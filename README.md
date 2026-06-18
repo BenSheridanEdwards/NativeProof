@@ -418,6 +418,13 @@ Every `getBy*` (and `by.*`) takes a **string** (exact match) or a **`RegExp`** (
 element's decoded value), so a human pattern matches even entity-escaped source — `getByText(/Save( draft)?/)`,
 `getByLabel(/^Remove /)`, `getByRole("checkbox", { name: /terms/i })`. The Playwright muscle memory carries over.
 
+> **A string selector is exact — case-, space- and punctuation-sensitive.** `getByText("Sign In")`
+> does **not** match a `Sign in` label; it just times out as "not found", with no hint that you were
+> one capital letter away. When you don't yet know a label verbatim — porting an existing suite, or
+> writing the spec before you've seen the screen — reach for a `RegExp` (`getByText(/sign in/i)`) or
+> read the real label off the page source first (see [Troubleshooting](#troubleshooting)). A wrong
+> guess fails the same way a genuinely-missing element does, so confirm the string against the device.
+
 How each maps to the page source:
 
 | Locator | Android attribute | iOS attribute |
@@ -763,8 +770,20 @@ The framework's own unit suite (`npm test`) needs **no device** and runs anywher
 | `no nativeproof.config.ts or wdio.conf.ts found` | Run from the project root, or pass `--config <path>`. |
 | "No specs found" | Specs must match `testDir`/`testMatch` (default `tests/**/*.spec.ts`), or pass `--spec`. |
 | App can't reach the mock | Emulator → use `10.0.2.2`; real device → your machine's LAN IP. Bind the mock with `host: "0.0.0.0"`. |
-| `expect(...)` times out | The selector never matched — confirm the attribute mapping (see the [Locators](#locators) table) and the value; raise `{ timeout }` for slow screens. |
+| `expect(...)` times out | The selector never matched — confirm the attribute mapping (see the [Locators](#locators) table) and the **exact** value (see below); raise `{ timeout }` for slow screens. |
 | iOS first run hangs | WebDriverAgent is building/signing. Set `appium:wdaLaunchTimeout` and, on a real device, the signing capabilities. |
+
+**A selector won't match? Read the source — don't re-guess.** A string that's off by a capital letter,
+a trailing space, or `(1)` vs ` (1)` fails as a silent timeout, identical to a genuinely-absent element.
+The fix is always the same: look at what the device actually exposes.
+
+- On any failure, the `onFailure` hook / `captureState(prefix)` writes the page source to your artifacts
+  dir. Grep it for the real label: `grep -oE 'text="[^"]+"' <file>` and `content-desc="…"` on Android,
+  `label="…"` / `value="…"` on iOS — then match it exactly, or with a `RegExp` if it varies.
+- Or read it live mid-spec: `console.log(await wdioDriver().source())`.
+
+This one-step loop — *fail → read the real attribute → match it* — is behind most "element not found"
+mysteries, and it beats guessing label strings every time.
 
 ## API reference
 

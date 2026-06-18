@@ -156,12 +156,15 @@ class ValueExpectation<T> implements ValueAssertions<T> {
   }
 
   toContain(expected: unknown): void {
+    if (typeof this.actual !== "string" && !Array.isArray(this.actual)) {
+      throw new TypeError(
+        `expect(...).toContain(...) needs a string or array actual, got ${describeValue(this.actual)}`,
+      );
+    }
     const ok =
       typeof this.actual === "string"
         ? this.actual.includes(String(expected))
-        : Array.isArray(this.actual)
-          ? this.actual.includes(expected)
-          : false;
+        : this.actual.includes(expected);
     this.assert(ok, "toContain", describeValue(expected));
   }
 

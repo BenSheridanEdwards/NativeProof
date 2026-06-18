@@ -24,3 +24,9 @@ test("expect(value).not inverts, and a failed matcher throws", () => {
   assert.throws(() => expect(1).toBe(2), /expect\(1\)\.toBe\(2\)/);
   assert.throws(() => expect("abc").not.toContain("a"), /toContain/);
 });
+
+test("expect(value).toContain throws a usage error on a non-string/array actual", () => {
+  // A misused matcher should be a hard usage error, not a soft (negatable) failure.
+  assert.throws(() => expect(42 as unknown).toContain(4), /needs a string or array/);
+  assert.throws(() => expect({ a: 1 } as unknown).toContain("a"), /needs a string or array/);
+});

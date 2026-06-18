@@ -449,7 +449,14 @@ await p.getByText("Item").count();       // how many elements match
 await p.getByText("Item").nth(1).tap();  // the 2nd match (.first() / .last(); negative counts from the end)
 await member.terms.check();              // checkbox/switch → tap to checked (no-op if already there); also uncheck()
 await member.terms.isChecked();          // boolean
+await p.getByRole("checkbox").near(p.getByText("Wi-Fi")).check(); // the checkbox in the Wi-Fi row
 ```
+
+**Relative locators.** `getByRole(role)` matches by element class/type (`checkbox`, `switch`, `button`,
+`textfield`, `image`), and `Locator.near(anchor, { maxDistance? })` scopes to the match nearest an
+anchor's element — so a control beside a label is addressed by the label, not by coordinates:
+`page(driver).getByRole("checkbox").near(page(driver).getByText("Wi-Fi"))`. Compose with `.check()` /
+`expect(locator).toBeChecked()`.
 
 `tap()` resolves the element's bounds from the page source and taps the centre — a coordinate
 tap that works even on Compose / SwiftUI nodes Appium reports as non-clickable.

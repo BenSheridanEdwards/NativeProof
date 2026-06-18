@@ -122,6 +122,8 @@ export class Locator {
     private readonly options: WaitOptions = {},
     /** When set, the locator resolves to the nth match (negative counts from the end). */
     private readonly index?: number,
+    /** When set, matches are ordered by proximity to the anchor (and filtered by maxDistance). */
+    private readonly proximity?: { anchor: Locator; maxDistance?: number },
   ) {}
 
   private attribute(): string {
@@ -135,9 +137,26 @@ export class Locator {
       : nodesForAttribute(source, this.attribute(), this.selector.value);
   }
 
-  /** All node tags this selector matches in the current source, in document order. */
+  /**
+   * All node tags this selector matches in the current source — document order, or, when a
+   * `near` anchor is set, ordered nearest-first by bounds-centre distance (filtered by maxDistance).
+   */
   private async matchedNodes(): Promise<string[]> {
-    return this.nodesIn(await this.driver.source());
+    const nodes = this.nodesIn(await this.driver.source());
+    if (!this.proximity) return nodes;
+    const anchor = await this.proximity.anchor.bounds();
+    if (!anchor) return [];
+    const { maxDistance } = this.proximity;
+    return nodes
+      .map((node) => ({ node, bounds: parseBounds(/bounds="([^"]+)"/.exec(node)?.[1]) }))
+      .filter((entry): entry is { node: string; bounds: Bounds } => entry.bounds !== null)
+      .map((entry) => ({
+        node: entry.node,
+        distance: Math.hypot(entry.bounds.centerX - anchor.centerX, entry.bounds.centerY - anchor.centerY),
+      }))
+      .filter((entry) => maxDistance === undefined || entry.distance <= maxDistance)
+      .sort((a, b) => a.distance - b.distance)
+      .map((entry) => entry.node);
   }
 
   /** The single node this locator resolves to (the nth match, or the first when unindexed). */
@@ -149,7 +168,18 @@ export class Locator {
 
   /** A locator scoped to the nth match (0-based; negative counts from the end). */
   nth(index: number): Locator {
-    return new Locator(this.driver, this.selector, this.options, index);
+    return new Locator(this.driver, this.selector, this.options, index, this.proximity);
+  }
+
+  /**
+   * Scope to the match nearest `anchor` (by bounds-centre distance) — the relative locator for
+   * native: `getByRole("checkbox").near(getByText("Wi-Fi"))` is the checkbox in the Wi-Fi row.
+   * `maxDistance` (px) drops matches farther than that, so an absent control resolves to nothing.
+   */
+  near(anchor: Locator, options: { maxDistance?: number } = {}): Locator {
+    const proximity =
+      options.maxDistance === undefined ? { anchor } : { anchor, maxDistance: options.maxDistance };
+    return new Locator(this.driver, this.selector, this.options, this.index, proximity);
   }
 
   /** A locator scoped to the first match. */

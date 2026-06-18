@@ -58,6 +58,18 @@ test("by.text matches a label exposed as content-desc (Compose), not just text="
   assert.equal(b.centerX, 60);
 });
 
+test("textContent prefers a non-empty label over an empty value on iOS (and decodes entities)", async () => {
+  const driver = new FakeDriver('<node label="Save &amp; Close" value="" bounds="[0,0][120,60]" />');
+  driver.platform = "ios";
+  const loc = new Locator(driver, by.text("Save & Close"));
+  assert.equal(await loc.textContent(), "Save & Close"); // not "" from the empty value=
+});
+
+test("textContent falls back to content-desc when text is empty on Android (Compose)", async () => {
+  const driver = new FakeDriver('<node text="" content-desc="Add to cart" bounds="[10,10][110,60]" />');
+  assert.equal(await new Locator(driver, by.text("Add to cart")).textContent(), "Add to cart");
+});
+
 test("tap({ clickableAncestor: true }) taps the clickable parent of a non-clickable label", async () => {
   const source =
     '<node clickable="true" bounds="[0,0][300,400]">' +

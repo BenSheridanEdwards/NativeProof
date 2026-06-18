@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+
 /**
  * Backend mocking that feels like Playwright's `page.route()`.
  *
@@ -54,7 +56,7 @@ export function matchesFrame(frame: MockFrame, match: FrameMatch): boolean {
   if (match.type !== undefined && frame.type !== match.type) return false;
   for (const [key, value] of Object.entries(match)) {
     if (key === "path" || key === "type") continue;
-    if (frame.payload?.[key] !== value) return false;
+    if (!isDeepStrictEqual(frame.payload?.[key], value)) return false;
   }
   return true;
 }

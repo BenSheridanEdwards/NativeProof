@@ -19,6 +19,33 @@ since they were technically part of the published surface this is a minor bump.
 - **`readLog`** (from `log.ts`) and **`waitForFrame`** (from `mock.ts`) — unused exports. The
   documented mock-traffic API (`expect(mock).toHaveSent/toHaveReceived`) is unaffected.
 
+## 0.3.1
+
+Correctness and robustness fixes; no API changes.
+
+**Fixed**
+
+- **`expect(mock)` now matches object/array payload fields by deep equality** — `matchesFrame`
+  used reference equality, so `toHaveSent({ data: { id: 1 } })` / `{ tags: ["a"] }` could never
+  match and surfaced only as a misleading timeout. Now uses `isDeepStrictEqual`.
+- **`textContent()` prefers the first non-empty label attribute** — an iOS node with
+  `value="" label="Submit"` (or an Android Compose node with `text="" content-desc="…"`) read as
+  `""`; it now returns the populated value, in the same precedence `attributeFor` uses.
+- **Bounds parsing no longer assumes attribute order** — `boundsForAttribute` /
+  `smallestClickableAncestorBounds` match the element tag first, then extract `bounds`, so a source
+  that emits `bounds` before the selector attribute still resolves.
+- **`parseBounds` accepts negative coordinates** — off-screen / RTL-shifted nodes (`[-5,0]…`) now
+  parse instead of becoming untappable.
+- **`--appium-port` is validated** — a non-numeric / out-of-range value throws a clear error instead
+  of producing an opaque `http://host:NaN/…` connection failure.
+- **`toContain` throws a usage error** on a non-string/array actual instead of silently failing.
+- **Page-source capture failures are logged** — `wdioDriver().source()` and `captureState` warn on a
+  `getPageSource` error before degrading to empty, so a dead session isn't mistaken for an empty screen.
+
+**Internal**
+
+- Deduplicated `escapeRegExp` (now shared from `source.ts`).
+
 ## 0.3.0
 
 Maintenance release — version bump only; no functional changes since 0.2.0.

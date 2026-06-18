@@ -20,7 +20,7 @@ export type Bounds = {
 };
 
 export function parseBounds(bounds: string | undefined | null): Bounds | null {
-  const match = /\[(\d+),(\d+)\]\[(\d+),(\d+)\]/.exec(bounds ?? "");
+  const match = /\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/.exec(bounds ?? "");
   if (!match) return null;
   const x1 = Number(match[1]);
   const y1 = Number(match[2]);
@@ -38,7 +38,7 @@ export function parseBounds(bounds: string | undefined | null): Bounds | null {
   };
 }
 
-function escapeRegExp(value: string): string {
+export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
@@ -65,11 +65,16 @@ export function encodeXmlEntities(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-/** Bounds of the first element whose `bounds` follows the given attribute match. */
+/**
+ * Bounds of the first element carrying the given attribute match. The element tag is
+ * matched first, then `bounds` is extracted from within it regardless of attribute order —
+ * so a source that emits `bounds` before the selector attribute still resolves.
+ */
 export function boundsForAttribute(source: string, attribute: string, value: string): Bounds | null {
   const escaped = escapeRegExp(encodeXmlEntities(value));
-  const match = new RegExp(`${attribute}="${escaped}"[^>]*bounds="([^"]+)"`).exec(source);
-  return match ? parseBounds(match[1]) : null;
+  const node = new RegExp(`<[^>]*${attribute}="${escaped}"[^>]*>`).exec(source)?.[0];
+  if (!node) return null;
+  return parseBounds(/bounds="([^"]+)"/.exec(node)?.[1]);
 }
 
 /** Bounds of an element addressed by Android `content-desc`. */
@@ -88,8 +93,8 @@ export function boundsForText(source: string, text: string): Bounds | null {
  * into a reliable tap target (e.g. the "Members (3)" list rows).
  */
 export function smallestClickableAncestorBounds(source: string, nodeBounds: Bounds): Bounds {
-  const clickable = [...source.matchAll(/clickable="true"[^>]*bounds="([^"]+)"/g)]
-    .map((m) => parseBounds(m[1]))
+  const clickable = [...source.matchAll(/<[^>]*clickable="true"[^>]*>/g)]
+    .map((m) => parseBounds(/bounds="([^"]+)"/.exec(m[0])?.[1]))
     .filter((b): b is Bounds => b !== null)
     .filter(
       (b) => b.x1 <= nodeBounds.x1 && b.x2 >= nodeBounds.x2 && b.y1 <= nodeBounds.y1 && b.y2 >= nodeBounds.y2,

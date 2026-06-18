@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { redactEvidenceText } from "../src/evidence.js";
 import { containsLeakedSecret, countMatches, LEAKED_SECRET_PATTERN } from "../src/log.js";
-import { boundsForContentDesc, clickableAncestorBoundsForText, parseBounds } from "../src/source.js";
+import {
+  boundsForContentDesc,
+  boundsForText,
+  clickableAncestorBoundsForText,
+  decodeXmlEntities,
+  encodeXmlEntities,
+  parseBounds,
+} from "../src/source.js";
 
 /**
  * Self-contained unit coverage for the framework's pure primitives — no device,
@@ -24,6 +31,20 @@ test("parseBounds returns null for malformed or missing input", () => {
   assert.equal(parseBounds("not-bounds"), null);
   assert.equal(parseBounds(undefined), null);
   assert.equal(parseBounds(null), null);
+});
+
+test("decode/encodeXmlEntities round-trip the page-source escaping", () => {
+  assert.equal(decodeXmlEntities("Terms &amp; Conditions &lt;x&gt;"), "Terms & Conditions <x>");
+  assert.equal(encodeXmlEntities("Terms & Conditions <x>"), "Terms &amp; Conditions &lt;x&gt;");
+  assert.equal(decodeXmlEntities("&amp;lt;"), "&lt;"); // &amp; decoded last, so this is not "<"
+});
+
+test("boundsForText matches a label the source XML-escaped (plain string in, entities in source)", () => {
+  const source = '<node text="Terms &amp; Conditions" bounds="[0,0][200,80]" />';
+  const b = boundsForText(source, "Terms & Conditions");
+  assert.ok(b);
+  assert.equal(b.centerX, 100);
+  assert.equal(b.centerY, 40);
 });
 
 test("boundsForContentDesc locates the element addressed by content-desc", () => {

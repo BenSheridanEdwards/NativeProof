@@ -1,5 +1,5 @@
 import type { Driver, Platform } from "./driver.js";
-import { type Bounds, boundsForAttribute } from "./source.js";
+import { type Bounds, boundsForAttribute, decodeXmlEntities, encodeXmlEntities } from "./source.js";
 
 /**
  * Cross-platform locators — the reusable heart of the framework.
@@ -100,7 +100,7 @@ export class Locator {
   }
 
   private presencePattern(): RegExp {
-    return new RegExp(`${this.attribute()}="${escapeRegExp(this.selector.value)}"`);
+    return new RegExp(`${this.attribute()}="${escapeRegExp(encodeXmlEntities(this.selector.value))}"`);
   }
 
   /** True if the selector matches a node in the current source. */
@@ -116,19 +116,19 @@ export class Locator {
   /** The matched node's own visible text, or null if the node is absent. */
   async textContent(): Promise<string | null> {
     const source = await this.driver.source();
-    const node = new RegExp(`<[^>]*${this.attribute()}="${escapeRegExp(this.selector.value)}"[^>]*>`).exec(
-      source,
-    )?.[0];
+    const selectorPattern = escapeRegExp(encodeXmlEntities(this.selector.value));
+    const node = new RegExp(`<[^>]*${this.attribute()}="${selectorPattern}"[^>]*>`).exec(source)?.[0];
     if (!node) return null;
     const textAttr = this.driver.platform === "ios" ? "value|label" : "text";
-    return new RegExp(`(?:${textAttr})="([^"]*)"`).exec(node)?.[1] ?? null;
+    const raw = new RegExp(`(?:${textAttr})="([^"]*)"`).exec(node)?.[1];
+    return raw == null ? null : decodeXmlEntities(raw);
   }
 
   /** True if the selector is present AND `text` appears in the source. */
   async shows(text: string | RegExp): Promise<boolean> {
     const source = await this.driver.source();
     if (!this.presencePattern().test(source)) return false;
-    const pattern = typeof text === "string" ? new RegExp(escapeRegExp(text)) : text;
+    const pattern = typeof text === "string" ? new RegExp(escapeRegExp(encodeXmlEntities(text))) : text;
     return pattern.test(source);
   }
 

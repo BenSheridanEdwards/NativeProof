@@ -20,6 +20,10 @@ Playwright-parity additions to locators, assertions, fixtures, and evidence.
   `describeScenario` registrar's `.beforeEach` / `.afterEach`) register per-behaviour hooks that
   receive the provisioned fixture context — a repeatable reset between behaviours without leaving the
   harness. `BddHooks` gained optional `beforeEach` / `afterEach` (present on Mocha and node:test).
+- **`onFailure` evidence hook** — `ScenarioFixture.onFailure` and `defineApp({ onFailure })` run when a
+  behaviour throws, before the failure propagates, so on-failure evidence (e.g. `captureState(...)`)
+  lives in one place instead of every behaviour. The hook receives the context + `{ title, error }`;
+  its own errors are swallowed (logged) so they never mask the real failure.
 - **`by.*` and every `page().getBy*` accept a `RegExp`** as well as a string —
   `getByText(/Save( draft)?/)`, `getByLabel(/^Remove /)`, `getByRole("checkbox", { name: /terms/i })`.
   A string matches the element's value exactly; a RegExp is tested against the element's **decoded**

@@ -39,6 +39,19 @@ export interface ScenarioFixture<Ctx> {
    * produced and must be safe to call in that state.
    */
   teardown(context: Ctx | undefined): Promise<void>;
+  /**
+   * Invoked when a behaviour throws, before the failure propagates — the seam for
+   * on-failure evidence (e.g. `captureState(...)`), so capture lives here instead of in
+   * every behaviour. Receives the provisioned context and the failing behaviour's title +
+   * error. Its own errors are swallowed (logged) so they never mask the real failure.
+   */
+  onFailure?(context: Ctx, info: FailureInfo): void | Promise<void>;
+}
+
+/** The failing behaviour's title and the error it threw. */
+export interface FailureInfo {
+  title: string;
+  error: unknown;
 }
 
 /**
@@ -111,7 +124,19 @@ export function describeScenario<Ctx>(
 
     const test = ((behaviourTitle: string, body: (context: Ctx) => void | Promise<void>): void => {
       it(behaviourTitle, async () => {
-        await body(requireContext());
+        const context = requireContext();
+        try {
+          await body(context);
+        } catch (error) {
+          if (fixture.onFailure) {
+            try {
+              await fixture.onFailure(context, { title: behaviourTitle, error });
+            } catch (hookError) {
+              console.warn(`[nativeproof] onFailure hook threw (ignored): ${hookError}`);
+            }
+          }
+          throw error;
+        }
       });
     }) as BehaviourRegistrar<Ctx>;
 

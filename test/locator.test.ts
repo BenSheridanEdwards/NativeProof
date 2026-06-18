@@ -11,6 +11,7 @@ import { by, Locator } from "../src/locator.js";
 class FakeDriver implements Driver {
   platform: Platform = "android";
   readonly taps: Array<{ x: number; y: number }> = [];
+  readonly typed: string[] = [];
   private readonly sources: string[];
 
   constructor(...sources: string[]) {
@@ -28,11 +29,32 @@ class FakeDriver implements Driver {
   async tapAt(x: number, y: number): Promise<void> {
     this.taps.push({ x, y });
   }
+
+  async typeText(text: string): Promise<void> {
+    this.typed.push(text);
+  }
 }
 
 const SETTLED =
   '<node content-desc="Sign out" bounds="[0,0][100,100]" />' +
   '<node text="E2E sample text node" bounds="[0,200][1080,300]" />';
+
+test("Locator.fill focuses the field (tap) then types via the driver", async () => {
+  const driver = new FakeDriver('<node content-desc="Email" bounds="[0,0][200,80]" />');
+  await new Locator(driver, by.label("Email")).fill("a@b.com");
+  assert.deepEqual(driver.taps, [{ x: 100, y: 40 }]); // focused
+  assert.deepEqual(driver.typed, ["a@b.com"]); // then typed
+});
+
+test("Locator.fill throws when the driver has no text input", async () => {
+  const noInput: Driver = {
+    platform: "android",
+    source: async () => '<node content-desc="Email" bounds="[0,0][200,80]" />',
+    pause: async () => {},
+    tapAt: async () => {},
+  };
+  await assert.rejects(() => new Locator(noInput, by.label("Email")).fill("x"), /text input/);
+});
 
 test("Locator.isVisible reflects whether the selector matches the source", async () => {
   const driver = new FakeDriver(SETTLED);

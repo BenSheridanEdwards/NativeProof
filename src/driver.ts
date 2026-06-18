@@ -19,6 +19,11 @@ export interface Driver {
   pause(ms: number): Promise<void>;
   /** Tap an absolute screen coordinate. */
   tapAt(x: number, y: number): Promise<void>;
+  /**
+   * Type into the currently focused element (keyboard input). Optional: drivers that
+   * cannot type leave it undefined, and {@link Locator.fill} throws a clear error.
+   */
+  typeText?(text: string): Promise<void>;
 }
 
 /** A {@link Driver} backed by the live WebdriverIO/Appium session. */
@@ -30,5 +35,6 @@ export function wdioDriver(): Driver {
     source: () => browser.getPageSource().catch(() => ""),
     pause: (ms: number) => browser.pause(ms),
     tapAt: (x: number, y: number) => tapAt(x, y),
+    typeText: (text: string) => browser.keys(text),
   };
 }

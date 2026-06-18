@@ -203,6 +203,39 @@ export class Locator {
     await this.tap(options);
     await this.driver.typeText(text);
   }
+
+  /** True if the matched node is a checked checkbox/switch (`checked="true"`). */
+  async isChecked(): Promise<boolean> {
+    const node = nodeForAttribute(await this.driver.source(), this.attribute(), this.selector.value);
+    return node !== null && /\bchecked="true"/.test(node);
+  }
+
+  /** Tap to bring a checkbox/switch to checked; a no-op if it already is. */
+  async check(options: WaitOptions = {}): Promise<void> {
+    await this.setChecked(true, options);
+  }
+
+  /** Tap to bring a checkbox/switch to unchecked; a no-op if it already is. */
+  async uncheck(options: WaitOptions = {}): Promise<void> {
+    await this.setChecked(false, options);
+  }
+
+  private async setChecked(desired: boolean, options: WaitOptions): Promise<void> {
+    if ((await this.isChecked()) === desired) return;
+    await this.tap(options);
+    const opts: WaitOptions = { ...this.options, ...options, sleep: (ms) => this.driver.pause(ms) };
+    const settled = await waitUntil(
+      () => this.isChecked(),
+      (value) => value === desired,
+      opts,
+    );
+    if (settled !== desired) {
+      const state = desired ? "checked" : "unchecked";
+      throw new Error(
+        `${describeSelector(this.selector)} did not become ${state} within ${opts.timeout ?? DEFAULTS.timeout}ms`,
+      );
+    }
+  }
 }
 
 /** Convenience factory: `locator(driver, by.text("Submit"))`. */

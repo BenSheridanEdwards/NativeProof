@@ -73,6 +73,30 @@ test("regex selectors match, read and locate a label by pattern (decoded, case-i
   assert.equal(await new Locator(driver, by.text(/^nope$/)).isVisible(), false);
 });
 
+test("checkbox state — isChecked, check()/uncheck() drive it, expect(...).toBeChecked()", async () => {
+  let checked = false; // a tap toggles the box, modelling a real checkbox
+  const driver: Driver = {
+    platform: "android",
+    async source() {
+      return `<node content-desc="Notifications" class="android.widget.CheckBox" checked="${checked}" bounds="[0,0][80,80]" />`;
+    },
+    async pause() {},
+    async tapAt() {
+      checked = !checked;
+    },
+  };
+  const box = new Locator(driver, by.label("Notifications"));
+  assert.equal(await box.isChecked(), false);
+  await expect(box).not.toBeChecked();
+  await box.check(); // taps once: false → true
+  assert.equal(await box.isChecked(), true);
+  await expect(box).toBeChecked();
+  await box.check(); // already checked → no-op, no toggle
+  assert.equal(await box.isChecked(), true);
+  await box.uncheck(); // taps once: true → false
+  await expect(box).not.toBeChecked();
+});
+
 test("textContent prefers a non-empty label over an empty value on iOS (and decodes entities)", async () => {
   const driver = new FakeDriver('<node label="Save &amp; Close" value="" bounds="[0,0][120,60]" />');
   driver.platform = "ios";

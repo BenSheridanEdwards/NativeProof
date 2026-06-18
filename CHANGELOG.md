@@ -6,10 +6,13 @@ All notable changes to NativeProof are documented here. The format follows
 
 ## 0.6.0
 
-Regex selectors — Playwright parity for matching by pattern.
+Playwright-parity additions to locators, assertions, fixtures, and evidence.
 
 **Added**
 
+- **Checkbox/switch state** — `Locator.isChecked()`, `Locator.check()` / `uncheck()` (tap to the
+  desired state, a no-op if already there), and auto-waiting `expect(locator).toBeChecked()` (+ `.not`),
+  reading `checked="true"` on the matched node.
 - **`by.*` and every `page().getBy*` accept a `RegExp`** as well as a string —
   `getByText(/Save( draft)?/)`, `getByLabel(/^Remove /)`, `getByRole("checkbox", { name: /terms/i })`.
   A string matches the element's value exactly; a RegExp is tested against the element's **decoded**

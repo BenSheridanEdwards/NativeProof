@@ -393,11 +393,16 @@ How each maps to the page source:
 
 | Locator | Android attribute | iOS attribute |
 |---|---|---|
-| `getByText` / `by.text` | `text` | `label` |
+| `getByText` / `by.text` | `text` or `content-desc` | `label` or `value` |
 | `getByLabel` / `by.label` / `getByRole({name})` | `content-desc` | `label` |
 | `getByTestId` / `by.testId` | `resource-id` | `name` |
 | `getById` / `by.id` | `resource-id` | `name` |
 | `by.desc` | `content-desc` | `name` |
+
+> **`getByText` is forgiving.** A visible label surfaces as `text` *or* `content-desc` on Android
+> (Jetpack Compose) and as `label` *or* `value` on iOS (SwiftUI), so `getByText` / `by.text` finds
+> the label wherever the toolkit put it — not just the node's own `text`. Reach for `getByLabel` /
+> `by.desc` when you specifically want the accessibility description.
 
 A `Locator` is a lazy, awaitable handle with built-in waiting:
 
@@ -407,10 +412,16 @@ await member.roomTitle.textContent();   // the node's own text, or null
 await member.spinner.waitFor();         // wait until visible (throws on timeout)
 await member.sendButton.tap();          // wait for it, then tap its centre
 await member.sendButton.tap({ timeout: 2_000, interval: 100 }); // tune the wait
+await member.row.tap({ clickableAncestor: true }); // tap the clickable parent of a non-clickable label
 ```
 
 `tap()` resolves the element's bounds from the page source and taps the centre — a coordinate
 tap that works even on Compose / SwiftUI nodes Appium reports as non-clickable.
+
+On Compose / SwiftUI the visible label often sits on a **non-clickable** child of the real touch
+target (a list row, a card). `tap({ clickableAncestor: true })` taps the smallest
+`clickable="true"` ancestor that fully contains the matched node instead of the node's own centre,
+falling back to the node itself when nothing clickable wraps it.
 
 ### Assertions
 
@@ -639,7 +650,8 @@ The framework's own unit suite (`npm test`) needs **no device** and runs anywher
 - `defineConfig({ app, projects, testDir?, testMatch?, appium?, mochaTimeout? })` — the config the CLI runs.
 - `by.text/desc/id/testId/label`, `page(driver).getByText/getByTestId/getByLabel/getById/getByRole`,
   `page(driver).locator(selector)`, `new Locator(driver, selector)` — locators
-  (`isVisible`, `textContent`, `bounds`, `shows`, `waitFor`, `tap`).
+  (`isVisible`, `textContent`, `bounds`, `shows`, `waitFor`, `tap` — `tap({ clickableAncestor })`
+  for non-clickable labels).
 - `expect(locator)` → `toBeVisible` / `toShow` / `toHaveText` (+ `.not`), each `(value?, { timeout?, interval? })`.
 - `expect(mock)` → `toHaveSent` / `toHaveReceived` (+ `.not`), matched by partial frame.
 - `startMockServer({ port?, host? })` → a `MockServer` (`url`, `wsUrl`, `route()`, `frames()`, `send()`, `stop()`).

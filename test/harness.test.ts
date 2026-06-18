@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { defineApp } from "../src/app.js";
 import type { Driver, Platform } from "../src/driver.js";
 import { createHarness } from "../src/harness.js";
@@ -11,7 +11,7 @@ import { useRunner } from "../src/runner.js";
  * test/test.describe runs, passes the role through login, and injects the typed
  * session context (mock + screens) into each behaviour — no device.
  */
-useRunner({ describe, before, after, it });
+useRunner({ describe, before, after, beforeEach, afterEach, it });
 
 const noopBackend: MockBackend = {
   async frames() {
@@ -59,5 +59,26 @@ test.describe("createHarness injects the typed context for a role", "member", ()
 test.describe("createHarness defaults the role when omitted", () => {
   test("runs with the default session", async ({ home }) => {
     assert.equal(home.marker, "home-screen");
+  });
+});
+
+test.describe("scenario beforeEach/afterEach run with the context", () => {
+  let befores = 0;
+  let afters = 0;
+  test.beforeEach(async ({ home }) => {
+    assert.equal(home.marker, "home-screen"); // context is injected into the hook
+    befores += 1;
+  });
+  test.afterEach(async ({ mock }) => {
+    assert.ok(mock);
+    afters += 1;
+  });
+  test("beforeEach ran once before this behaviour", async () => {
+    assert.equal(befores, 1);
+    assert.equal(afters, 0);
+  });
+  test("beforeEach ran again; afterEach ran once between behaviours", async () => {
+    assert.equal(befores, 2);
+    assert.equal(afters, 1);
   });
 });

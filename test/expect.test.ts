@@ -43,4 +43,7 @@ test("expect(frameLog) asserts traffic on any frames-only source (no route/stop 
   await expect(traffic).toHaveSent({ path: "/chat", type: "send", text: "hi" });
   await expect(traffic).toHaveReceived({ type: "message" });
   await expect(traffic).not.toHaveSent({ type: "leave" });
+  // path / type / payload fields also match by RegExp (so query-suffixed paths match)
+  await expect(traffic).toHaveSent({ path: /^\/ch/, type: /^se/, text: /h/ });
+  await expect(traffic).not.toHaveSent({ path: /^\/nope/ });
 });

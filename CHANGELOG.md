@@ -4,6 +4,17 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.9.0
+
+Regex frame matching — `expect(mock)` matches traffic by pattern.
+
+**Added**
+
+- **`toHaveSent` / `toHaveReceived` (and `FrameMatch`) accept a `RegExp`** for `path`, `type`, and any
+  payload field — `expect(mock).toHaveSent({ path: /\/users/, type: "request" })` matches a
+  query-suffixed or otherwise variable path, mirroring regex selectors on the locator side. A string
+  stays an exact match (deep equality for payload objects); a RegExp tests the actual string value.
+
 ## 0.8.0
 
 Relative locators — `Locator.near` scopes to the match nearest an anchor.

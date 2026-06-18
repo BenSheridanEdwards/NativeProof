@@ -1,5 +1,5 @@
 import type { Driver, Platform } from "./driver.js";
-import { type Bounds, boundsForAttribute } from "./source.js";
+import { type Bounds, boundsForAttribute, smallestClickableAncestorBounds } from "./source.js";
 
 /**
  * Cross-platform locators — the reusable heart of the framework.
@@ -42,16 +42,21 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** The page-source attribute a selector resolves to on each platform. */
+/**
+ * The page-source attribute a selector resolves to on each platform. `text` is an
+ * alternation, because a visible label surfaces as `text` OR `content-desc` on Android
+ * (Compose) and as `label` OR `value` on iOS — so `getByText` finds a label wherever
+ * the toolkit put it, not just the node's own `text` attribute.
+ */
 function attributeFor(selector: Selector, platform: Platform): string {
   const android = {
-    text: "text",
+    text: "(?:text|content-desc)",
     desc: "content-desc",
     id: "resource-id",
     testId: "resource-id",
     label: "content-desc",
   } as const;
-  const ios = { text: "label", desc: "name", id: "name", testId: "name", label: "label" } as const;
+  const ios = { text: "(?:label|value)", desc: "name", id: "name", testId: "name", label: "label" } as const;
   return (platform === "ios" ? ios : android)[selector.by];
 }
 
@@ -60,6 +65,15 @@ export interface WaitOptions {
   interval?: number;
   /** Sleep awaited between polls; defaults to a real timer. The locator injects the driver's pause. */
   sleep?: (ms: number) => Promise<void>;
+}
+
+export interface TapOptions extends WaitOptions {
+  /**
+   * Tap the smallest `clickable="true"` ancestor that contains the matched node, rather
+   * than the node itself. Compose/SwiftUI often expose a label on a non-clickable child;
+   * this taps the real touch target around it.
+   */
+  clickableAncestor?: boolean;
 }
 
 const DEFAULTS = { timeout: 10_000, interval: 250 };
@@ -148,7 +162,7 @@ export class Locator {
   }
 
   /** Wait for the element, then tap its centre (a source-bounds coordinate tap). */
-  async tap(options: WaitOptions = {}): Promise<void> {
+  async tap(options: TapOptions = {}): Promise<void> {
     const opts: WaitOptions = { ...this.options, ...options, sleep: (ms) => this.driver.pause(ms) };
     const bounds = await waitUntil(
       () => this.bounds(),
@@ -160,7 +174,10 @@ export class Locator {
         `${describeSelector(this.selector)} was not found to tap within ${opts.timeout ?? DEFAULTS.timeout}ms`,
       );
     }
-    await this.driver.tapAt(bounds.centerX, bounds.centerY);
+    const target = options.clickableAncestor
+      ? smallestClickableAncestorBounds(await this.driver.source(), bounds)
+      : bounds;
+    await this.driver.tapAt(target.centerX, target.centerY);
   }
 }
 

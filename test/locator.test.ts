@@ -34,6 +34,29 @@ const SETTLED =
   '<node content-desc="Sign out" bounds="[0,0][100,100]" />' +
   '<node text="E2E sample text node" bounds="[0,200][1080,300]" />';
 
+test("by.text matches a label exposed as content-desc (Compose), not just text=", async () => {
+  const driver = new FakeDriver('<node text="" content-desc="Add to cart" bounds="[10,10][110,60]" />');
+  const loc = new Locator(driver, by.text("Add to cart"));
+  assert.equal(await loc.isVisible(), true);
+  const b = await loc.bounds();
+  assert.ok(b);
+  assert.equal(b.centerX, 60);
+});
+
+test("tap({ clickableAncestor: true }) taps the clickable parent of a non-clickable label", async () => {
+  const source =
+    '<node clickable="true" bounds="[0,0][300,400]">' +
+    '<node text="Tap me" clickable="false" bounds="[50,90][150,110]" /></node>';
+  const driver = new FakeDriver(source);
+  const loc = new Locator(driver, by.text("Tap me"));
+  await loc.tap(); // the label node's own centre
+  await loc.tap({ clickableAncestor: true }); // the clickable parent's centre
+  assert.deepEqual(driver.taps, [
+    { x: 100, y: 100 },
+    { x: 150, y: 200 },
+  ]);
+});
+
 test("Locator.isVisible reflects whether the selector matches the source", async () => {
   const driver = new FakeDriver(SETTLED);
   assert.equal(await new Locator(driver, by.desc("Sign out")).isVisible(), true);

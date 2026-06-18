@@ -58,6 +58,21 @@ test("by.text matches a label exposed as content-desc (Compose), not just text="
   assert.equal(b.centerX, 60);
 });
 
+test("regex selectors match, read and locate a label by pattern (decoded, case-insensitive)", async () => {
+  const driver = new FakeDriver(
+    '<node text="Save &amp; Close" bounds="[0,0][120,60]" /><node text="Cancel" bounds="[0,80][120,140]" />',
+  );
+  // A RegExp is tested against the DECODED value, so the human pattern matches escaped source.
+  const save = new Locator(driver, by.text(/save & /i));
+  assert.equal(await save.isVisible(), true);
+  assert.equal(await save.textContent(), "Save & Close");
+  const b = await save.bounds();
+  assert.ok(b);
+  assert.equal(b.centerY, 30); // located the "Save" row, not "Cancel"
+  await expect(save).toBeVisible();
+  assert.equal(await new Locator(driver, by.text(/^nope$/)).isVisible(), false);
+});
+
 test("textContent prefers a non-empty label over an empty value on iOS (and decodes entities)", async () => {
   const driver = new FakeDriver('<node label="Save &amp; Close" value="" bounds="[0,0][120,60]" />');
   driver.platform = "ios";

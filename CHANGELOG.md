@@ -4,6 +4,19 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.8.0
+
+Relative locators — `Locator.near` scopes to the match nearest an anchor.
+
+**Added**
+
+- **`Locator.near(anchor, { maxDistance? })`** — orders this locator's matches by bounds-centre
+  distance to the `anchor` locator's match, nearest first, so a control is addressed by the element
+  beside it: `getByRole("checkbox").near(getByText("Wi-Fi"))` is the checkbox in the Wi-Fi row.
+  `maxDistance` (px) drops farther matches, so an absent control resolves to nothing. Composes with
+  `.nth()` / `.check()` / `expect(locator).toBeChecked()`. Together with role selectors this retires
+  source-bounds geometry for "the control next to this label".
+
 ## 0.7.0
 
 Role selectors — `getByRole` matches by element role, not just name.

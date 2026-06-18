@@ -131,6 +131,26 @@ test("by.role throws a helpful error on an unknown role", async () => {
   await assert.rejects(() => new Locator(driver, by.role("slider")).isVisible(), /Unknown role "slider"/);
 });
 
+test("near() resolves the match nearest an anchor — the checkbox in a label's row", async () => {
+  const driver = new FakeDriver(
+    '<node text="Wi-Fi" bounds="[0,0][300,80]" />' +
+      '<node class="android.widget.CheckBox" checked="false" bounds="[320,0][380,80]" />' + // Wi-Fi row
+      '<node text="Bluetooth" bounds="[0,100][300,180]" />' +
+      '<node class="android.widget.CheckBox" checked="true" bounds="[320,100][380,180]" />', // Bluetooth row
+  );
+  const checkbox = by.role("checkbox");
+  const wifiBox = new Locator(driver, checkbox).near(new Locator(driver, by.text("Wi-Fi")));
+  const btBox = new Locator(driver, checkbox).near(new Locator(driver, by.text("Bluetooth")));
+  assert.equal(await wifiBox.isChecked(), false); // the Wi-Fi-row checkbox, nearest "Wi-Fi"
+  assert.equal(await btBox.isChecked(), true); // the Bluetooth-row checkbox, nearest "Bluetooth"
+  await wifiBox.tap();
+  assert.deepEqual(driver.taps, [{ x: 350, y: 40 }]); // tapped the Wi-Fi-row checkbox centre
+
+  // maxDistance drops a too-far match → resolves to nothing
+  const none = new Locator(driver, checkbox).near(new Locator(driver, by.text("Wi-Fi")), { maxDistance: 10 });
+  assert.equal(await none.isVisible(), false);
+});
+
 test("textContent prefers a non-empty label over an empty value on iOS (and decodes entities)", async () => {
   const driver = new FakeDriver('<node label="Save &amp; Close" value="" bounds="[0,0][120,60]" />');
   driver.platform = "ios";

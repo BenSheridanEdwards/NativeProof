@@ -93,6 +93,40 @@ export function nodesForAttribute(source: string, attribute: string, value: stri
   return nodes;
 }
 
+/**
+ * Element classes/types that back a semantic role, per platform — Android exposes a widget
+ * `class`, iOS an XCUITest `type`. Matched as a substring, so framework variants
+ * (`SwitchCompat`, `MaterialButton`, Compose's `android.widget.CheckBox`) all resolve.
+ */
+const ROLE_PATTERNS: Record<string, { android: string; ios: string }> = {
+  checkbox: { android: "CheckBox", ios: "XCUIElementTypeSwitch" },
+  switch: { android: "Switch", ios: "XCUIElementTypeSwitch" },
+  button: { android: "Button", ios: "XCUIElementTypeButton" },
+  textfield: { android: "EditText", ios: "XCUIElementTypeTextField" },
+  image: { android: "ImageView", ios: "XCUIElementTypeImage" },
+};
+
+/** Roles `by.role` / `getByRole(role)` can match without a name. */
+export const KNOWN_ROLES = Object.keys(ROLE_PATTERNS);
+
+/**
+ * Every element whose class (Android) / type (iOS) backs `role`, in document order.
+ * Throws on an unknown role, listing the supported set.
+ */
+export function nodesForRole(source: string, role: string, platform: "android" | "ios"): string[] {
+  const patterns = ROLE_PATTERNS[role.toLowerCase()];
+  if (!patterns) {
+    throw new Error(
+      `Unknown role "${role}". Known roles: ${KNOWN_ROLES.join(", ")}. Use getByLabel / getByText for arbitrary elements.`,
+    );
+  }
+  const attribute = platform === "ios" ? "type" : "class";
+  const pattern = escapeRegExp(platform === "ios" ? patterns.ios : patterns.android);
+  return [...source.matchAll(new RegExp(`<[^>]*${attribute}="[^"]*${pattern}[^"]*"[^>]*>`, "g"))].map(
+    (m) => m[0],
+  );
+}
+
 /** True if any element exposes `attribute` with a value matching `value` (string exact or RegExp). */
 export function attributeMatches(source: string, attribute: string, value: string | RegExp): boolean {
   return nodeForAttribute(source, attribute, value) !== null;

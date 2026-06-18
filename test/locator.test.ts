@@ -113,6 +113,24 @@ test("nth/first/last and count select among multiple matches", async () => {
   assert.deepEqual(driver.taps, [{ x: 50, y: 85 }]);
 });
 
+test("by.role matches elements by class (Android), with checked state and count", async () => {
+  const driver = new FakeDriver(
+    '<node class="android.widget.CheckBox" content-desc="Notifications" checked="true" bounds="[0,0][80,80]" />' +
+      '<node class="android.widget.TextView" text="Notifications" bounds="[100,0][400,80]" />' +
+      '<node class="android.widget.CheckBox" content-desc="Sounds" checked="false" bounds="[0,100][80,180]" />',
+  );
+  const checkboxes = new Locator(driver, by.role("checkbox"));
+  assert.equal(await checkboxes.count(), 2); // both CheckBox nodes, not the TextView
+  assert.equal(await checkboxes.first().isChecked(), true);
+  assert.equal(await checkboxes.nth(1).isChecked(), false);
+  assert.equal(await new Locator(driver, by.role("button")).isVisible(), false); // none present
+});
+
+test("by.role throws a helpful error on an unknown role", async () => {
+  const driver = new FakeDriver("<node class='Whatever' />");
+  await assert.rejects(() => new Locator(driver, by.role("slider")).isVisible(), /Unknown role "slider"/);
+});
+
 test("textContent prefers a non-empty label over an empty value on iOS (and decodes entities)", async () => {
   const driver = new FakeDriver('<node label="Save &amp; Close" value="" bounds="[0,0][120,60]" />');
   driver.platform = "ios";

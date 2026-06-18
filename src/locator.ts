@@ -5,6 +5,7 @@ import {
   encodeXmlEntities,
   escapeRegExp,
   nodesForAttribute,
+  nodesForRole,
   parseBounds,
   smallestClickableAncestorBounds,
 } from "./source.js";
@@ -24,7 +25,8 @@ export type Selector =
   | { readonly by: "desc"; readonly value: string | RegExp }
   | { readonly by: "id"; readonly value: string | RegExp }
   | { readonly by: "testId"; readonly value: string | RegExp }
-  | { readonly by: "label"; readonly value: string | RegExp };
+  | { readonly by: "label"; readonly value: string | RegExp }
+  | { readonly by: "role"; readonly value: string };
 
 /**
  * Build selectors Playwright-style. The cross-platform attribute each maps to is resolved
@@ -41,6 +43,8 @@ export const by = {
   testId: (value: string | RegExp): Selector => ({ by: "testId", value }),
   /** The accessibility label (Android `content-desc`, iOS `label`). */
   label: (value: string | RegExp): Selector => ({ by: "label", value }),
+  /** A semantic role, matched by element class/type — `checkbox`, `switch`, `button`, `textfield`, `image`. */
+  role: (value: string): Selector => ({ by: "role", value }),
 } as const;
 
 export function describeSelector(selector: Selector): string {
@@ -55,6 +59,9 @@ export function describeSelector(selector: Selector): string {
  * the toolkit put it, not just the node's own `text` attribute.
  */
 function attributeFor(selector: Selector, platform: Platform): string {
+  if (selector.by === "role") {
+    throw new Error("role selectors match by element class/type, not a single attribute");
+  }
   const android = {
     text: "(?:text|content-desc)",
     desc: "content-desc",
@@ -121,9 +128,16 @@ export class Locator {
     return attributeFor(this.selector, this.driver.platform);
   }
 
+  /** Node tags this selector matches in `source`, in document order (role- or attribute-based). */
+  private nodesIn(source: string): string[] {
+    return this.selector.by === "role"
+      ? nodesForRole(source, this.selector.value, this.driver.platform)
+      : nodesForAttribute(source, this.attribute(), this.selector.value);
+  }
+
   /** All node tags this selector matches in the current source, in document order. */
   private async matchedNodes(): Promise<string[]> {
-    return nodesForAttribute(await this.driver.source(), this.attribute(), this.selector.value);
+    return this.nodesIn(await this.driver.source());
   }
 
   /** The single node this locator resolves to (the nth match, or the first when unindexed). */
@@ -183,7 +197,7 @@ export class Locator {
   /** True if the selector is present AND `text` appears in the source. */
   async shows(text: string | RegExp): Promise<boolean> {
     const source = await this.driver.source();
-    if (this.pick(nodesForAttribute(source, this.attribute(), this.selector.value)) === null) return false;
+    if (this.pick(this.nodesIn(source)) === null) return false;
     const pattern = typeof text === "string" ? new RegExp(escapeRegExp(encodeXmlEntities(text))) : text;
     return pattern.test(source);
   }

@@ -15,11 +15,11 @@ export interface Page {
   getByLabel(label: string | RegExp, options?: WaitOptions): Locator;
   getById(id: string | RegExp, options?: WaitOptions): Locator;
   /**
-   * Match by accessible name. Native accessibility trees don't expose web-style roles
-   * reliably, so `role` is advisory and the dependable signal is the name (the element's
-   * accessibility label). Pass `{ name }` — a string for exact match, or a RegExp.
+   * Match by role. With `{ name }`, matches the element's accessibility label (a string or RegExp) —
+   * the dependable signal on native. Without a name, matches by element class/type
+   * (`checkbox`, `switch`, `button`, `textfield`, `image`) — e.g. `getByRole("checkbox")`.
    */
-  getByRole(role: string, options: { name: string | RegExp } & WaitOptions): Locator;
+  getByRole(role: string, options?: { name?: string | RegExp } & WaitOptions): Locator;
 }
 
 export function page(driver: Driver): Page {
@@ -29,14 +29,16 @@ export function page(driver: Driver): Page {
     getByTestId: (testId, options = {}) => locator(driver, by.testId(testId), options),
     getByLabel: (label, options = {}) => locator(driver, by.label(label), options),
     getById: (id, options = {}) => locator(driver, by.id(id), options),
-    getByRole: (role, options) => {
+    getByRole: (role, options = {}) => {
       const { name, ...wait } = options;
-      if (!name) {
+      if (name === "") {
         throw new Error(
-          `getByRole(${JSON.stringify(role)}) needs { name } on native — it matches the accessible label`,
+          `getByRole(${JSON.stringify(role)}, { name: "" }) — name must be non-empty; omit it to match by role`,
         );
       }
-      return locator(driver, by.label(name), wait);
+      return name !== undefined
+        ? locator(driver, by.label(name), wait) // name is the dependable signal on native
+        : locator(driver, by.role(role), wait); // no name → match by element class/type
     },
   };
 }

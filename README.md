@@ -41,6 +41,7 @@ nativeproof --platform android
   - [Locators](#locators)
   - [Assertions](#assertions)
   - [Network interception & assertions](#network-interception--assertions)
+  - [Bring your own backend](#bring-your-own-backend)
   - [Gestures & scrolling](#gestures--scrolling)
   - [Evidence & secrets](#evidence--secrets)
 - [Running](#running)
@@ -330,6 +331,11 @@ test.describe("home screen", () => {
 The destructured fixtures (`member`, `home`, `mock`, `driver`, …) are exactly the `screens` you
 declared in `defineApp`, plus `mock` and `driver` — typed to your app.
 
+> **Where imports come from:** specs import **`test` / `expect`** from your
+> `nativeproof.config.ts` (the typed pair `createHarness` returns). Everything else —
+> `page`, `by`, the gesture helpers (`swipe` / `tapAt`), `captureState`, and the types —
+> imports from the **`nativeproof`** package directly.
+
 ### Fixtures, roles & the app seam
 
 A scenario's context is provisioned **once** before its behaviours and torn down **once** after
@@ -482,6 +488,45 @@ server also synthesises types for primitives so you can assert on them:
 `startMockServer()` is a real HTTP + WebSocket server (`url` / `wsUrl`), so there's no per-app
 adapter — your app just points at it. It can also push a server-initiated frame to open sockets
 with `server.send(path, frame)` (useful for simulating an incoming message in a config-level helper).
+
+### Bring your own backend
+
+`startMockServer` is the batteries-included option, but `defineApp({ mock })` accepts **any**
+`MockBackend`. An app with its own protocol (or an existing mock server) injects a small adapter
+that exposes the three-method contract — then `route()` and the traffic assertions work unchanged:
+
+```ts
+import { defineApp, type MockBackend, type MockFrame, type MockRoute, wdioDriver } from "nativeproof";
+
+function adapt(server: MyExistingMock): MockBackend {
+  return {
+    frames: async (): Promise<MockFrame[]> =>
+      server.log.map((f) => ({
+        path: f.path,
+        type: f.kind,
+        direction: f.outbound ? "sent" : "received",
+        payload: f.body,
+      })),
+    route: (path: string): MockRoute => ({
+      fulfill: (frame) => server.stub(path, frame),
+      reject: ({ code }) => server.fail(path, code),
+      abort: () => server.drop(path),
+    }),
+    stop: () => server.close(),
+  };
+}
+
+const app = defineApp({
+  driver: () => wdioDriver(),
+  mock: () => adapt(startMyMock()),
+  screens: {
+    /* … */
+  },
+});
+```
+
+The framework depends only on the `MockBackend` interface, never a concrete server — so
+`expect(mock).toHaveSent(...)` reads your backend's traffic with no other changes.
 
 ### Gestures & scrolling
 

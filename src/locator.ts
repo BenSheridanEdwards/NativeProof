@@ -1,12 +1,11 @@
 import type { Driver, Platform } from "./driver.js";
 import {
-  attributeMatches,
   type Bounds,
-  boundsForAttribute,
   decodeXmlEntities,
   encodeXmlEntities,
   escapeRegExp,
-  nodeForAttribute,
+  nodesForAttribute,
+  parseBounds,
   smallestClickableAncestorBounds,
 } from "./source.js";
 
@@ -114,26 +113,60 @@ export class Locator {
     readonly driver: Driver,
     readonly selector: Selector,
     private readonly options: WaitOptions = {},
+    /** When set, the locator resolves to the nth match (negative counts from the end). */
+    private readonly index?: number,
   ) {}
 
   private attribute(): string {
     return attributeFor(this.selector, this.driver.platform);
   }
 
+  /** All node tags this selector matches in the current source, in document order. */
+  private async matchedNodes(): Promise<string[]> {
+    return nodesForAttribute(await this.driver.source(), this.attribute(), this.selector.value);
+  }
+
+  /** The single node this locator resolves to (the nth match, or the first when unindexed). */
+  private pick(nodes: string[]): string | null {
+    if (this.index === undefined) return nodes[0] ?? null;
+    const at = this.index < 0 ? nodes.length + this.index : this.index;
+    return nodes[at] ?? null;
+  }
+
+  /** A locator scoped to the nth match (0-based; negative counts from the end). */
+  nth(index: number): Locator {
+    return new Locator(this.driver, this.selector, this.options, index);
+  }
+
+  /** A locator scoped to the first match. */
+  first(): Locator {
+    return this.nth(0);
+  }
+
+  /** A locator scoped to the last match. */
+  last(): Locator {
+    return this.nth(-1);
+  }
+
+  /** How many elements currently match the selector. */
+  async count(): Promise<number> {
+    return (await this.matchedNodes()).length;
+  }
+
   /** True if the selector matches a node in the current source. */
   async isVisible(): Promise<boolean> {
-    return attributeMatches(await this.driver.source(), this.attribute(), this.selector.value);
+    return this.pick(await this.matchedNodes()) !== null;
   }
 
   /** Bounds of the matched node in the current source, or null if absent. */
   async bounds(): Promise<Bounds | null> {
-    return boundsForAttribute(await this.driver.source(), this.attribute(), this.selector.value);
+    const node = this.pick(await this.matchedNodes());
+    return node ? parseBounds(/bounds="([^"]+)"/.exec(node)?.[1]) : null;
   }
 
   /** The matched node's own visible text, or null if the node is absent. */
   async textContent(): Promise<string | null> {
-    const source = await this.driver.source();
-    const node = nodeForAttribute(source, this.attribute(), this.selector.value);
+    const node = this.pick(await this.matchedNodes());
     if (!node) return null;
     // A visible label can live in either of two attributes per platform, in the same
     // precedence `attributeFor` uses (iOS label→value, Android text→content-desc). Prefer
@@ -150,7 +183,7 @@ export class Locator {
   /** True if the selector is present AND `text` appears in the source. */
   async shows(text: string | RegExp): Promise<boolean> {
     const source = await this.driver.source();
-    if (!attributeMatches(source, this.attribute(), this.selector.value)) return false;
+    if (this.pick(nodesForAttribute(source, this.attribute(), this.selector.value)) === null) return false;
     const pattern = typeof text === "string" ? new RegExp(escapeRegExp(encodeXmlEntities(text))) : text;
     return pattern.test(source);
   }
@@ -206,7 +239,7 @@ export class Locator {
 
   /** True if the matched node is a checked checkbox/switch (`checked="true"`). */
   async isChecked(): Promise<boolean> {
-    const node = nodeForAttribute(await this.driver.source(), this.attribute(), this.selector.value);
+    const node = this.pick(await this.matchedNodes());
     return node !== null && /\bchecked="true"/.test(node);
   }
 

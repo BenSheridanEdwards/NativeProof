@@ -97,6 +97,22 @@ test("checkbox state — isChecked, check()/uncheck() drive it, expect(...).toBe
   await expect(box).not.toBeChecked();
 });
 
+test("nth/first/last and count select among multiple matches", async () => {
+  const driver = new FakeDriver(
+    '<node text="Item" bounds="[0,0][100,50]" />' +
+      '<node text="Item" bounds="[0,60][100,110]" />' +
+      '<node text="Item" bounds="[0,120][100,170]" />',
+  );
+  const items = new Locator(driver, by.text("Item"));
+  assert.equal(await items.count(), 3);
+  await expect(items).toHaveCount(3);
+  assert.equal((await items.first().bounds())?.centerY, 25);
+  assert.equal((await items.nth(1).bounds())?.centerY, 85);
+  assert.equal((await items.last().bounds())?.centerY, 145);
+  await items.nth(1).tap();
+  assert.deepEqual(driver.taps, [{ x: 50, y: 85 }]);
+});
+
 test("textContent prefers a non-empty label over an empty value on iOS (and decodes entities)", async () => {
   const driver = new FakeDriver('<node label="Save &amp; Close" value="" bounds="[0,0][120,60]" />');
   driver.platform = "ios";

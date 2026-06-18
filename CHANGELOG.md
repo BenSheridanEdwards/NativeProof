@@ -13,6 +13,9 @@ Playwright-parity additions to locators, assertions, fixtures, and evidence.
 - **Checkbox/switch state** — `Locator.isChecked()`, `Locator.check()` / `uncheck()` (tap to the
   desired state, a no-op if already there), and auto-waiting `expect(locator).toBeChecked()` (+ `.not`),
   reading `checked="true"` on the matched node.
+- **Multi-match locators** — `Locator.nth(i)` / `first()` / `last()` (negative `i` counts from the end),
+  `Locator.count()`, and auto-waiting `expect(locator).toHaveCount(n)`. An unindexed locator still
+  resolves to the first match. New `nodesForAttribute` source helper backs it.
 - **`by.*` and every `page().getBy*` accept a `RegExp`** as well as a string —
   `getByText(/Save( draft)?/)`, `getByLabel(/^Remove /)`, `getByRole("checkbox", { name: /terms/i })`.
   A string matches the element's value exactly; a RegExp is tested against the element's **decoded**

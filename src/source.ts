@@ -72,19 +72,25 @@ export function encodeXmlEntities(value: string): string {
  * value, so `by.text(/Save( draft)?/)` matches whether the source XML-escaped it or not.
  */
 export function nodeForAttribute(source: string, attribute: string, value: string | RegExp): string | null {
+  return nodesForAttribute(source, attribute, value)[0] ?? null;
+}
+
+/** Every element tag exposing `attribute` with a value matching `value`, in document order. */
+export function nodesForAttribute(source: string, attribute: string, value: string | RegExp): string[] {
   if (typeof value === "string") {
     const escaped = escapeRegExp(encodeXmlEntities(value));
-    return new RegExp(`<[^>]*${attribute}="${escaped}"[^>]*>`).exec(source)?.[0] ?? null;
+    return [...source.matchAll(new RegExp(`<[^>]*${attribute}="${escaped}"[^>]*>`, "g"))].map((m) => m[0]);
   }
   // A `g`-flagged RegExp is stateful across `.test()` calls; use a non-global copy so the
   // per-candidate test is order-independent.
   const test = value.global ? new RegExp(value.source, value.flags.replace("g", "")) : value;
   const candidate = new RegExp(`${attribute}="([^"]*)"`);
+  const nodes: string[] = [];
   for (const tag of source.matchAll(/<[^>]*>/g)) {
     const attr = candidate.exec(tag[0]);
-    if (attr && test.test(decodeXmlEntities(attr[1] ?? ""))) return tag[0];
+    if (attr && test.test(decodeXmlEntities(attr[1] ?? ""))) nodes.push(tag[0]);
   }
-  return null;
+  return nodes;
 }
 
 /** True if any element exposes `attribute` with a value matching `value` (string exact or RegExp). */

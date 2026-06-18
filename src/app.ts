@@ -1,5 +1,5 @@
 import type { Driver } from "./driver.js";
-import type { ScenarioFixture } from "./fixtures.js";
+import type { FailureInfo, ScenarioFixture } from "./fixtures.js";
 import type { MockBackend } from "./mock.js";
 
 /**
@@ -47,6 +47,12 @@ export interface AppDefinition<S extends ScreenFactories> {
    * even if this throws.
    */
   teardown?: (context: SessionContext<S>) => Promise<void> | void;
+  /**
+   * Invoked when a behaviour throws, before the failure propagates — wire on-failure
+   * evidence here (e.g. `captureState(...)`) so capture lives in one place, not in every
+   * behaviour. Its own errors are swallowed so they never mask the real failure.
+   */
+  onFailure?: (context: SessionContext<S>, info: FailureInfo) => Promise<void> | void;
 }
 
 /** The fixture context a session injects: the device handles plus each app screen. */
@@ -90,6 +96,7 @@ export function defineApp<S extends ScreenFactories>(definition: AppDefinition<S
             await context.mock.stop();
           }
         },
+        ...(definition.onFailure ? { onFailure: definition.onFailure } : {}),
       };
     },
   };

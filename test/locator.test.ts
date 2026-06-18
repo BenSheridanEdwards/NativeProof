@@ -126,6 +126,17 @@ test("by.role matches elements by class (Android), with checked state and count"
   assert.equal(await new Locator(driver, by.role("button")).isVisible(), false); // none present
 });
 
+test("toBeEnabled / toBeDisabled read the enabled attribute", async () => {
+  const driver = new FakeDriver(
+    '<node content-desc="Submit" enabled="false" bounds="[0,0][100,40]" />' +
+      '<node content-desc="Cancel" enabled="true" bounds="[0,60][100,100]" />',
+  );
+  await expect(new Locator(driver, by.label("Submit"))).toBeDisabled();
+  await expect(new Locator(driver, by.label("Submit"))).not.toBeEnabled();
+  await expect(new Locator(driver, by.label("Cancel"))).toBeEnabled();
+  await expect(new Locator(driver, by.label("Cancel"))).not.toBeDisabled();
+});
+
 test("by.role throws a helpful error on an unknown role", async () => {
   const driver = new FakeDriver("<node class='Whatever' />");
   await assert.rejects(() => new Locator(driver, by.role("slider")).isVisible(), /Unknown role "slider"/);

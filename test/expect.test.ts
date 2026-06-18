@@ -30,3 +30,17 @@ test("expect(value).toContain throws a usage error on a non-string/array actual"
   assert.throws(() => expect(42 as unknown).toContain(4), /needs a string or array/);
   assert.throws(() => expect({ a: 1 } as unknown).toContain("a"), /needs a string or array/);
 });
+
+test("expect(frameLog) asserts traffic on any frames-only source (no route/stop needed)", async () => {
+  // A mock that predates MockBackend can be asserted on via a frames-only adapter.
+  const traffic = {
+    frames: async () => [
+      { path: "/chat", type: "join", direction: "sent" as const },
+      { path: "/chat", type: "send", direction: "sent" as const, payload: { text: "hi" } },
+      { path: "/chat", type: "message", direction: "received" as const },
+    ],
+  };
+  await expect(traffic).toHaveSent({ path: "/chat", type: "send", text: "hi" });
+  await expect(traffic).toHaveReceived({ type: "message" });
+  await expect(traffic).not.toHaveSent({ type: "leave" });
+});

@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { describeSelector, Locator, type WaitOptions, waitUntil } from "./locator.js";
-import { describeMatch, type FrameMatch, frameExists, type MockBackend } from "./mock.js";
+import { describeMatch, type FrameLog, type FrameMatch, frameExists, type MockBackend } from "./mock.js";
 
 /**
  * Playwright-style assertions with built-in auto-waiting — the "easy visibility"
@@ -94,7 +94,7 @@ class LocatorExpectation implements LocatorAssertions {
 
 class MockExpectation implements MockAssertions {
   constructor(
-    private readonly mock: MockBackend,
+    private readonly mock: FrameLog,
     private readonly negated: boolean = false,
   ) {}
 
@@ -194,22 +194,21 @@ class ValueExpectation<T> implements ValueAssertions<T> {
   }
 }
 
-/** Structural guard: a {@link MockBackend} is anything with `frames`/`route`/`stop`. */
-function isMockBackend(target: unknown): target is MockBackend {
-  return (
-    typeof target === "object" &&
-    target !== null &&
-    typeof (target as MockBackend).frames === "function" &&
-    typeof (target as MockBackend).route === "function" &&
-    typeof (target as MockBackend).stop === "function"
-  );
+/**
+ * Structural guard: anything with a `frames()` method is a {@link FrameLog} we can
+ * assert traffic on — a full {@link MockBackend} or a frames-only adapter alike. The
+ * traffic matchers only read `frames()`, so `route`/`stop` are not required here.
+ */
+function isFrameLog(target: unknown): target is FrameLog {
+  return typeof target === "object" && target !== null && typeof (target as FrameLog).frames === "function";
 }
 
 export function expect(target: Locator): LocatorAssertions;
 export function expect(target: MockBackend): MockAssertions;
+export function expect(target: FrameLog): MockAssertions;
 export function expect<T>(target: T): ValueAssertions<T>;
 export function expect(target: unknown): LocatorAssertions | MockAssertions | ValueAssertions<unknown> {
   if (target instanceof Locator) return new LocatorExpectation(target);
-  if (isMockBackend(target)) return new MockExpectation(target);
+  if (isFrameLog(target)) return new MockExpectation(target);
   return new ValueExpectation(target);
 }

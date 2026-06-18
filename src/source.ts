@@ -66,15 +66,40 @@ export function encodeXmlEntities(value: string): string {
 }
 
 /**
+ * The first element tag exposing `attribute` with a value matching `value`. `attribute`
+ * may be a regex alternation (e.g. `"(?:text|content-desc)"`). A string matches the
+ * entity-escaped source exactly; a RegExp is tested against each candidate's DECODED
+ * value, so `by.text(/Save( draft)?/)` matches whether the source XML-escaped it or not.
+ */
+export function nodeForAttribute(source: string, attribute: string, value: string | RegExp): string | null {
+  if (typeof value === "string") {
+    const escaped = escapeRegExp(encodeXmlEntities(value));
+    return new RegExp(`<[^>]*${attribute}="${escaped}"[^>]*>`).exec(source)?.[0] ?? null;
+  }
+  // A `g`-flagged RegExp is stateful across `.test()` calls; use a non-global copy so the
+  // per-candidate test is order-independent.
+  const test = value.global ? new RegExp(value.source, value.flags.replace("g", "")) : value;
+  const candidate = new RegExp(`${attribute}="([^"]*)"`);
+  for (const tag of source.matchAll(/<[^>]*>/g)) {
+    const attr = candidate.exec(tag[0]);
+    if (attr && test.test(decodeXmlEntities(attr[1] ?? ""))) return tag[0];
+  }
+  return null;
+}
+
+/** True if any element exposes `attribute` with a value matching `value` (string exact or RegExp). */
+export function attributeMatches(source: string, attribute: string, value: string | RegExp): boolean {
+  return nodeForAttribute(source, attribute, value) !== null;
+}
+
+/**
  * Bounds of the first element carrying the given attribute match. The element tag is
  * matched first, then `bounds` is extracted from within it regardless of attribute order —
  * so a source that emits `bounds` before the selector attribute still resolves.
  */
-export function boundsForAttribute(source: string, attribute: string, value: string): Bounds | null {
-  const escaped = escapeRegExp(encodeXmlEntities(value));
-  const node = new RegExp(`<[^>]*${attribute}="${escaped}"[^>]*>`).exec(source)?.[0];
-  if (!node) return null;
-  return parseBounds(/bounds="([^"]+)"/.exec(node)?.[1]);
+export function boundsForAttribute(source: string, attribute: string, value: string | RegExp): Bounds | null {
+  const node = nodeForAttribute(source, attribute, value);
+  return node ? parseBounds(/bounds="([^"]+)"/.exec(node)?.[1]) : null;
 }
 
 /** Bounds of an element addressed by Android `content-desc`. */

@@ -1,10 +1,12 @@
 import type { Driver, Platform } from "./driver.js";
 import {
+  attributeMatches,
   type Bounds,
   boundsForAttribute,
   decodeXmlEntities,
   encodeXmlEntities,
   escapeRegExp,
+  nodeForAttribute,
   smallestClickableAncestorBounds,
 } from "./source.js";
 
@@ -19,30 +21,32 @@ import {
 
 /** A cross-platform element selector. */
 export type Selector =
-  | { readonly by: "text"; readonly value: string }
-  | { readonly by: "desc"; readonly value: string }
-  | { readonly by: "id"; readonly value: string }
-  | { readonly by: "testId"; readonly value: string }
-  | { readonly by: "label"; readonly value: string };
+  | { readonly by: "text"; readonly value: string | RegExp }
+  | { readonly by: "desc"; readonly value: string | RegExp }
+  | { readonly by: "id"; readonly value: string | RegExp }
+  | { readonly by: "testId"; readonly value: string | RegExp }
+  | { readonly by: "label"; readonly value: string | RegExp };
 
 /**
  * Build selectors Playwright-style. The cross-platform attribute each maps to is resolved
  * per platform (see {@link attributeFor}), so you never have to know whether it's a
  * `content-desc` or a `name`: `by.text("Submit")`, `by.testId("login-button")`,
- * `by.label("Sign out")`, `by.id("message-list")`.
+ * `by.label("Sign out")`, `by.id("message-list")`. Each accepts a string (exact match) or
+ * a RegExp (`by.text(/Save( draft)?/)`), tested against the element's decoded value.
  */
 export const by = {
-  text: (value: string): Selector => ({ by: "text", value }),
-  desc: (value: string): Selector => ({ by: "desc", value }),
-  id: (value: string): Selector => ({ by: "id", value }),
+  text: (value: string | RegExp): Selector => ({ by: "text", value }),
+  desc: (value: string | RegExp): Selector => ({ by: "desc", value }),
+  id: (value: string | RegExp): Selector => ({ by: "id", value }),
   /** The app's test id (Android `resource-id` / Compose testTag, iOS accessibilityIdentifier). */
-  testId: (value: string): Selector => ({ by: "testId", value }),
+  testId: (value: string | RegExp): Selector => ({ by: "testId", value }),
   /** The accessibility label (Android `content-desc`, iOS `label`). */
-  label: (value: string): Selector => ({ by: "label", value }),
+  label: (value: string | RegExp): Selector => ({ by: "label", value }),
 } as const;
 
 export function describeSelector(selector: Selector): string {
-  return `by.${selector.by}(${JSON.stringify(selector.value)})`;
+  const value = selector.value instanceof RegExp ? String(selector.value) : JSON.stringify(selector.value);
+  return `by.${selector.by}(${value})`;
 }
 
 /**
@@ -116,13 +120,9 @@ export class Locator {
     return attributeFor(this.selector, this.driver.platform);
   }
 
-  private presencePattern(): RegExp {
-    return new RegExp(`${this.attribute()}="${escapeRegExp(encodeXmlEntities(this.selector.value))}"`);
-  }
-
   /** True if the selector matches a node in the current source. */
   async isVisible(): Promise<boolean> {
-    return this.presencePattern().test(await this.driver.source());
+    return attributeMatches(await this.driver.source(), this.attribute(), this.selector.value);
   }
 
   /** Bounds of the matched node in the current source, or null if absent. */
@@ -133,8 +133,7 @@ export class Locator {
   /** The matched node's own visible text, or null if the node is absent. */
   async textContent(): Promise<string | null> {
     const source = await this.driver.source();
-    const selectorPattern = escapeRegExp(encodeXmlEntities(this.selector.value));
-    const node = new RegExp(`<[^>]*${this.attribute()}="${selectorPattern}"[^>]*>`).exec(source)?.[0];
+    const node = nodeForAttribute(source, this.attribute(), this.selector.value);
     if (!node) return null;
     // A visible label can live in either of two attributes per platform, in the same
     // precedence `attributeFor` uses (iOS label→value, Android text→content-desc). Prefer
@@ -151,7 +150,7 @@ export class Locator {
   /** True if the selector is present AND `text` appears in the source. */
   async shows(text: string | RegExp): Promise<boolean> {
     const source = await this.driver.source();
-    if (!this.presencePattern().test(source)) return false;
+    if (!attributeMatches(source, this.attribute(), this.selector.value)) return false;
     const pattern = typeof text === "string" ? new RegExp(escapeRegExp(encodeXmlEntities(text))) : text;
     return pattern.test(source);
   }

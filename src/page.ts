@@ -4,21 +4,22 @@ import { by, type Locator, locator, type Selector, type WaitOptions } from "./lo
 /**
  * Playwright-style `getBy*` ergonomics over a {@link Driver}, so selectors are
  * discovered, not inferred. `page(driver).getByText("Submit")` returns a {@link Locator}
- * and you never spell out which native attribute backs it.
+ * and you never spell out which native attribute backs it. Every `getBy*` takes a string
+ * (exact match) or a RegExp (`getByText(/Save( draft)?/)`).
  */
 export interface Page {
   /** Escape hatch: a locator from a raw selector. */
   locator(selector: Selector, options?: WaitOptions): Locator;
-  getByText(text: string, options?: WaitOptions): Locator;
-  getByTestId(testId: string, options?: WaitOptions): Locator;
-  getByLabel(label: string, options?: WaitOptions): Locator;
-  getById(id: string, options?: WaitOptions): Locator;
+  getByText(text: string | RegExp, options?: WaitOptions): Locator;
+  getByTestId(testId: string | RegExp, options?: WaitOptions): Locator;
+  getByLabel(label: string | RegExp, options?: WaitOptions): Locator;
+  getById(id: string | RegExp, options?: WaitOptions): Locator;
   /**
    * Match by accessible name. Native accessibility trees don't expose web-style roles
    * reliably, so `role` is advisory and the dependable signal is the name (the element's
-   * accessibility label). Pass `{ name }`.
+   * accessibility label). Pass `{ name }` — a string for exact match, or a RegExp.
    */
-  getByRole(role: string, options: { name: string } & WaitOptions): Locator;
+  getByRole(role: string, options: { name: string | RegExp } & WaitOptions): Locator;
 }
 
 export function page(driver: Driver): Page {

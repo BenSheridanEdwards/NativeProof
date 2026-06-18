@@ -60,7 +60,8 @@ nativeproof --platform android
 - **Locators** — `by.text/testId/label/desc/id` and `page(driver).getByText/getByTestId/
   getByLabel/getById/getByRole`, each mapped to the right native attribute per platform (so you
   never guess `content-desc` vs `accessibilityIdentifier`), with built-in auto-waiting and
-  `tap()` / `fill()` for interaction.
+  `tap()` / `fill()` for interaction. Each takes a string (exact) or a **`RegExp`**
+  (`getByText(/Save( draft)?/)`), tested against the element's decoded value.
 - **Auto-waiting `expect`** — `expect(locator).toBeVisible()/toShow()/toHaveText()` and
   `.not`, each polling until the condition holds (default 10s); plus synchronous `expect(value)`
   matchers (`toBe`/`toEqual`/`toContain`/…) so non-UI checks need no second assertion library.

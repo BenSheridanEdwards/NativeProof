@@ -4,6 +4,20 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.6.0
+
+Regex selectors — Playwright parity for matching by pattern.
+
+**Added**
+
+- **`by.*` and every `page().getBy*` accept a `RegExp`** as well as a string —
+  `getByText(/Save( draft)?/)`, `getByLabel(/^Remove /)`, `getByRole("checkbox", { name: /terms/i })`.
+  A string matches the element's value exactly; a RegExp is tested against the element's **decoded**
+  value, so a human pattern matches the entity-escaped source and tolerant labels
+  (`/complete(d)? phrases/`) no longer need source-scraping. Matching, `bounds`, `textContent`,
+  `tap`/`fill`, and `expect(locator)` all honour it. New `nodeForAttribute` / `attributeMatches`
+  source helpers back it (`boundsForAttribute` now takes `string | RegExp`).
+
 ## 0.5.0
 
 Two additive, backward-compatible seams so an app can drive more of its lifecycle and

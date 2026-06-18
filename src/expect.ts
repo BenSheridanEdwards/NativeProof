@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { describeSelector, Locator, type WaitOptions, waitUntil } from "./locator.js";
 import { describeMatch, type FrameMatch, frameExists, type MockBackend } from "./mock.js";
 
@@ -23,6 +24,25 @@ export interface MockAssertions {
   toHaveSent(match: FrameMatch, options?: WaitOptions): Promise<void>;
   /** The app received a frame matching `match`. */
   toHaveReceived(match: FrameMatch, options?: WaitOptions): Promise<void>;
+}
+
+/**
+ * Synchronous matchers for a plain value — for the non-UI assertions a spec still needs
+ * (counts, ids, parsed payloads). UI/traffic matchers auto-wait and return promises;
+ * these assert a value that is already known, so they run synchronously and `.not` inverts.
+ */
+export interface ValueAssertions<T> {
+  readonly not: ValueAssertions<T>;
+  /** Strict identity (`Object.is`). */
+  toBe(expected: T): void;
+  /** Deep structural equality. */
+  toEqual(expected: T): void;
+  /** Substring (for strings) or membership (for arrays). */
+  toContain(expected: unknown): void;
+  toBeTruthy(): void;
+  toBeFalsy(): void;
+  toBeDefined(): void;
+  toBeNull(): void;
 }
 
 class LocatorExpectation implements LocatorAssertions {
@@ -109,8 +129,84 @@ class MockExpectation implements MockAssertions {
   }
 }
 
+function describeValue(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+class ValueExpectation<T> implements ValueAssertions<T> {
+  constructor(
+    private readonly actual: T,
+    private readonly negated: boolean = false,
+  ) {}
+
+  get not(): ValueAssertions<T> {
+    return new ValueExpectation(this.actual, !this.negated);
+  }
+
+  toBe(expected: T): void {
+    this.assert(Object.is(this.actual, expected), "toBe", describeValue(expected));
+  }
+
+  toEqual(expected: T): void {
+    this.assert(isDeepStrictEqual(this.actual, expected), "toEqual", describeValue(expected));
+  }
+
+  toContain(expected: unknown): void {
+    const ok =
+      typeof this.actual === "string"
+        ? this.actual.includes(String(expected))
+        : Array.isArray(this.actual)
+          ? this.actual.includes(expected)
+          : false;
+    this.assert(ok, "toContain", describeValue(expected));
+  }
+
+  toBeTruthy(): void {
+    this.assert(Boolean(this.actual), "toBeTruthy");
+  }
+
+  toBeFalsy(): void {
+    this.assert(!this.actual, "toBeFalsy");
+  }
+
+  toBeDefined(): void {
+    this.assert(this.actual !== undefined, "toBeDefined");
+  }
+
+  toBeNull(): void {
+    this.assert(this.actual === null, "toBeNull");
+  }
+
+  private assert(pass: boolean, matcher: string, expectedDesc = ""): void {
+    const want = !this.negated;
+    if (pass === want) return;
+    const not = this.negated ? ".not" : "";
+    throw new Error(
+      `expect(${describeValue(this.actual)})${not}.${matcher}(${expectedDesc}) — assertion not met`,
+    );
+  }
+}
+
+/** Structural guard: a {@link MockBackend} is anything with `frames`/`route`/`stop`. */
+function isMockBackend(target: unknown): target is MockBackend {
+  return (
+    typeof target === "object" &&
+    target !== null &&
+    typeof (target as MockBackend).frames === "function" &&
+    typeof (target as MockBackend).route === "function" &&
+    typeof (target as MockBackend).stop === "function"
+  );
+}
+
 export function expect(target: Locator): LocatorAssertions;
 export function expect(target: MockBackend): MockAssertions;
-export function expect(target: Locator | MockBackend): LocatorAssertions | MockAssertions {
-  return target instanceof Locator ? new LocatorExpectation(target) : new MockExpectation(target);
+export function expect<T>(target: T): ValueAssertions<T>;
+export function expect(target: unknown): LocatorAssertions | MockAssertions | ValueAssertions<unknown> {
+  if (target instanceof Locator) return new LocatorExpectation(target);
+  if (isMockBackend(target)) return new MockExpectation(target);
+  return new ValueExpectation(target);
 }

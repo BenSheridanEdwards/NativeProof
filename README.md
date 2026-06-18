@@ -60,7 +60,8 @@ nativeproof --platform android
   getByLabel/getById/getByRole`, each mapped to the right native attribute per platform (so you
   never guess `content-desc` vs `accessibilityIdentifier`), with built-in auto-waiting.
 - **Auto-waiting `expect`** — `expect(locator).toBeVisible()/toShow()/toHaveText()` and
-  `.not`, each polling until the condition holds (default 10s).
+  `.not`, each polling until the condition holds (default 10s); plus synchronous `expect(value)`
+  matchers (`toBe`/`toEqual`/`toContain`/…) so non-UI checks need no second assertion library.
 - **Network interception** — a first-party HTTP + WebSocket mock server with
   `route().fulfill/reject/abort` (like `page.route()`) and `expect(mock).toHaveSent()/
   toHaveReceived()` traffic assertions. No per-app adapter.
@@ -429,6 +430,31 @@ await expect(member.spinner).not.toBeVisible({ timeout: 5_000 });
 - `toHaveText(text, opts?)` — the matched node's **own** text contains / matches `text`.
 - `opts` is `{ timeout?, interval? }` (ms).
 
+**Value matchers** — `expect(value)` also takes a plain value, for the non-UI assertions a spec
+still needs (counts, ids, parsed payloads). The locator and mock matchers auto-wait and return
+promises; value matchers assert a value you already have, so they are **synchronous** (no `await`)
+and `.not` inverts:
+
+```ts
+const frames = await mock.frames();
+
+expect(2 + 2).toBe(4);                          // strict identity (Object.is)
+expect(frames).toContain(someFrame);            // membership (arrays) or substring (strings)
+expect({ id: 7, name: "Ada" }).toEqual(user);   // deep structural equality
+expect(member.unreadBadge).toBeTruthy();
+expect(reply.error).toBeNull();
+expect(reply.id).toBeDefined();
+expect(reply.id).not.toBe(previousId);
+```
+
+- `toBe(expected)` — strict identity (`Object.is`).
+- `toEqual(expected)` — deep structural equality.
+- `toContain(expected)` — substring (for strings) or membership (for arrays).
+- `toBeTruthy()` / `toBeFalsy()` / `toBeDefined()` / `toBeNull()` — value guards.
+
+This keeps every assertion in a spec under one `expect`, so there's no second assertion library to
+import for the checks the UI/traffic matchers don't cover.
+
 ### Network interception & assertions
 
 The mock backend works like Playwright's `page.route()`. **Intercept** a path to control its
@@ -642,6 +668,7 @@ The framework's own unit suite (`npm test`) needs **no device** and runs anywher
   (`isVisible`, `textContent`, `bounds`, `shows`, `waitFor`, `tap`).
 - `expect(locator)` → `toBeVisible` / `toShow` / `toHaveText` (+ `.not`), each `(value?, { timeout?, interval? })`.
 - `expect(mock)` → `toHaveSent` / `toHaveReceived` (+ `.not`), matched by partial frame.
+- `expect(value)` → `toBe` / `toEqual` / `toContain` / `toBeTruthy` / `toBeFalsy` / `toBeDefined` / `toBeNull` (+ `.not`) — synchronous matchers for plain values.
 - `startMockServer({ port?, host? })` → a `MockServer` (`url`, `wsUrl`, `route()`, `frames()`, `send()`, `stop()`).
 - `swipe`, `tapAt`, `pause` — low-level pointer gestures.
 - `captureState(prefix)` / `captureScreenshot` / `captureText` / `redactEvidenceText` — evidence.

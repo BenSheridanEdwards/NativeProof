@@ -42,9 +42,33 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Decode the XML entities UiAutomator/XCUITest escape attribute values with
+ * (`&amp;` → `&`, `&lt;` → `<`, …). `&amp;` is decoded LAST so `&amp;lt;` round-trips
+ * to the literal `&lt;` rather than `<`.
+ */
+export function decodeXmlEntities(value: string): string {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+/**
+ * Encode a human-readable value to the entity-escaped form the page source uses, so a
+ * selector built from a plain string (`"Terms & Conditions"`) matches the escaped source
+ * (`text="Terms &amp; Conditions"`). `&` is encoded first to avoid double-encoding.
+ */
+export function encodeXmlEntities(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 /** Bounds of the first element whose `bounds` follows the given attribute match. */
 export function boundsForAttribute(source: string, attribute: string, value: string): Bounds | null {
-  const match = new RegExp(`${attribute}="${escapeRegExp(value)}"[^>]*bounds="([^"]+)"`).exec(source);
+  const escaped = escapeRegExp(encodeXmlEntities(value));
+  const match = new RegExp(`${attribute}="${escaped}"[^>]*bounds="([^"]+)"`).exec(source);
   return match ? parseBounds(match[1]) : null;
 }
 

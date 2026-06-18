@@ -34,6 +34,16 @@ const SETTLED =
   '<node content-desc="Sign out" bounds="[0,0][100,100]" />' +
   '<node text="E2E sample text node" bounds="[0,200][1080,300]" />';
 
+test("locators match, read and tap labels the source XML-escaped", async () => {
+  const driver = new FakeDriver('<node text="Save &amp; Close" bounds="[0,0][120,60]" />');
+  const loc = new Locator(driver, by.text("Save & Close")); // a plain, human-readable string
+  assert.equal(await loc.isVisible(), true);
+  assert.equal(await loc.textContent(), "Save & Close"); // decoded back from the source
+  await expect(loc).toShow("Save & Close");
+  await loc.tap();
+  assert.deepEqual(driver.taps, [{ x: 60, y: 30 }]);
+});
+
 test("Locator.isVisible reflects whether the selector matches the source", async () => {
   const driver = new FakeDriver(SETTLED);
   assert.equal(await new Locator(driver, by.desc("Sign out")).isVisible(), true);

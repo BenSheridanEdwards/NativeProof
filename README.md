@@ -58,7 +58,8 @@ nativeproof --platform android
   context injected; no per-test setup/teardown in the spec.
 - **Locators** — `by.text/testId/label/desc/id` and `page(driver).getByText/getByTestId/
   getByLabel/getById/getByRole`, each mapped to the right native attribute per platform (so you
-  never guess `content-desc` vs `accessibilityIdentifier`), with built-in auto-waiting.
+  never guess `content-desc` vs `accessibilityIdentifier`), with built-in auto-waiting and
+  `tap()` / `fill()` for interaction.
 - **Auto-waiting `expect`** — `expect(locator).toBeVisible()/toShow()/toHaveText()` and
   `.not`, each polling until the condition holds (default 10s).
 - **Network interception** — a first-party HTTP + WebSocket mock server with
@@ -349,8 +350,7 @@ const app = defineApp({
   // runs once per describe, before screens are built:
   login: async ({ driver, role }) => {
     const p = page(driver);
-    await p.getByTestId("email").tap();
-    // text entry uses WebdriverIO directly — e.g. await $("~email").setValue(`${role}@example.com`)
+    await p.getByTestId("email").fill(`${role}@example.com`); // taps to focus, then types
     await p.getByRole("button", { name: "Sign in" }).tap();
   },
 
@@ -371,7 +371,8 @@ test.describe("a signed-in member", "member", () => { /* uses { member, mock } *
 test.describe("a guest", "guest", () => { /* uses { guest, mock } */ });
 ```
 
-> NativeProof locators **read and tap**; for text entry, drive WebdriverIO's `$(...).setValue(...)`
+> NativeProof locators **read, tap and fill** (text entry). For input `fill()` doesn't cover
+> (clearing a field first, custom keyboards, key chords), drive WebdriverIO's `$(...).setValue(...)`
 > directly inside `login` (the `@wdio/globals` `browser`/`$` are available in the live session).
 
 ### Locators
@@ -407,10 +408,16 @@ await member.roomTitle.textContent();   // the node's own text, or null
 await member.spinner.waitFor();         // wait until visible (throws on timeout)
 await member.sendButton.tap();          // wait for it, then tap its centre
 await member.sendButton.tap({ timeout: 2_000, interval: 100 }); // tune the wait
+await member.composer.fill("Hello team"); // focus the field (tap), then type
 ```
 
 `tap()` resolves the element's bounds from the page source and taps the centre — a coordinate
 tap that works even on Compose / SwiftUI nodes Appium reports as non-clickable.
+
+`fill(text, opts?)` focuses the field with a `tap()` and types `text` through the device keyboard
+— the native analogue of Playwright's `locator.fill()`. It types into the focused field and does
+**not** clear existing content first; it needs a driver with text input (the bundled `wdioDriver()`
+has it) and throws a clear error otherwise. `opts` is the same `{ timeout?, interval? }` as `tap()`.
 
 ### Assertions
 
@@ -639,7 +646,7 @@ The framework's own unit suite (`npm test`) needs **no device** and runs anywher
 - `defineConfig({ app, projects, testDir?, testMatch?, appium?, mochaTimeout? })` — the config the CLI runs.
 - `by.text/desc/id/testId/label`, `page(driver).getByText/getByTestId/getByLabel/getById/getByRole`,
   `page(driver).locator(selector)`, `new Locator(driver, selector)` — locators
-  (`isVisible`, `textContent`, `bounds`, `shows`, `waitFor`, `tap`).
+  (`isVisible`, `textContent`, `bounds`, `shows`, `waitFor`, `tap`, `fill`).
 - `expect(locator)` → `toBeVisible` / `toShow` / `toHaveText` (+ `.not`), each `(value?, { timeout?, interval? })`.
 - `expect(mock)` → `toHaveSent` / `toHaveReceived` (+ `.not`), matched by partial frame.
 - `startMockServer({ port?, host? })` → a `MockServer` (`url`, `wsUrl`, `route()`, `frames()`, `send()`, `stop()`).

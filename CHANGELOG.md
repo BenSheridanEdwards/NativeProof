@@ -4,6 +4,23 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.5.0
+
+Two additive, backward-compatible seams so an app can drive more of its lifecycle and
+traffic assertions through the framework instead of around it.
+
+**Added**
+
+- **`expect(...)` accepts any frame source, not just a full `MockBackend`** — a new
+  `FrameLog` interface (`{ frames() }`, which `MockBackend` extends) is all the traffic
+  matchers need. An app whose mock predates `MockBackend` can expose a frames-only adapter
+  over its existing request/socket log and get auto-waiting `expect(traffic).toHaveSent({
+  path, type, ...payload })` / `.toHaveReceived(...)` — no `route`/`stop` to implement.
+- **`defineApp({ teardown })`** — an optional app-level teardown hook, run on session
+  teardown BEFORE the mock stops and before the runner deletes the device session (e.g.
+  force-stop the app so its background sockets are gone before `deleteSession`). The mock
+  is still stopped even if the hook throws.
+
 ## 0.4.0
 
 Dead-code removal. The dropped exports were undocumented and unused by the framework, but

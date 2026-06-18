@@ -38,9 +38,18 @@ export interface MockRoute {
   abort(): void;
 }
 
-export interface MockBackend {
+/**
+ * A read-only source of observed frames — the minimum `expect(...)` needs to assert
+ * traffic. A full {@link MockBackend} is one, but so is any adapter that produces the
+ * frames an app exchanged (e.g. a view over an existing request/socket log), so a mock
+ * that predates {@link MockBackend} can be asserted on without implementing `route`/`stop`.
+ */
+export interface FrameLog {
   /** Every frame observed so far, in order, both directions. */
   frames(): Promise<readonly MockFrame[]>;
+}
+
+export interface MockBackend extends FrameLog {
   /** Intercept a path and control its reply. */
   route(path: string): MockRoute;
   /** Release the backend (stop the server, close sockets). */
@@ -67,10 +76,10 @@ export function describeMatch(match: FrameMatch): string {
 
 /** Single-shot check: does any observed frame match `match` in `direction`? */
 export async function frameExists(
-  mock: MockBackend,
+  source: FrameLog,
   direction: FrameDirection,
   match: FrameMatch,
 ): Promise<boolean> {
-  const frames = await mock.frames();
+  const frames = await source.frames();
   return frames.some((frame) => frame.direction === direction && matchesFrame(frame, match));
 }

@@ -40,6 +40,13 @@ export interface AppDefinition<S extends ScreenFactories> {
   join?: (context: FlowContext) => Promise<void>;
   /** Screen-object factories, bound to the device context. */
   screens: S;
+  /**
+   * Release app-level resources acquired across the session, run on teardown BEFORE the
+   * mock stops and before the runner deletes the device session — e.g. force-stop the app
+   * so its background sockets are gone before `deleteSession`. The mock is still stopped
+   * even if this throws.
+   */
+  teardown?: (context: SessionContext<S>) => Promise<void> | void;
 }
 
 /** The fixture context a session injects: the device handles plus each app screen. */
@@ -76,7 +83,12 @@ export function defineApp<S extends ScreenFactories>(definition: AppDefinition<S
           }
         },
         async teardown(context): Promise<void> {
-          if (context) await context.mock.stop();
+          if (!context) return;
+          try {
+            await definition.teardown?.(context);
+          } finally {
+            await context.mock.stop();
+          }
         },
       };
     },

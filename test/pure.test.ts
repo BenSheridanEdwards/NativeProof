@@ -108,13 +108,13 @@ test("LEAKED_SECRET_PATTERN is app-agnostic: catches real bearer tokens, ignores
   assert.equal(containsLeakedSecret("Bearer fake-e2e-token"), false);
   // An app-specific secret literal (e.g. a passcode) is injected by the consumer,
   // never baked into the framework — so the bare value is not flagged here.
-  assert.equal(containsLeakedSecret("passcode 2468"), false);
-  assert.equal(LEAKED_SECRET_PATTERN.test("2468"), false);
+  assert.equal(containsLeakedSecret("passcode 1234"), false);
+  assert.equal(LEAKED_SECRET_PATTERN.test("1234"), false);
 });
 
 test("redactEvidenceText strips passcodes, 4-8 digit values and bearer tokens", () => {
-  assert.match(redactEvidenceText('<node text="2468" />'), /\[REDACTED\]/);
-  assert.match(redactEvidenceText("passcode: 246800"), /passcode: \[REDACTED\]/);
+  assert.match(redactEvidenceText('<node text="1234" />'), /\[REDACTED\]/);
+  assert.match(redactEvidenceText("passcode: 123400"), /passcode: \[REDACTED\]/);
   assert.match(redactEvidenceText("Authorization: Bearer abc.def"), /Bearer \[REDACTED\]/);
   assert.doesNotMatch(redactEvidenceText("hello world"), /\[REDACTED\]/);
 });

@@ -42,6 +42,20 @@ test("expect(mock).toHaveSent matches a sent frame by path, type and payload", a
   await expect(mock).toHaveSent({ path: "/messages", type: "disconnect", end: false });
 });
 
+test("expect(mock).toHaveSent matches nested object/array payload fields by deep equality", async () => {
+  const mock = new FakeBackend();
+  mock.record({
+    path: "/messages",
+    type: "create",
+    direction: "sent",
+    payload: { author: { id: 7, name: "Ada" }, tags: ["a", "b"] },
+  });
+  // A fresh object/array literal — only deep equality (not reference equality) matches it.
+  await expect(mock).toHaveSent({ path: "/messages", author: { id: 7, name: "Ada" } });
+  await expect(mock).toHaveSent({ path: "/messages", tags: ["a", "b"] });
+  await expect(mock).not.toHaveSent({ path: "/messages", tags: ["a"] }, { timeout: 30, interval: 5 });
+});
+
 test("expect(mock) distinguishes sent from received by direction", async () => {
   const mock = new FakeBackend();
   mock.record({ path: "/messages", type: "new", direction: "received" });

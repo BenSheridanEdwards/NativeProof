@@ -40,7 +40,11 @@ export async function captureScreenshot(filename: string): Promise<string> {
 
 /** Capture a screenshot + redacted source pair under one prefix; returns the source. */
 export async function captureState(prefix: string): Promise<string> {
-  const source = await browser.getPageSource().catch(() => "");
+  const source = await browser.getPageSource().catch((err: unknown) => {
+    // A failed capture must not look like a clean empty screen in the evidence trail.
+    console.warn(`[nativeproof] getPageSource failed during captureState("${prefix}"): ${err}`);
+    return "";
+  });
   await captureScreenshot(`${prefix}.png`);
   await captureText(`${prefix}.xml`, source);
   return source;

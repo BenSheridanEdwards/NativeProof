@@ -48,6 +48,12 @@ test("parseArgs rejects an invalid platform, a missing value, and unknown flags"
   assert.throws(() => parseArgs(["--nope"]), /Unknown argument/);
 });
 
+test("parseArgs validates --appium-port (rejects non-numeric / out-of-range, accepts valid)", () => {
+  assert.throws(() => parseArgs(["--appium-port", "abc"]), /--appium-port must be an integer/);
+  assert.throws(() => parseArgs(["--appium-port", "99999"]), /--appium-port must be an integer/);
+  assert.equal(parseArgs(["--appium-port", "4724"]).appiumPort, 4724);
+});
+
 test("resolveRunner errors when no config is discoverable", () => {
   assert.throws(
     () => resolveRunner(parseArgs([]), "/tmp/nativeproof-nonexistent-xyz"),

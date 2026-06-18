@@ -75,7 +75,12 @@ export function parseArgs(argv: readonly string[]): CliArgs {
       args.appiumHost = valueFor(argv, i, "--appium-host");
     } else if (arg === "--appium-port") {
       i += 1;
-      args.appiumPort = Number(valueFor(argv, i, "--appium-port"));
+      const raw = valueFor(argv, i, "--appium-port");
+      const port = Number(raw);
+      if (!Number.isInteger(port) || port < 0 || port > 65535) {
+        throw new Error(`--appium-port must be an integer between 0 and 65535, got "${raw}"`);
+      }
+      args.appiumPort = port;
     } else if (arg === "--appium-path") {
       i += 1;
       args.appiumPath = valueFor(argv, i, "--appium-path");

@@ -32,7 +32,13 @@ export function wdioDriver(): Driver {
     get platform(): Platform {
       return browser.isAndroid ? "android" : "ios";
     },
-    source: () => browser.getPageSource().catch(() => ""),
+    source: () =>
+      browser.getPageSource().catch((err: unknown) => {
+        // Don't let a dead/unreachable session masquerade as "element not visible";
+        // surface it so a timeout's cause is visible, then degrade to empty source.
+        console.warn(`[nativeproof] getPageSource failed: ${err}`);
+        return "";
+      }),
     pause: (ms: number) => browser.pause(ms),
     tapAt: (x: number, y: number) => tapAt(x, y),
     typeText: (text: string) => browser.keys(text),

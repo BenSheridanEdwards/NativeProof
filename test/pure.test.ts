@@ -9,6 +9,7 @@ import {
   decodeXmlEntities,
   encodeXmlEntities,
   parseBounds,
+  smallestClickableAncestorBounds,
 } from "../src/source.js";
 
 /**
@@ -33,6 +34,16 @@ test("parseBounds returns null for malformed or missing input", () => {
   assert.equal(parseBounds(null), null);
 });
 
+test("parseBounds handles negative (off-screen / RTL-shifted) coordinates", () => {
+  const b = parseBounds("[-10,-5][90,95]");
+  assert.ok(b);
+  assert.equal(b.x1, -10);
+  assert.equal(b.y1, -5);
+  assert.equal(b.width, 100);
+  assert.equal(b.centerX, 40);
+  assert.equal(b.centerY, 45);
+});
+
 test("decode/encodeXmlEntities round-trip the page-source escaping", () => {
   assert.equal(decodeXmlEntities("Terms &amp; Conditions &lt;x&gt;"), "Terms & Conditions <x>");
   assert.equal(encodeXmlEntities("Terms & Conditions <x>"), "Terms &amp; Conditions &lt;x&gt;");
@@ -45,6 +56,26 @@ test("boundsForText matches a label the source XML-escaped (plain string in, ent
   assert.ok(b);
   assert.equal(b.centerX, 100);
   assert.equal(b.centerY, 40);
+});
+
+test("boundsForAttribute resolves even when bounds precedes the selector attribute", () => {
+  // Real dumps don't guarantee bounds comes after text/content-desc.
+  const source = '<node bounds="[0,0][200,80]" text="Submit" />';
+  const b = boundsForText(source, "Submit");
+  assert.ok(b);
+  assert.equal(b.centerX, 100);
+  assert.equal(b.centerY, 40);
+});
+
+test("smallestClickableAncestorBounds resolves when bounds precedes clickable", () => {
+  const inner = parseBounds("[50,90][150,110]");
+  assert.ok(inner);
+  const source =
+    '<node bounds="[0,0][300,400]" clickable="true">' +
+    '<node text="Tap me" clickable="false" bounds="[50,90][150,110]" /></node>';
+  const b = smallestClickableAncestorBounds(source, inner);
+  assert.equal(b.x1, 0);
+  assert.equal(b.x2, 300);
 });
 
 test("boundsForContentDesc locates the element addressed by content-desc", () => {

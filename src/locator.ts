@@ -4,6 +4,7 @@ import {
   boundsForAttribute,
   decodeXmlEntities,
   encodeXmlEntities,
+  escapeRegExp,
   smallestClickableAncestorBounds,
 } from "./source.js";
 
@@ -42,10 +43,6 @@ export const by = {
 
 export function describeSelector(selector: Selector): string {
   return `by.${selector.by}(${JSON.stringify(selector.value)})`;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -139,9 +136,16 @@ export class Locator {
     const selectorPattern = escapeRegExp(encodeXmlEntities(this.selector.value));
     const node = new RegExp(`<[^>]*${this.attribute()}="${selectorPattern}"[^>]*>`).exec(source)?.[0];
     if (!node) return null;
-    const textAttr = this.driver.platform === "ios" ? "value|label" : "text";
-    const raw = new RegExp(`(?:${textAttr})="([^"]*)"`).exec(node)?.[1];
-    return raw == null ? null : decodeXmlEntities(raw);
+    // A visible label can live in either of two attributes per platform, in the same
+    // precedence `attributeFor` uses (iOS label→value, Android text→content-desc). Prefer
+    // the first NON-empty one, so a node like `value="" label="Submit"` reads "Submit",
+    // falling back to the first present (possibly empty) attribute.
+    const attrs = this.driver.platform === "ios" ? ["label", "value"] : ["text", "content-desc"];
+    const present = attrs
+      .map((attr) => new RegExp(`${attr}="([^"]*)"`).exec(node)?.[1])
+      .filter((v): v is string => v !== undefined);
+    const raw = present.find((v) => v !== "") ?? present[0];
+    return raw === undefined ? null : decodeXmlEntities(raw);
   }
 
   /** True if the selector is present AND `text` appears in the source. */

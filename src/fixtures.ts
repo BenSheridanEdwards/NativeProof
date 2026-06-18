@@ -14,7 +14,7 @@
  * surface intended for extraction into a standalone package.
  */
 
-import { runner } from "./runner.js";
+import { type BddHooks, runner } from "./runner.js";
 
 /**
  * Provisioning + teardown for one behaviour scenario's shared fixture context.
@@ -46,7 +46,14 @@ export interface ScenarioFixture<Ctx> {
  * behaviour — no `before`/`after`, no threading a backend handle through assertions.
  * Read it Playwright-style: destructure the fixtures the behaviour needs.
  */
-export type BehaviourRegistrar<Ctx> = (title: string, body: (context: Ctx) => void | Promise<void>) => void;
+export interface BehaviourRegistrar<Ctx> {
+  /** Register one behaviour; the provisioned context is injected into its body. */
+  (title: string, body: (context: Ctx) => void | Promise<void>): void;
+  /** Run before each behaviour in the scenario, with the provisioned context. */
+  beforeEach(body: (context: Ctx) => void | Promise<void>): void;
+  /** Run after each behaviour in the scenario, with the provisioned context. */
+  afterEach(body: (context: Ctx) => void | Promise<void>): void;
+}
 
 /**
  * Define a behaviour scenario: a Mocha `describe` whose fixture context is
@@ -69,7 +76,8 @@ export function describeScenario<Ctx>(
   fixture: ScenarioFixture<Ctx>,
   define: (test: BehaviourRegistrar<Ctx>) => void,
 ): void {
-  const { describe, before, after, it } = runner();
+  const hooks = runner();
+  const { describe, before, after, it } = hooks;
   describe(title, () => {
     let context: Ctx | undefined;
 
@@ -81,14 +89,34 @@ export function describeScenario<Ctx>(
       await fixture.teardown(context);
     });
 
-    const test: BehaviourRegistrar<Ctx> = (behaviourTitle, body) => {
-      it(behaviourTitle, async () => {
-        if (context === undefined) {
-          throw new Error(`Scenario "${title}" ran a behaviour before its fixture context was provisioned`);
-        }
-        await body(context);
+    const requireContext = (): Ctx => {
+      if (context === undefined) {
+        throw new Error(`Scenario "${title}" ran a behaviour before its fixture context was provisioned`);
+      }
+      return context;
+    };
+
+    const registerHook = (
+      hook: BddHooks["beforeEach"],
+      name: string,
+      body: (context: Ctx) => void | Promise<void>,
+    ): void => {
+      if (!hook) {
+        throw new Error(`The active runner has no ${name} hook; scenario ${name} is unavailable`);
+      }
+      hook(async () => {
+        await body(requireContext());
       });
     };
+
+    const test = ((behaviourTitle: string, body: (context: Ctx) => void | Promise<void>): void => {
+      it(behaviourTitle, async () => {
+        await body(requireContext());
+      });
+    }) as BehaviourRegistrar<Ctx>;
+
+    test.beforeEach = (body) => registerHook(hooks.beforeEach, "beforeEach", body);
+    test.afterEach = (body) => registerHook(hooks.afterEach, "afterEach", body);
 
     define(test);
   });

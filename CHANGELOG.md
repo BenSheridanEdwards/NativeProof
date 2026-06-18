@@ -16,6 +16,10 @@ Playwright-parity additions to locators, assertions, fixtures, and evidence.
 - **Multi-match locators** — `Locator.nth(i)` / `first()` / `last()` (negative `i` counts from the end),
   `Locator.count()`, and auto-waiting `expect(locator).toHaveCount(n)`. An unindexed locator still
   resolves to the first match. New `nodesForAttribute` source helper backs it.
+- **Scenario `beforeEach` / `afterEach`** — `test.beforeEach(fn)` / `test.afterEach(fn)` (and the
+  `describeScenario` registrar's `.beforeEach` / `.afterEach`) register per-behaviour hooks that
+  receive the provisioned fixture context — a repeatable reset between behaviours without leaving the
+  harness. `BddHooks` gained optional `beforeEach` / `afterEach` (present on Mocha and node:test).
 - **`by.*` and every `page().getBy*` accept a `RegExp`** as well as a string —
   `getByText(/Save( draft)?/)`, `getByLabel(/^Remove /)`, `getByRole("checkbox", { name: /terms/i })`.
   A string matches the element's value exactly; a RegExp is tested against the element's **decoded**

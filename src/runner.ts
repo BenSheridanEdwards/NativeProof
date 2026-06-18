@@ -7,10 +7,16 @@
  * (for example node:test). This keeps the framework from hard-coding a single runner,
  * the way Playwright owns its own.
  */
+/** A per-behaviour hook (`beforeEach` / `afterEach`). */
+type PerTestHook = (fn: () => void | Promise<void>) => void;
+
 export interface BddHooks {
   describe(title: string, fn: () => void): void;
   before(fn: () => void | Promise<void>): void;
   after(fn: () => void | Promise<void>): void;
+  /** Optional per-behaviour hooks; present on Mocha and node:test. */
+  beforeEach?(fn: () => void | Promise<void>): void;
+  afterEach?(fn: () => void | Promise<void>): void;
   it(title: string, fn: () => void | Promise<void>): void;
 }
 
@@ -23,7 +29,7 @@ export function useRunner(hooks: BddHooks): void {
 
 function fromGlobals(): BddHooks | null {
   const globals = globalThis as Record<string, unknown>;
-  const { describe, before, after, it } = globals;
+  const { describe, before, after, beforeEach, afterEach, it } = globals;
   if (
     typeof describe === "function" &&
     typeof before === "function" &&
@@ -35,6 +41,8 @@ function fromGlobals(): BddHooks | null {
       before: before as BddHooks["before"],
       after: after as BddHooks["after"],
       it: it as BddHooks["it"],
+      ...(typeof beforeEach === "function" ? { beforeEach: beforeEach as PerTestHook } : {}),
+      ...(typeof afterEach === "function" ? { afterEach: afterEach as PerTestHook } : {}),
     };
   }
   return null;

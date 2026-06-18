@@ -26,6 +26,10 @@ export interface HarnessTest<S extends ScreenFactories> {
   describe(title: string, body: () => void): void;
   /** Open a scenario block for a specific role (e.g. "member" / "guest"). */
   describe(title: string, role: string, body: () => void): void;
+  /** Run before each behaviour in the open scenario, with the session context injected. */
+  beforeEach(body: (context: SessionContext<S>) => void | Promise<void>): void;
+  /** Run after each behaviour in the open scenario, with the session context injected. */
+  afterEach(body: (context: SessionContext<S>) => void | Promise<void>): void;
 }
 
 export interface Harness<S extends ScreenFactories> {
@@ -59,6 +63,15 @@ export function createHarness<S extends ScreenFactories>(app: App<S>): Harness<S
       }
     });
   }) as HarnessTest<S>["describe"];
+
+  const requireActive = (hook: string): BehaviourRegistrar<SessionContext<S>> => {
+    if (!active) {
+      throw new Error(`test.${hook}(...) must be called inside test.describe(...)`);
+    }
+    return active;
+  };
+  test.beforeEach = (body) => requireActive("beforeEach").beforeEach(body);
+  test.afterEach = (body) => requireActive("afterEach").afterEach(body);
 
   return { test, expect };
 }

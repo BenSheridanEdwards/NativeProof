@@ -489,6 +489,7 @@ await expect(member.spinner).not.toBeVisible({ timeout: 5_000 });
 - `toShow(text, opts?)` — the selector is present **and** `text` appears in the source.
 - `toHaveText(text, opts?)` — the matched node's **own** text contains / matches `text`.
 - `toBeChecked(opts?)` — the matched checkbox / switch is checked (`checked="true"`).
+- `toBeEnabled(opts?)` / `toBeDisabled(opts?)` — the matched element's `enabled` state.
 - `toHaveCount(n, opts?)` — exactly `n` elements match the selector.
 - `opts` is `{ timeout?, interval? }` (ms).
 

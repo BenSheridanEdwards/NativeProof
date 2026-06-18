@@ -4,6 +4,17 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.0
+
+Element enabled-state assertions.
+
+**Added**
+
+- **`Locator.isEnabled()` / `isDisabled()` and `expect(locator).toBeEnabled()` / `toBeDisabled()`** —
+  read the matched element's `enabled` attribute (present and not `enabled="false"` is enabled, matching
+  Playwright's default-enabled semantics). Auto-waiting, `.not` inverts. For asserting a button/control
+  flips between enabled and disabled as a form validates.
+
 ## 0.9.0
 
 Regex frame matching — `expect(mock)` matches traffic by pattern.

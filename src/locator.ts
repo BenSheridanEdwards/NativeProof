@@ -287,6 +287,18 @@ export class Locator {
     return node !== null && /\bchecked="true"/.test(node);
   }
 
+  /** True if the matched node is present and not `enabled="false"` (matches Playwright's default-enabled). */
+  async isEnabled(): Promise<boolean> {
+    const node = this.pick(await this.matchedNodes());
+    return node !== null && !/\benabled="false"/.test(node);
+  }
+
+  /** True if the matched node is present and explicitly `enabled="false"`. */
+  async isDisabled(): Promise<boolean> {
+    const node = this.pick(await this.matchedNodes());
+    return node !== null && /\benabled="false"/.test(node);
+  }
+
   /** Tap to bring a checkbox/switch to checked; a no-op if it already is. */
   async check(options: WaitOptions = {}): Promise<void> {
     await this.setChecked(true, options);

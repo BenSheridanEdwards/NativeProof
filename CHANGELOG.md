@@ -4,6 +4,19 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.7.0
+
+Role selectors — `getByRole` matches by element role, not just name.
+
+**Added**
+
+- **`getByRole(role)` / `by.role(role)` match by element class/type** when no `name` is given —
+  `checkbox`, `switch`, `button`, `textfield`, `image`. Maps to the Android widget `class` / iOS
+  XCUITest `type` as a substring, so `SwitchCompat`, `MaterialButton`, and Compose's
+  `android.widget.CheckBox` all resolve. Combine with `.nth()` / `expect(locator).toBeChecked()`.
+  `getByRole(role, { name })` is unchanged (matches the accessibility label); an unknown role throws
+  with the supported list. New `nodesForRole` source helper.
+
 ## 0.6.0
 
 Playwright-parity additions to locators, assertions, fixtures, and evidence.

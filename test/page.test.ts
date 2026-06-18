@@ -32,10 +32,15 @@ test("getByText / getByLabel / getByTestId / getById resolve the right Android a
   assert.equal(await p.getByText("Nope").isVisible(), false);
 });
 
-test("getByRole matches the accessible name (role advisory on native)", async () => {
-  const p = page(new FakeDriver(ANDROID));
-  assert.equal(await p.getByRole("button", { name: "Sign out" }).isVisible(), true);
-  await assert.rejects(async () => p.getByRole("button", { name: "" }), /needs \{ name \}/);
+test("getByRole matches by name, or by element role when no name is given", async () => {
+  const p = page(
+    new FakeDriver(
+      '<node content-desc="Sign out" /><node class="android.widget.CheckBox" checked="true" bounds="[0,0][50,50]" />',
+    ),
+  );
+  assert.equal(await p.getByRole("button", { name: "Sign out" }).isVisible(), true); // name → accessibility label
+  assert.equal(await p.getByRole("checkbox").isVisible(), true); // no name → element class/type
+  await assert.rejects(async () => p.getByRole("button", { name: "" }), /name must be non-empty/);
 });
 
 test("selectors map to iOS attributes when the platform is iOS", async () => {

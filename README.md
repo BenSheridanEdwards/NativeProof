@@ -409,7 +409,8 @@ p.getByText(/Sign ?in/i);                // ...or a RegExp, matched against the 
 p.getByTestId("login-button");           // your test id
 p.getByLabel("Sign out");                // accessibility label
 p.getById("message-list");               // resource id
-p.getByRole("button", { name: "Send" }); // accessible name (role is advisory on native)
+p.getByRole("button", { name: "Send" }); // accessible name
+p.getByRole("checkbox");                 // by role/class — checkbox/switch/button/textfield/image
 p.locator(by.desc("Open menu"));         // escape hatch: a raw selector
 ```
 
@@ -423,6 +424,7 @@ How each maps to the page source:
 |---|---|---|
 | `getByText` / `by.text` | `text` or `content-desc` | `label` or `value` |
 | `getByLabel` / `by.label` / `getByRole({name})` | `content-desc` | `label` |
+| `getByRole(role)` / `by.role` (no name) | widget `class` | XCUITest `type` |
 | `getByTestId` / `by.testId` | `resource-id` | `name` |
 | `getById` / `by.id` | `resource-id` | `name` |
 | `by.desc` | `content-desc` | `name` |

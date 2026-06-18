@@ -1,5 +1,4 @@
 import { isDeepStrictEqual } from "node:util";
-import { type WaitOptions, waitUntil } from "./locator.js";
 
 /**
  * Backend mocking that feels like Playwright's `page.route()`.
@@ -74,18 +73,4 @@ export async function frameExists(
 ): Promise<boolean> {
   const frames = await mock.frames();
   return frames.some((frame) => frame.direction === direction && matchesFrame(frame, match));
-}
-
-/** Poll until a frame matching `match` in `direction` appears, or the timeout elapses. */
-export function waitForFrame(
-  mock: MockBackend,
-  direction: FrameDirection,
-  match: FrameMatch,
-  options: WaitOptions = {},
-): Promise<boolean> {
-  return waitUntil(
-    () => frameExists(mock, direction, match),
-    (present) => present,
-    options,
-  );
 }

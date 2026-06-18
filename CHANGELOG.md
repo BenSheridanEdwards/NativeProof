@@ -4,6 +4,21 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.4.0
+
+Dead-code removal. The dropped exports were undocumented and unused by the framework, but
+since they were technically part of the published surface this is a minor bump.
+
+**Removed**
+
+- **`src/text.ts`** — a legacy WebdriverIO-`$`-based selector/text layer (`exactText`,
+  `tapVisibleText`, `typeInto`, `waitForAnyVisibleText`, …) superseded by the `Driver` / `Locator` /
+  `page` stack. Use `page(driver).getByText(...)` / `Locator.fill(...)` instead.
+- **`src/screen.ts`** — the unused `Screen` base class (nothing extended it).
+- **`src/wait.ts`** — `waitAndClick` / `waitForAnyDisplayed`, only ever used by `Screen`.
+- **`readLog`** (from `log.ts`) and **`waitForFrame`** (from `mock.ts`) — unused exports. The
+  documented mock-traffic API (`expect(mock).toHaveSent/toHaveReceived`) is unaffected.
+
 ## 0.3.1
 
 Correctness and robustness fixes; no API changes.

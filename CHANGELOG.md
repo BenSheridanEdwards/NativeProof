@@ -4,6 +4,10 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.3.0
+
+Maintenance release — version bump only; no functional changes since 0.2.0.
+
 ## 0.2.0
 
 Locator interaction, generic assertions, and Compose/SwiftUI robustness — plus the docs for each.

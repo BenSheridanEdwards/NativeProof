@@ -1,6 +1,6 @@
 {
   "name": "nativeproof",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
   "type": "module",
   "description": "Native Mobile E2E test framework inspired by Playwright (fixtures, locators, expect, route-style mocking) on Appium/WebdriverIO.",

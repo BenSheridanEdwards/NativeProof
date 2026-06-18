@@ -60,11 +60,11 @@ nativeproof --platform android
 - **Locators** — `by.text/testId/label/desc/id` and `page(driver).getByText/getByTestId/
   getByLabel/getById/getByRole`, each mapped to the right native attribute per platform (so you
   never guess `content-desc` vs `accessibilityIdentifier`), with built-in auto-waiting and
-  `tap()` / `fill()` for interaction. Each takes a string (exact) or a **`RegExp`**
-  (`getByText(/Save( draft)?/)`), tested against the element's decoded value.
-- **Auto-waiting `expect`** — `expect(locator).toBeVisible()/toShow()/toHaveText()` and
-  `.not`, each polling until the condition holds (default 10s); plus synchronous `expect(value)`
-  matchers (`toBe`/`toEqual`/`toContain`/…) so non-UI checks need no second assertion library.
+  `tap()` / `fill()` / `check()` for interaction. Each takes a string (exact) or a **`RegExp`**
+  (`getByText(/Save( draft)?/)`); `.nth()` / `.first()` / `.last()` / `.count()` handle multiple matches.
+- **Auto-waiting `expect`** — `expect(locator).toBeVisible()/toShow()/toHaveText()/toBeChecked()/
+  toHaveCount()` and `.not`, each polling until the condition holds (default 10s); plus synchronous
+  `expect(value)` matchers (`toBe`/`toEqual`/`toContain`/…) so non-UI checks need no second assertion library.
 - **Network interception** — a first-party HTTP + WebSocket mock server with
   `route().fulfill/reject/abort` (like `page.route()`) and `expect(mock).toHaveSent()/
   toHaveReceived()` traffic assertions. No per-app adapter.
@@ -371,13 +371,27 @@ const app = defineApp({
     member: ({ driver }) => ({ messages: page(driver).getByTestId("message-list") }),
     guest: ({ driver }) => ({ banner: page(driver).getByTestId("signup-banner") }),
   },
+
+  // optional lifecycle hooks:
+  teardown: async ({ driver }) => { /* release app resources before the session is deleted */ },
+  onFailure: async (ctx, { title, error }) => { await captureState(`fail-${title}`); }, // evidence on any failed behaviour
 });
 ```
 
 ```ts
-test.describe("a signed-in member", "member", () => { /* uses { member, mock } */ });
+test.describe("a signed-in member", "member", () => {
+  test.beforeEach(async ({ member }) => { /* reset to a known state before each behaviour */ });
+  test.afterEach(async ({ member }) => { /* per-behaviour cleanup, if any */ });
+  test("renders the latest message", async ({ member, mock }) => { /* … */ });
+});
 test.describe("a guest", "guest", () => { /* uses { guest, mock } */ });
 ```
+
+The session fixture is provisioned **once** per `describe` (the slow login + join) and shared across
+its behaviours; `beforeEach` / `afterEach` run around each behaviour with the context injected — a
+repeatable reset without per-spec boilerplate. `teardown` runs before the mock stops and the session
+is deleted (e.g. force-stop the app); `onFailure` runs when a behaviour throws, before the failure
+propagates, so on-failure evidence lives in one place instead of every behaviour.
 
 > NativeProof locators **read, tap and fill** (text entry). For input `fill()` doesn't cover
 > (clearing a field first, custom keyboards, key chords), drive WebdriverIO's `$(...).setValue(...)`
@@ -391,12 +405,17 @@ you address elements the way a person describes them, not by `content-desc` vs `
 ```ts
 const p = page(driver);
 p.getByText("Sign in");                  // visible text
+p.getByText(/Sign ?in/i);                // ...or a RegExp, matched against the element's decoded value
 p.getByTestId("login-button");           // your test id
 p.getByLabel("Sign out");                // accessibility label
 p.getById("message-list");               // resource id
 p.getByRole("button", { name: "Send" }); // accessible name (role is advisory on native)
 p.locator(by.desc("Open menu"));         // escape hatch: a raw selector
 ```
+
+Every `getBy*` (and `by.*`) takes a **string** (exact match) or a **`RegExp`** (tested against the
+element's decoded value), so a human pattern matches even entity-escaped source — `getByText(/Save( draft)?/)`,
+`getByLabel(/^Remove /)`, `getByRole("checkbox", { name: /terms/i })`. The Playwright muscle memory carries over.
 
 How each maps to the page source:
 
@@ -423,6 +442,11 @@ await member.sendButton.tap();          // wait for it, then tap its centre
 await member.sendButton.tap({ timeout: 2_000, interval: 100 }); // tune the wait
 await member.row.tap({ clickableAncestor: true }); // tap the clickable parent of a non-clickable label
 await member.composer.fill("Hello team"); // focus the field (tap), then type
+
+await p.getByText("Item").count();       // how many elements match
+await p.getByText("Item").nth(1).tap();  // the 2nd match (.first() / .last(); negative counts from the end)
+await member.terms.check();              // checkbox/switch → tap to checked (no-op if already there); also uncheck()
+await member.terms.isChecked();          // boolean
 ```
 
 `tap()` resolves the element's bounds from the page source and taps the centre — a coordinate
@@ -447,12 +471,16 @@ Assertions **auto-wait** (poll until the condition holds or the timeout elapses,
 await expect(member.messages).toBeVisible();
 await expect(member.messages).toShow("Welcome to the room");   // present + text anywhere on screen
 await expect(member.roomTitle).toHaveText(/Room: \w+/);        // the node's OWN text (substring or regex)
+await expect(member.terms).toBeChecked();                      // checkbox / switch is on
+await expect(member.results).toHaveCount(3);                   // exactly 3 elements match
 await expect(member.spinner).not.toBeVisible({ timeout: 5_000 });
 ```
 
 - `toBeVisible(opts?)` — the selector matches a node in the source.
 - `toShow(text, opts?)` — the selector is present **and** `text` appears in the source.
 - `toHaveText(text, opts?)` — the matched node's **own** text contains / matches `text`.
+- `toBeChecked(opts?)` — the matched checkbox / switch is checked (`checked="true"`).
+- `toHaveCount(n, opts?)` — exactly `n` elements match the selector.
 - `opts` is `{ timeout?, interval? }` (ms).
 
 **Value matchers** — `expect(value)` also takes a plain value, for the non-UI assertions a spec
@@ -572,6 +600,11 @@ const app = defineApp({
 
 The framework depends only on the `MockBackend` interface, never a concrete server — so
 `expect(mock).toHaveSent(...)` reads your backend's traffic with no other changes.
+
+> **Just need the assertions?** If your mock can't implement `route` / `stop` (e.g. it only writes a
+> request/socket log), expose a frames-only **`FrameLog`** — `{ frames(): Promise<MockFrame[]> }`,
+> which `MockBackend` extends — and pass *that* to `expect(...)`: `expect(traffic).toHaveSent({ path, type })`
+> / `.toHaveReceived(...)` auto-wait over it, no `route`/`stop` needed.
 
 ### Gestures & scrolling
 
@@ -724,15 +757,17 @@ The framework's own unit suite (`npm test`) needs **no device** and runs anywher
 
 ## API reference
 
-- `defineApp(definition)` → `app` — the seam; `app.session(role?)` is a scenario fixture.
-- `createHarness(app)` → `{ test, expect }` — typed, app-bound test surface.
+- `defineApp(definition)` → `app` — the seam; `app.session(role?)` is a scenario fixture. `definition` also
+  takes optional `teardown(ctx)` (before mock stop / session delete) and `onFailure(ctx, { title, error })`.
+- `createHarness(app)` → `{ test, expect }` — typed, app-bound test surface; `test.beforeEach` / `test.afterEach`
+  register per-behaviour hooks with the context injected.
 - `defineConfig({ app, projects, testDir?, testMatch?, appium?, mochaTimeout? })` — the config the CLI runs.
-- `by.text/desc/id/testId/label`, `page(driver).getByText/getByTestId/getByLabel/getById/getByRole`,
+- `by.text/desc/id/testId/label` (string **or** `RegExp`), `page(driver).getByText/getByTestId/getByLabel/getById/getByRole`,
   `page(driver).locator(selector)`, `new Locator(driver, selector)` — locators
-  (`isVisible`, `textContent`, `bounds`, `shows`, `waitFor`, `tap`, `fill` — `tap({ clickableAncestor })`
-  for non-clickable labels).
-- `expect(locator)` → `toBeVisible` / `toShow` / `toHaveText` (+ `.not`), each `(value?, { timeout?, interval? })`.
-- `expect(mock)` → `toHaveSent` / `toHaveReceived` (+ `.not`), matched by partial frame.
+  (`isVisible`, `textContent`, `bounds`, `shows`, `waitFor`, `tap`, `fill`, `isChecked`, `check`, `uncheck`,
+  `count`, `nth`, `first`, `last` — `tap({ clickableAncestor })` for non-clickable labels).
+- `expect(locator)` → `toBeVisible` / `toShow` / `toHaveText` / `toBeChecked` / `toHaveCount` (+ `.not`), each `(value?, { timeout?, interval? })`.
+- `expect(mock | frameLog)` → `toHaveSent` / `toHaveReceived` (+ `.not`), matched by partial frame; accepts any `FrameLog` (`{ frames() }`).
 - `expect(value)` → `toBe` / `toEqual` / `toContain` / `toBeTruthy` / `toBeFalsy` / `toBeDefined` / `toBeNull` (+ `.not`) — synchronous matchers for plain values.
 - `startMockServer({ port?, host? })` → a `MockServer` (`url`, `wsUrl`, `route()`, `frames()`, `send()`, `stop()`).
 - `swipe`, `tapAt`, `pause` — low-level pointer gestures.

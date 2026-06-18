@@ -23,9 +23,19 @@ export interface MockFrame {
 
 /** A partial frame to match against: `path` / `type` plus any payload fields. */
 export interface FrameMatch {
-  path?: string;
-  type?: string;
+  path?: string | RegExp;
+  type?: string | RegExp;
   [key: string]: unknown;
+}
+
+/**
+ * Match one field of an observed frame against an expected value: a `RegExp` tests the
+ * actual string (so paths with query/suffix match — `toHaveSent({ path: /\/users/ })`),
+ * anything else is deep structural equality.
+ */
+function fieldMatches(actual: unknown, expected: unknown): boolean {
+  if (expected instanceof RegExp) return typeof actual === "string" && expected.test(actual);
+  return isDeepStrictEqual(actual, expected);
 }
 
 /** Controls how an intercepted path replies — the Playwright `Route` equivalent. */
@@ -61,17 +71,17 @@ export interface MockBackend extends FrameLog {
  * every other key against the frame's payload.
  */
 export function matchesFrame(frame: MockFrame, match: FrameMatch): boolean {
-  if (match.path !== undefined && frame.path !== match.path) return false;
-  if (match.type !== undefined && frame.type !== match.type) return false;
+  if (match.path !== undefined && !fieldMatches(frame.path, match.path)) return false;
+  if (match.type !== undefined && !fieldMatches(frame.type, match.type)) return false;
   for (const [key, value] of Object.entries(match)) {
     if (key === "path" || key === "type") continue;
-    if (!isDeepStrictEqual(frame.payload?.[key], value)) return false;
+    if (!fieldMatches(frame.payload?.[key], value)) return false;
   }
   return true;
 }
 
 export function describeMatch(match: FrameMatch): string {
-  return JSON.stringify(match);
+  return JSON.stringify(match, (_key, value) => (value instanceof RegExp ? String(value) : value));
 }
 
 /** Single-shot check: does any observed frame match `match` in `direction`? */

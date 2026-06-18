@@ -555,7 +555,8 @@ test.describe("chat room", "member", () => {
 - `mock.route(path).reject({ code })` — fail it (HTTP status, or WebSocket close code 3000–4999).
 - `mock.route(path).abort()` — drop the connect/request entirely.
 - `expect(mock).toHaveSent(match)` / `toHaveReceived(match)` — `match` is a partial frame:
-  `path` / `type` plus any payload fields.
+  `path` / `type` plus any payload fields. Each field is a string (exact / deep-equal) **or a `RegExp`**
+  (`toHaveSent({ path: /\/users/, type: "request" })`) to match a query-suffixed or variable path.
 
 **Frame types** — real protocol messages keep their own `type` (a WS JSON message's `type`); the
 server also synthesises types for primitives so you can assert on them:

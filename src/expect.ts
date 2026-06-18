@@ -18,6 +18,8 @@ export interface LocatorAssertions {
   toHaveText(text: string | RegExp, options?: WaitOptions): Promise<void>;
   /** The matched checkbox/switch is checked (`checked="true"`). */
   toBeChecked(options?: WaitOptions): Promise<void>;
+  /** Exactly `count` elements match the selector. */
+  toHaveCount(count: number, options?: WaitOptions): Promise<void>;
 }
 
 export interface MockAssertions {
@@ -79,6 +81,10 @@ class LocatorExpectation implements LocatorAssertions {
 
   toBeChecked(options: WaitOptions = {}): Promise<void> {
     return this.check(() => this.locator.isChecked(), "be checked", options);
+  }
+
+  toHaveCount(count: number, options: WaitOptions = {}): Promise<void> {
+    return this.check(async () => (await this.locator.count()) === count, `have count ${count}`, options);
   }
 
   private async check(

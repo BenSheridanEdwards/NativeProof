@@ -23,8 +23,5 @@ export * from "./mock.js";
 export * from "./mock-server.js";
 export * from "./page.js";
 export * from "./runner.js";
-export * from "./screen.js";
 export * from "./source.js";
 export * from "./test.js";
-export * from "./text.js";
-export * from "./wait.js";

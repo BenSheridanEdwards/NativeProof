@@ -1,5 +1,3 @@
-import fs from "node:fs/promises";
-
 /**
  * Network-evidence log helpers.
  *
@@ -8,10 +6,6 @@ import fs from "node:fs/promises";
  * Playwright-`page.route()` equivalent that native Appium otherwise lacks.
  * App-agnostic; app-specific frame semantics live in the consumer's assertions.
  */
-
-export async function readLog(logPath: string): Promise<string> {
-  return fs.readFile(logPath, "utf8").catch(() => "");
-}
 
 export function countMatches(text: string, pattern: RegExp): number {
   const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;

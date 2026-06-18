@@ -641,9 +641,9 @@ jobs:
   android-e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with: { node-version: 24 }
       - run: npm ci
       - run: npx appium driver install uiautomator2
       - uses: reactivecircus/android-emulator-runner@v2
@@ -659,9 +659,9 @@ jobs:
   ios-e2e:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with: { node-version: 24 }
       - run: npm ci
       - run: npx appium driver install xcuitest
       - run: xcrun simctl boot "iPhone 15" || true

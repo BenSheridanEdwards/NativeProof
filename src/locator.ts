@@ -185,6 +185,21 @@ export class Locator {
       : bounds;
     await this.driver.tapAt(target.centerX, target.centerY);
   }
+
+  /**
+   * Focus the field (tap it) and type `text`. Requires a driver with text input
+   * ({@link Driver.typeText}); throws a clear error otherwise. Types into the focused
+   * field — it does not clear existing content first.
+   */
+  async fill(text: string, options: WaitOptions = {}): Promise<void> {
+    if (!this.driver.typeText) {
+      throw new Error(
+        `${describeSelector(this.selector)}.fill(...) needs a driver that supports text input (Driver.typeText)`,
+      );
+    }
+    await this.tap(options);
+    await this.driver.typeText(text);
+  }
 }
 
 /** Convenience factory: `locator(driver, by.text("Submit"))`. */

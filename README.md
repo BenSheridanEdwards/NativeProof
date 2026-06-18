@@ -641,8 +641,8 @@ jobs:
   android-e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 24 }
       - run: npm ci
       - run: npx appium driver install uiautomator2
@@ -659,8 +659,8 @@ jobs:
   ios-e2e:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 24 }
       - run: npm ci
       - run: npx appium driver install xcuitest

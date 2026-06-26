@@ -1,7 +1,6 @@
-import type { App, ScreenFactories, SessionContext } from "./app.js";
+import type { App } from "./app.js";
 import { expect } from "./expect.js";
 import { type BehaviourRegistrar, describeScenario } from "./fixtures.js";
-import type { SessionMock } from "./mock.js";
 
 /**
  * `createHarness(app)` — the Playwright `@playwright/test` pattern.
@@ -21,34 +20,41 @@ import type { SessionMock } from "./mock.js";
  * });
  * ```
  */
-export interface HarnessTest<S extends ScreenFactories<M>, M extends SessionMock = SessionMock> {
-  (name: string, body: (context: SessionContext<S, M>) => void | Promise<void>): void;
+/**
+ * Parameterised by the *resolved* session context `Ctx`, not by the screens type `S`. When a
+ * project does `export const { test } = createHarness(app)` and a spec in another file imports
+ * `test`, TS computes the portable exported type — and if the harness were parameterised by
+ * `S extends ScreenFactories<M>`, it would write the **constraint** (`ScreenFactories<M>`, whose
+ * screens return `unknown`) instead of the concrete `S`, so every imported behaviour's context
+ * would be `unknown`. `Ctx` is already the concrete object (`{ driver; mock; …screens }`), so the
+ * screen return types survive the boundary and behaviours stay fully typed.
+ */
+export interface HarnessTest<Ctx> {
+  (name: string, body: (context: Ctx) => void | Promise<void>): void;
   /** Open a scenario block for the default role. */
   describe(title: string, body: () => void): void;
   /** Open a scenario block for a specific role (e.g. "member" / "guest"). */
   describe(title: string, role: string, body: () => void): void;
   /** Run before each behaviour in the open scenario, with the session context injected. */
-  beforeEach(body: (context: SessionContext<S, M>) => void | Promise<void>): void;
+  beforeEach(body: (context: Ctx) => void | Promise<void>): void;
   /** Run after each behaviour in the open scenario, with the session context injected. */
-  afterEach(body: (context: SessionContext<S, M>) => void | Promise<void>): void;
+  afterEach(body: (context: Ctx) => void | Promise<void>): void;
 }
 
-export interface Harness<S extends ScreenFactories<M>, M extends SessionMock = SessionMock> {
-  test: HarnessTest<S, M>;
+export interface Harness<Ctx> {
+  test: HarnessTest<Ctx>;
   expect: typeof expect;
 }
 
-export function createHarness<S extends ScreenFactories<M>, M extends SessionMock = SessionMock>(
-  app: App<S, M>,
-): Harness<S, M> {
-  let active: BehaviourRegistrar<SessionContext<S, M>> | null = null;
+export function createHarness<Ctx>(app: App<Ctx>): Harness<Ctx> {
+  let active: BehaviourRegistrar<Ctx> | null = null;
 
-  const test = ((name: string, body: (context: SessionContext<S, M>) => void | Promise<void>): void => {
+  const test = ((name: string, body: (context: Ctx) => void | Promise<void>): void => {
     if (!active) {
       throw new Error(`test(${JSON.stringify(name)}) must be called inside test.describe(...)`);
     }
     active(name, body);
-  }) as HarnessTest<S, M>;
+  }) as HarnessTest<Ctx>;
 
   test.describe = ((title: string, roleOrBody: string | (() => void), maybeBody?: () => void): void => {
     const role = typeof roleOrBody === "string" ? roleOrBody : undefined;
@@ -65,9 +71,9 @@ export function createHarness<S extends ScreenFactories<M>, M extends SessionMoc
         active = previous;
       }
     });
-  }) as HarnessTest<S, M>["describe"];
+  }) as HarnessTest<Ctx>["describe"];
 
-  const requireActive = (hook: string): BehaviourRegistrar<SessionContext<S, M>> => {
+  const requireActive = (hook: string): BehaviourRegistrar<Ctx> => {
     if (!active) {
       throw new Error(`test.${hook}(...) must be called inside test.describe(...)`);
     }

@@ -1,8 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
-import type { App, ScreenFactories } from "./app.js";
+import type { App } from "./app.js";
 import { captureState, failureEvidenceName } from "./evidence.js";
-import type { SessionMock } from "./mock.js";
 
 /**
  * The Playwright-style config: one `nativeproof.config.ts` declares the app, the device
@@ -68,19 +67,13 @@ export interface RunnerConfig {
   mochaTimeout?: number;
 }
 
-export interface NativeProofConfig<
-  S extends ScreenFactories<M> = ScreenFactories,
-  M extends SessionMock = SessionMock,
-> extends RunnerConfig {
+export interface NativeProofConfig<Ctx = unknown> extends RunnerConfig {
   /** The app under test (from `defineApp`). */
-  app: App<S, M>;
+  app: App<Ctx>;
 }
 
 /** Identity helper for typed config + editor autocomplete (mirrors Playwright's `defineConfig`). */
-export function defineConfig<
-  S extends ScreenFactories<M> = ScreenFactories,
-  M extends SessionMock = SessionMock,
->(config: NativeProofConfig<S, M>): NativeProofConfig<S, M> {
+export function defineConfig<Ctx>(config: NativeProofConfig<Ctx>): NativeProofConfig<Ctx> {
   return config;
 }
 

@@ -5,6 +5,7 @@ import type { Driver, Platform } from "../src/driver.js";
 import { createHarness } from "../src/harness.js";
 import type { MockBackend, MockRoute } from "../src/mock.js";
 import { useRunner } from "../src/runner.js";
+import { test as exportedTest } from "./harness-export-app.js";
 
 /**
  * createHarness coverage under node:test (wired as the BDD runner). Proves the bound
@@ -59,6 +60,16 @@ test.describe("createHarness injects the typed context for a role", "member", ()
 test.describe("createHarness defaults the role when omitted", () => {
   test("runs with the default session", async ({ home }) => {
     assert.equal(home.marker, "home-screen");
+  });
+});
+
+exportedTest.describe("a harness imported from another module keeps its typed context", () => {
+  exportedTest("the screen's value type survives the import boundary", async ({ home }) => {
+    // Type-level guard: `home` must be the concrete screen object, not `unknown`. `marker: string`
+    // only compiles if `createHarness`'s exported context kept the resolved screen type across the
+    // module boundary — the regression this whole change fixes. (Also a runtime smoke check.)
+    const marker: string = home.marker;
+    assert.equal(marker, "home-screen");
   });
 });
 

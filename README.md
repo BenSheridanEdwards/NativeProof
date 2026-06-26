@@ -100,7 +100,13 @@ npx appium driver doctor uiautomator2
 
 ## Quick start
 
-Four steps from zero to a green run on Android.
+Scaffold the starting files with one command, then fill in your app's seam:
+
+```bash
+npx nativeproof init   # writes nativeproof.config.ts + a sample spec (never overwrites)
+```
+
+Then four steps from zero to a green run on Android — or set it all up by hand:
 
 **1. Configure** — one `nativeproof.config.ts` at the project root:
 

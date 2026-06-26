@@ -49,3 +49,13 @@ export async function captureState(prefix: string): Promise<string> {
   await captureText(`${prefix}.xml`, source);
   return source;
 }
+
+/**
+ * A filesystem-safe evidence prefix for a failed behaviour — `failure-<describe>-<test>`
+ * with runs of non-word characters collapsed to `_` and capped at 120 chars. Used by the
+ * runner's built-in on-failure capture so a failing spec leaves a screenshot + source pair
+ * named after it, with no per-spec wiring.
+ */
+export function failureEvidenceName(test: { parent: string; title: string }): string {
+  return `failure-${test.parent}-${test.title}`.replace(/[^\w.-]+/g, "_").slice(0, 120);
+}

@@ -4,6 +4,18 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.1
+
+Cross-platform locator resolution fixes.
+
+**Fixed**
+
+- `by.text` / `getByText` with a `RegExp` now matches a label exposed via `content-desc`
+  (e.g. Compose). The RegExp path previously tested only the first attribute in the
+  `text`/`content-desc` alternation, so a label was missed when an empty `text=""` preceded it.
+- Locators now resolve iOS element geometry (XCUITest `x`/`y`/`width`/`height`), so `tap()`,
+  `bounds()` and `near()` work on iOS — not just Android `bounds="[x1,y1][x2,y2]"`.
+
 ## 0.10.0
 
 Element enabled-state assertions.

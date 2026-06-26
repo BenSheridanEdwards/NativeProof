@@ -84,11 +84,19 @@ export function nodesForAttribute(source: string, attribute: string, value: stri
   // A `g`-flagged RegExp is stateful across `.test()` calls; use a non-global copy so the
   // per-candidate test is order-independent.
   const test = value.global ? new RegExp(value.source, value.flags.replace("g", "")) : value;
-  const candidate = new RegExp(`${attribute}="([^"]*)"`);
+  // `attribute` may be an alternation (e.g. `(?:text|content-desc)`), and a node can carry
+  // more than one of them — Android often exposes both `text=""` and `content-desc="…"`. Test
+  // the pattern against EVERY matching attribute's value, not just the first: otherwise a label
+  // that lives in `content-desc` is missed whenever an empty `text=""` precedes it in the tag.
+  const candidates = new RegExp(`${attribute}="([^"]*)"`, "g");
   const nodes: string[] = [];
   for (const tag of source.matchAll(/<[^>]*>/g)) {
-    const attr = candidate.exec(tag[0]);
-    if (attr && test.test(decodeXmlEntities(attr[1] ?? ""))) nodes.push(tag[0]);
+    for (const attr of tag[0].matchAll(candidates)) {
+      if (test.test(decodeXmlEntities(attr[1] ?? ""))) {
+        nodes.push(tag[0]);
+        break;
+      }
+    }
   }
   return nodes;
 }

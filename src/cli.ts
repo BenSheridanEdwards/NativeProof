@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findConfigFile } from "./config.js";
@@ -16,7 +16,7 @@ import { findConfigFile } from "./config.js";
  */
 
 export interface CliArgs {
-  command: "test" | "help" | "version";
+  command: "test" | "init" | "help" | "version";
   config: string | undefined;
   platform: "android" | "ios" | undefined;
   project: string | undefined;
@@ -50,6 +50,10 @@ export function parseArgs(argv: readonly string[]): CliArgs {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "test") continue;
+    if (arg === "init") {
+      args.command = "init";
+      continue;
+    }
     if (arg === "-h" || arg === "--help") return { ...args, command: "help" };
     if (arg === "-v" || arg === "--version") return { ...args, command: "version" };
     if (arg === "--no-appium") {
@@ -106,7 +110,8 @@ export function helpText(): string {
     "nativeproof — Native Mobile E2E test framework inspired by Playwright",
     "",
     "Usage:",
-    "  nativeproof [test] [options]",
+    "  nativeproof [test] [options]   run the suite (default)",
+    "  nativeproof init               scaffold nativeproof.config.ts + a sample spec",
     "",
     "Config is auto-discovered: nativeproof.config.ts (preferred), else wdio.conf.ts.",
     "",
@@ -122,6 +127,117 @@ export function helpText(): string {
     "  -h, --help                 show this help",
     "  -v, --version              print the version",
   ].join("\n");
+}
+
+const CONFIG_TEMPLATE = `import { createHarness, defineApp, defineConfig, page, startMockServer, wdioDriver } from "nativeproof";
+
+/**
+ * One file declares your app, your devices, and where your specs live — the
+ * \`nativeproof\` CLI discovers it and runs the suite. Replace the TODOs with your app.
+ */
+const app = defineApp({
+  // Acquire the device/driver (Appium/WebdriverIO under the hood).
+  driver: () => wdioDriver(),
+  // Start a mock backend; swap startMockServer() for your own if you have one.
+  mock: () => startMockServer(),
+  // Screen objects: build locators/actions from the device context. Replace these.
+  screens: {
+    home: ({ driver }) => ({
+      heading: page(driver).getByText("Welcome"),
+    }),
+  },
+});
+
+// Specs import these: \`import { test, expect } from "../nativeproof.config";\`
+export const { test, expect } = createHarness(app);
+
+export default defineConfig({
+  app,
+  testDir: "tests",
+  projects: [
+    {
+      name: "android",
+      platform: "android",
+      capabilities: {
+        platformName: "Android",
+        "appium:automationName": "UiAutomator2",
+        // "appium:app": "/path/to/app.apk",
+      },
+    },
+    {
+      name: "ios",
+      platform: "ios",
+      capabilities: {
+        platformName: "iOS",
+        "appium:automationName": "XCUITest",
+        // "appium:app": "/path/to/app.app",
+      },
+    },
+  ],
+});
+`;
+
+const SPEC_TEMPLATE = `import { expect, test } from "../nativeproof.config";
+
+test.describe("example", () => {
+  test("the home screen shows its heading", async ({ home }) => {
+    await expect(home.heading).toBeVisible();
+  });
+});
+`;
+
+export interface ScaffoldFile {
+  path: string;
+  contents: string;
+}
+
+/** The starter files \`nativeproof init\` writes — pure, so they can be asserted in a test. */
+export function scaffoldFiles(): ScaffoldFile[] {
+  return [
+    { path: "nativeproof.config.ts", contents: CONFIG_TEMPLATE },
+    { path: "tests/example.spec.ts", contents: SPEC_TEMPLATE },
+  ];
+}
+
+/** Minimal filesystem seam so \`scaffold\` is testable without touching disk. */
+export interface ScaffoldIo {
+  exists(file: string): boolean;
+  write(file: string, contents: string): void;
+}
+
+const diskIo: ScaffoldIo = {
+  exists: existsSync,
+  write(file, contents) {
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, contents);
+  },
+};
+
+/** Write the starter files under \`cwd\`, never overwriting an existing one. */
+export function scaffold(cwd: string, io: ScaffoldIo = diskIo): { created: string[]; skipped: string[] } {
+  const created: string[] = [];
+  const skipped: string[] = [];
+  for (const file of scaffoldFiles()) {
+    if (io.exists(path.join(cwd, file.path))) {
+      skipped.push(file.path);
+      continue;
+    }
+    io.write(path.join(cwd, file.path), file.contents);
+    created.push(file.path);
+  }
+  return { created, skipped };
+}
+
+export function init(cwd: string = process.cwd()): number {
+  const { created, skipped } = scaffold(cwd);
+  for (const file of created) console.log(`nativeproof: created ${file}`);
+  for (const file of skipped) console.log(`nativeproof: ${file} already exists — skipped`);
+  if (created.length === 0) {
+    console.log("nativeproof: nothing to scaffold (all files already exist)");
+  } else {
+    console.log("\nNext: set capabilities + screens in nativeproof.config.ts, then run `nativeproof`.");
+  }
+  return 0;
 }
 
 function localBin(name: string): string {
@@ -226,6 +342,9 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (args.command === "version") {
     console.log(version());
     return 0;
+  }
+  if (args.command === "init") {
+    return init();
   }
   return runTests(args);
 }

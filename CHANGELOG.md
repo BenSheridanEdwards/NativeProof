@@ -4,6 +4,20 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.2
+
+Generic mock typing and built-in evidence-on-failure.
+
+**Added**
+
+- `defineApp` (and `createHarness` / `defineConfig`) are now generic over the mock type. An app
+  whose mock extends the base contract gets that concrete type through screens, login/join,
+  teardown, `onFailure` and the session context — no casts. Existing single-type-arg uses are
+  unchanged (the mock type defaults to `MockBackend`).
+- The synthesised runner config captures evidence on a failed behaviour out of the box — a
+  screenshot + redacted page source named after the spec — so apps need no hand-written
+  `afterTest`. Best-effort: a capture error never masks the real failure.
+
 ## 0.10.1
 
 Cross-platform locator resolution fixes.

@@ -38,6 +38,37 @@ export function parseBounds(bounds: string | undefined | null): Bounds | null {
   };
 }
 
+/**
+ * Bounds of a single element node, cross-platform. Android UiAutomator exposes geometry as
+ * `bounds="[x1,y1][x2,y2]"`; iOS XCUITest exposes separate `x`/`y`/`width`/`height` attributes
+ * (no `bounds`). Tries the Android form first, then falls back to the iOS attributes — so locators
+ * resolve a tap point on both platforms. Without this, iOS elements have null bounds and `tap()`
+ * never finds a target.
+ */
+export function parseNodeBounds(node: string): Bounds | null {
+  const android = parseBounds(/bounds="([^"]+)"/.exec(node)?.[1]);
+  if (android) return android;
+  const attr = (name: string): number | null => {
+    const m = new RegExp(`\\b${name}="(-?\\d+(?:\\.\\d+)?)"`).exec(node);
+    return m ? Number(m[1]) : null;
+  };
+  const x = attr("x");
+  const y = attr("y");
+  const w = attr("width");
+  const h = attr("height");
+  if (x === null || y === null || w === null || h === null) return null;
+  return {
+    x1: Math.round(x),
+    y1: Math.round(y),
+    x2: Math.round(x + w),
+    y2: Math.round(y + h),
+    width: Math.round(w),
+    height: Math.round(h),
+    centerX: Math.round(x + w / 2),
+    centerY: Math.round(y + h / 2),
+  };
+}
+
 export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -147,7 +178,7 @@ export function attributeMatches(source: string, attribute: string, value: strin
  */
 export function boundsForAttribute(source: string, attribute: string, value: string | RegExp): Bounds | null {
   const node = nodeForAttribute(source, attribute, value);
-  return node ? parseBounds(/bounds="([^"]+)"/.exec(node)?.[1]) : null;
+  return node ? parseNodeBounds(node) : null;
 }
 
 /** Bounds of an element addressed by Android `content-desc`. */
@@ -167,7 +198,7 @@ export function boundsForText(source: string, text: string): Bounds | null {
  */
 export function smallestClickableAncestorBounds(source: string, nodeBounds: Bounds): Bounds {
   const clickable = [...source.matchAll(/<[^>]*clickable="true"[^>]*>/g)]
-    .map((m) => parseBounds(/bounds="([^"]+)"/.exec(m[0])?.[1]))
+    .map((m) => parseNodeBounds(m[0]))
     .filter((b): b is Bounds => b !== null)
     .filter(
       (b) => b.x1 <= nodeBounds.x1 && b.x2 >= nodeBounds.x2 && b.y1 <= nodeBounds.y1 && b.y2 >= nodeBounds.y2,

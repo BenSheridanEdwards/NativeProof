@@ -6,7 +6,7 @@ import {
   escapeRegExp,
   nodesForAttribute,
   nodesForRole,
-  parseBounds,
+  parseNodeBounds,
   smallestClickableAncestorBounds,
 } from "./source.js";
 
@@ -148,7 +148,7 @@ export class Locator {
     if (!anchor) return [];
     const { maxDistance } = this.proximity;
     return nodes
-      .map((node) => ({ node, bounds: parseBounds(/bounds="([^"]+)"/.exec(node)?.[1]) }))
+      .map((node) => ({ node, bounds: parseNodeBounds(node) }))
       .filter((entry): entry is { node: string; bounds: Bounds } => entry.bounds !== null)
       .map((entry) => ({
         node: entry.node,
@@ -205,7 +205,7 @@ export class Locator {
   /** Bounds of the matched node in the current source, or null if absent. */
   async bounds(): Promise<Bounds | null> {
     const node = this.pick(await this.matchedNodes());
-    return node ? parseBounds(/bounds="([^"]+)"/.exec(node)?.[1]) : null;
+    return node ? parseNodeBounds(node) : null;
   }
 
   /** The matched node's own visible text, or null if the node is absent. */

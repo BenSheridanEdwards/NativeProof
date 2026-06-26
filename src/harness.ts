@@ -1,6 +1,7 @@
 import type { App, ScreenFactories, SessionContext } from "./app.js";
 import { expect } from "./expect.js";
 import { type BehaviourRegistrar, describeScenario } from "./fixtures.js";
+import type { MockBackend } from "./mock.js";
 
 /**
  * `createHarness(app)` — the Playwright `@playwright/test` pattern.
@@ -20,32 +21,34 @@ import { type BehaviourRegistrar, describeScenario } from "./fixtures.js";
  * });
  * ```
  */
-export interface HarnessTest<S extends ScreenFactories> {
-  (name: string, body: (context: SessionContext<S>) => void | Promise<void>): void;
+export interface HarnessTest<S extends ScreenFactories<M>, M extends MockBackend = MockBackend> {
+  (name: string, body: (context: SessionContext<S, M>) => void | Promise<void>): void;
   /** Open a scenario block for the default role. */
   describe(title: string, body: () => void): void;
   /** Open a scenario block for a specific role (e.g. "member" / "guest"). */
   describe(title: string, role: string, body: () => void): void;
   /** Run before each behaviour in the open scenario, with the session context injected. */
-  beforeEach(body: (context: SessionContext<S>) => void | Promise<void>): void;
+  beforeEach(body: (context: SessionContext<S, M>) => void | Promise<void>): void;
   /** Run after each behaviour in the open scenario, with the session context injected. */
-  afterEach(body: (context: SessionContext<S>) => void | Promise<void>): void;
+  afterEach(body: (context: SessionContext<S, M>) => void | Promise<void>): void;
 }
 
-export interface Harness<S extends ScreenFactories> {
-  test: HarnessTest<S>;
+export interface Harness<S extends ScreenFactories<M>, M extends MockBackend = MockBackend> {
+  test: HarnessTest<S, M>;
   expect: typeof expect;
 }
 
-export function createHarness<S extends ScreenFactories>(app: App<S>): Harness<S> {
-  let active: BehaviourRegistrar<SessionContext<S>> | null = null;
+export function createHarness<S extends ScreenFactories<M>, M extends MockBackend = MockBackend>(
+  app: App<S, M>,
+): Harness<S, M> {
+  let active: BehaviourRegistrar<SessionContext<S, M>> | null = null;
 
-  const test = ((name: string, body: (context: SessionContext<S>) => void | Promise<void>): void => {
+  const test = ((name: string, body: (context: SessionContext<S, M>) => void | Promise<void>): void => {
     if (!active) {
       throw new Error(`test(${JSON.stringify(name)}) must be called inside test.describe(...)`);
     }
     active(name, body);
-  }) as HarnessTest<S>;
+  }) as HarnessTest<S, M>;
 
   test.describe = ((title: string, roleOrBody: string | (() => void), maybeBody?: () => void): void => {
     const role = typeof roleOrBody === "string" ? roleOrBody : undefined;
@@ -62,9 +65,9 @@ export function createHarness<S extends ScreenFactories>(app: App<S>): Harness<S
         active = previous;
       }
     });
-  }) as HarnessTest<S>["describe"];
+  }) as HarnessTest<S, M>["describe"];
 
-  const requireActive = (hook: string): BehaviourRegistrar<SessionContext<S>> => {
+  const requireActive = (hook: string): BehaviourRegistrar<SessionContext<S, M>> => {
     if (!active) {
       throw new Error(`test.${hook}(...) must be called inside test.describe(...)`);
     }

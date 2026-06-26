@@ -90,6 +90,22 @@ test("defineApp threads a richer mock type through the session context (no cast)
   assert.equal(lastUsers, 0); // teardown used the richer mock API
 });
 
+test("defineApp accepts a frames+stop mock with no route() (SessionMock)", async () => {
+  // A session never routes — only a spec does — so a mock that just observes frames and stops
+  // is enough. This would not type-check when defineApp required the full MockBackend (route).
+  const sessionMock = {
+    async frames() {
+      return [];
+    },
+    async stop() {},
+  };
+  const app = defineApp({ driver: () => driver, mock: () => sessionMock, screens: {} });
+  const session = app.session();
+  const context = await session.setup();
+  assert.equal(typeof context.mock.frames, "function");
+  await session.teardown(context);
+});
+
 test("defineApp still stops the mock when the teardown hook throws", async () => {
   let stopped = false;
   const app = defineApp({

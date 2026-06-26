@@ -154,25 +154,10 @@ export const { test, expect } = createHarness(app);
 export default defineConfig({
   app,
   testDir: "tests",
+  // platformName + automationName are filled in from \`platform\`; set \`appium:app\` to your build.
   projects: [
-    {
-      name: "android",
-      platform: "android",
-      capabilities: {
-        platformName: "Android",
-        "appium:automationName": "UiAutomator2",
-        // "appium:app": "/path/to/app.apk",
-      },
-    },
-    {
-      name: "ios",
-      platform: "ios",
-      capabilities: {
-        platformName: "iOS",
-        "appium:automationName": "XCUITest",
-        // "appium:app": "/path/to/app.app",
-      },
-    },
+    { name: "android", platform: "android", capabilities: { /* "appium:app": "/path/to/app.apk" */ } },
+    { name: "ios", platform: "ios", capabilities: { /* "appium:app": "/path/to/app.app" */ } },
   ],
 });
 `;

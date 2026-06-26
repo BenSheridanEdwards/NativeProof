@@ -36,8 +36,24 @@ export interface DeviceProject {
   /** A name to select with `nativeproof --project <name>`. */
   name: string;
   platform: "android" | "ios";
-  /** Appium capabilities for this device (e.g. `appium:app`, `appium:deviceName`). */
-  capabilities: Record<string, unknown>;
+  /**
+   * Appium capabilities for this device (e.g. `appium:app`, `appium:deviceName`). Optional:
+   * `platformName` and `appium:automationName` are filled in from `platform` (see
+   * {@link defaultCapabilities}), so a project usually needs only `appium:app` — or nothing
+   * for a smoke run against whatever is already installed. Anything you set here wins.
+   */
+  capabilities?: Record<string, unknown>;
+}
+
+/**
+ * The standard capabilities for a platform, so a consumer doesn't restate the same
+ * `platformName` / `automationName` in every project. Android → UiAutomator2, iOS → XCUITest
+ * (the canonical Appium drivers). A project's own `capabilities` override these.
+ */
+export function defaultCapabilities(platform: "android" | "ios"): Record<string, unknown> {
+  return platform === "android"
+    ? { platformName: "Android", "appium:automationName": "UiAutomator2" }
+    : { platformName: "iOS", "appium:automationName": "XCUITest" };
 }
 
 /** The device/run config the CLI turns into a WebdriverIO run. */
@@ -115,7 +131,7 @@ export function buildWdioConfig(
     path: env.appiumPath ?? config.appium?.path ?? "/wd/hub",
     specs,
     maxInstances: 1,
-    capabilities: [project.capabilities],
+    capabilities: [{ ...defaultCapabilities(project.platform), ...project.capabilities }],
     framework: "mocha",
     reporters: ["spec"],
     mochaOpts: { ui: "bdd", timeout: config.mochaTimeout ?? 240_000 },

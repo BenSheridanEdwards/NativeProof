@@ -34,9 +34,26 @@ test("resolveProject picks by name, then platform, then the first project", () =
 test("buildWdioConfig synthesises a WebdriverIO config with absolute specs for the platform", () => {
   const wdio = buildWdioConfig({ projects, testDir: "e2e" }, { platform: "ios" }, "/proj");
   assert.equal(wdio.framework, "mocha");
-  assert.deepEqual(wdio.capabilities, [ios.capabilities]);
+  // The project's caps, with the platform's automationName defaulted in (XCUITest for iOS).
+  assert.deepEqual(wdio.capabilities, [
+    { platformName: "iOS", "appium:automationName": "XCUITest", "appium:app": "A.app" },
+  ]);
   assert.deepEqual(wdio.specs, ["/proj/e2e/**/*.spec.ts"]);
   assert.equal(wdio.path, "/wd/hub");
+});
+
+test("buildWdioConfig defaults platformName + automationName per platform, and a project's caps win", () => {
+  const minimal = [
+    { name: "android", platform: "android" as const }, // no capabilities at all
+    { name: "ios", platform: "ios" as const, capabilities: { "appium:automationName": "Custom" } },
+  ];
+  const android = buildWdioConfig({ projects: minimal }, { project: "android" }, "/p");
+  assert.deepEqual(android.capabilities, [
+    { platformName: "Android", "appium:automationName": "UiAutomator2" },
+  ]);
+  // A project's own automationName overrides the platform default.
+  const ios = buildWdioConfig({ projects: minimal }, { project: "ios" }, "/p");
+  assert.deepEqual(ios.capabilities, [{ platformName: "iOS", "appium:automationName": "Custom" }]);
 });
 
 test("buildWdioConfig honours a spec override and Appium env", () => {

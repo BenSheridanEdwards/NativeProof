@@ -42,6 +42,13 @@ export interface DeviceProject {
    * for a smoke run against whatever is already installed. Anything you set here wins.
    */
   capabilities?: Record<string, unknown>;
+  /**
+   * Spec globs for THIS project, relative to the project root — overriding the top-level
+   * `testDir`/`testMatch` when set. For suites where platforms run different specs (e.g. a shared
+   * set plus a platform-specific set: `["e2e/shared/**\/*.spec.ts", "e2e/android/**\/*.spec.ts"]`).
+   * A `--spec` CLI override still wins over this.
+   */
+  specs?: string[];
 }
 
 /**
@@ -59,12 +66,27 @@ export function defaultCapabilities(platform: "android" | "ios"): Record<string,
 export interface RunnerConfig {
   /** Directory holding the specs (default "tests"). */
   testDir?: string;
-  /** Glob within `testDir` (default "**\/*.spec.ts"). */
+  /** Glob within `testDir` (default "**\/*.spec.ts"). A project's own `specs` overrides this. */
   testMatch?: string;
   projects: DeviceProject[];
   appium?: AppiumOptions;
   /** Per-test timeout in ms (default 240000). */
   mochaTimeout?: number;
+  /**
+   * WebdriverIO pass-throughs for tuning real-device runs. Each is forwarded only when set, so
+   * WebdriverIO's own defaults apply otherwise. Slow software-GPU emulators in particular often
+   * need a longer `connectionRetryTimeout` / `waitforTimeout` than the defaults.
+   */
+  /** Per-command/session connection timeout in ms (wdio default 120000). */
+  connectionRetryTimeout?: number;
+  /** Connection retry count (wdio default 3). */
+  connectionRetryCount?: number;
+  /** Default auto-wait timeout in ms for `waitUntil`/`waitFor*` (wdio default 5000). */
+  waitforTimeout?: number;
+  /** Stop the run after N failures; 0 = never bail (wdio default 0). */
+  bail?: number;
+  /** WebdriverIO log level (wdio default "info"). */
+  logLevel?: "trace" | "debug" | "info" | "warn" | "error" | "silent";
 }
 
 export interface NativeProofConfig<Ctx = unknown> extends RunnerConfig {
@@ -104,9 +126,22 @@ export function resolveProject(config: RunnerConfig, env: RunnerEnv = {}): Devic
 }
 
 /**
- * Translate an NativeProof config into a WebdriverIO `config` object. Spec paths are made
- * absolute against `cwd` (the project root) because the synthesised config is loaded from
- * inside `node_modules`, so a relative glob would resolve against the wrong directory.
+ * Resolve the spec globs (absolute) for a run, in precedence order: an explicit `--spec` override
+ * (comma-separated allowed), else the active project's own `specs`, else the top-level
+ * `testDir`/`testMatch`. Absolute against `cwd` because the synthesised config is loaded from inside
+ * `node_modules`, so a relative glob would resolve against the wrong directory.
+ */
+function resolveSpecs(config: RunnerConfig, project: DeviceProject, env: RunnerEnv, cwd: string): string[] {
+  const abs = (glob: string): string => path.resolve(cwd, glob);
+  if (env.spec) return env.spec.split(",").map((glob) => abs(glob.trim()));
+  if (project.specs && project.specs.length > 0) return project.specs.map(abs);
+  const testDir = config.testDir ?? "tests";
+  const testMatch = config.testMatch ?? "**/*.spec.ts";
+  return [abs(`${testDir}/${testMatch}`)];
+}
+
+/**
+ * Translate an NativeProof config into a WebdriverIO `config` object.
  */
 export function buildWdioConfig(
   config: RunnerConfig,
@@ -114,15 +149,12 @@ export function buildWdioConfig(
   cwd: string = process.cwd(),
 ): Record<string, unknown> {
   const project = resolveProject(config, env);
-  const testDir = config.testDir ?? "tests";
-  const testMatch = config.testMatch ?? "**/*.spec.ts";
-  const specs = [path.resolve(cwd, env.spec ?? `${testDir}/${testMatch}`)];
-  return {
+  const wdio: Record<string, unknown> = {
     runner: "local",
     hostname: env.appiumHost ?? config.appium?.host ?? "127.0.0.1",
     port: env.appiumPort ?? config.appium?.port ?? 4723,
     path: env.appiumPath ?? config.appium?.path ?? "/wd/hub",
-    specs,
+    specs: resolveSpecs(config, project, env, cwd),
     maxInstances: 1,
     capabilities: [{ ...defaultCapabilities(project.platform), ...project.capabilities }],
     framework: "mocha",
@@ -141,6 +173,15 @@ export function buildWdioConfig(
       await captureState(failureEvidenceName(test)).catch(() => {});
     },
   };
+  // Optional WebdriverIO tuning — forwarded only when the consumer set it, so wdio's defaults apply
+  // otherwise (real emulators/simulators often need longer connection/wait timeouts than the defaults).
+  if (config.connectionRetryTimeout !== undefined)
+    wdio.connectionRetryTimeout = config.connectionRetryTimeout;
+  if (config.connectionRetryCount !== undefined) wdio.connectionRetryCount = config.connectionRetryCount;
+  if (config.waitforTimeout !== undefined) wdio.waitforTimeout = config.waitforTimeout;
+  if (config.bail !== undefined) wdio.bail = config.bail;
+  if (config.logLevel !== undefined) wdio.logLevel = config.logLevel;
+  return wdio;
 }
 
 const CONFIG_NAMES = [

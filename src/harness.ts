@@ -1,7 +1,7 @@
 import type { App, ScreenFactories, SessionContext } from "./app.js";
 import { expect } from "./expect.js";
 import { type BehaviourRegistrar, describeScenario } from "./fixtures.js";
-import type { MockBackend } from "./mock.js";
+import type { SessionMock } from "./mock.js";
 
 /**
  * `createHarness(app)` — the Playwright `@playwright/test` pattern.
@@ -21,7 +21,7 @@ import type { MockBackend } from "./mock.js";
  * });
  * ```
  */
-export interface HarnessTest<S extends ScreenFactories<M>, M extends MockBackend = MockBackend> {
+export interface HarnessTest<S extends ScreenFactories<M>, M extends SessionMock = SessionMock> {
   (name: string, body: (context: SessionContext<S, M>) => void | Promise<void>): void;
   /** Open a scenario block for the default role. */
   describe(title: string, body: () => void): void;
@@ -33,12 +33,12 @@ export interface HarnessTest<S extends ScreenFactories<M>, M extends MockBackend
   afterEach(body: (context: SessionContext<S, M>) => void | Promise<void>): void;
 }
 
-export interface Harness<S extends ScreenFactories<M>, M extends MockBackend = MockBackend> {
+export interface Harness<S extends ScreenFactories<M>, M extends SessionMock = SessionMock> {
   test: HarnessTest<S, M>;
   expect: typeof expect;
 }
 
-export function createHarness<S extends ScreenFactories<M>, M extends MockBackend = MockBackend>(
+export function createHarness<S extends ScreenFactories<M>, M extends SessionMock = SessionMock>(
   app: App<S, M>,
 ): Harness<S, M> {
   let active: BehaviourRegistrar<SessionContext<S, M>> | null = null;

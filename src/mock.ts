@@ -59,11 +59,20 @@ export interface FrameLog {
   frames(): Promise<readonly MockFrame[]>;
 }
 
-export interface MockBackend extends FrameLog {
-  /** Intercept a path and control its reply. */
-  route(path: string): MockRoute;
+/**
+ * The minimum a mock must provide to drive a {@link defineApp} session: observable frames plus a
+ * `stop()` the session calls on teardown. `route()` is intentionally NOT required — a session never
+ * routes (only a spec does) — so an app whose mock only observes frames and stops can use
+ * `defineApp` without implementing `route`. {@link MockBackend} is the full contract (adds `route`).
+ */
+export interface SessionMock extends FrameLog {
   /** Release the backend (stop the server, close sockets). */
   stop(): Promise<void>;
+}
+
+export interface MockBackend extends SessionMock {
+  /** Intercept a path and control its reply. */
+  route(path: string): MockRoute;
 }
 
 /**

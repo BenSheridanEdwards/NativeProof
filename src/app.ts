@@ -41,42 +41,64 @@ export interface AppDefinition<S extends ScreenFactories<M>, M extends SessionMo
   /** App-specific evidence-redaction patterns. */
   redact?: readonly RegExp[];
   /** Reach a logged-in state for the role. */
-  login?: (context: FlowContext<M>) => Promise<void>;
+  login?: (context: NoInfer<FlowContext<M>>) => Promise<void>;
   /** Enter the role's main surface. */
-  join?: (context: FlowContext<M>) => Promise<void>;
-  /** Screen-object factories, bound to the device context. */
+  join?: (context: NoInfer<FlowContext<M>>) => Promise<void>;
+  /** Screen-object factories, bound to the device context. `S` (and so the whole context) is
+   *  inferred from here. */
   screens: S;
   /**
    * Release app-level resources acquired across the session, run on teardown BEFORE the
    * mock stops and before the runner deletes the device session — e.g. force-stop the app
    * so its background sockets are gone before `deleteSession`. The mock is still stopped
    * even if this throws.
+   *
+   * The context is wrapped in `NoInfer` so passing a `teardown` does NOT drive `S` inference —
+   * otherwise this S-dependent parameter co-infers with `screens` and collapses `S` to its
+   * `ScreenFactories<M>` constraint (screens → `unknown`) in the exported context type.
    */
-  teardown?: (context: SessionContext<S, M>) => Promise<void> | void;
+  teardown?: (context: NoInfer<SessionContext<S, M>>) => Promise<void> | void;
   /**
    * Invoked when a behaviour throws, before the failure propagates — wire on-failure
    * evidence here (e.g. `captureState(...)`) so capture lives in one place, not in every
-   * behaviour. Its own errors are swallowed so they never mask the real failure.
+   * behaviour. Its own errors are swallowed so they never mask the real failure. `NoInfer` for the
+   * same reason as `teardown` — this parameter must not participate in inferring `S`.
    */
-  onFailure?: (context: SessionContext<S, M>, info: FailureInfo) => Promise<void> | void;
+  onFailure?: (context: NoInfer<SessionContext<S, M>>, info: FailureInfo) => Promise<void> | void;
 }
 
-/** The fixture context a session injects: the device handles plus each app screen. */
-export type SessionContext<
-  S extends ScreenFactories<M>,
-  M extends SessionMock = SessionMock,
-> = DeviceContext<M> & {
-  [K in keyof S]: ReturnType<S[K]>;
-};
+/** Eagerly flatten an intersection into one object type, so the resolved context ports cleanly. */
+type Prettify<T> = { [K in keyof T]: T[K] } & {};
 
-export interface App<S extends ScreenFactories<M>, M extends SessionMock = SessionMock> {
+/**
+ * The fixture context a session injects: the device handles plus each app screen's value. Flattened
+ * with {@link Prettify} so it is a single object type rather than a lazy intersection — that lets
+ * `export const { test } = createHarness(app)` carry fully-typed screens into specs in other files.
+ * (Portability still needs the mock type `M` to be nameable — a single exported interface, not an
+ * anonymous intersection — so a consumer's mock should be one named type.)
+ */
+export type SessionContext<S extends ScreenFactories<M>, M extends SessionMock = SessionMock> = Prettify<
+  DeviceContext<M> & {
+    [K in keyof S]: ReturnType<S[K]>;
+  }
+>;
+
+/**
+ * Parameterised by the *resolved* session context `Ctx` (`{ driver; mock; …screens }`), not by
+ * the screens type `S`. `S` is only ever used inside the mapped `SessionContext<S, M>`, a
+ * non-inferable position — so a consumer's `export const { test } = createHarness(app)` would
+ * lose the concrete screen return types across the import boundary (TS falls back to the
+ * `ScreenFactories<M>` constraint, whose screens are `unknown`). `defineApp` resolves the context
+ * here, where `S` is still concrete, so `Ctx` is a plain object type that ports cleanly into specs.
+ */
+export interface App<Ctx> {
   /** A scenario fixture that provisions a logged-in, joined session for `role`. */
-  session(role?: string): ScenarioFixture<SessionContext<S, M>>;
+  session(role?: string): ScenarioFixture<Ctx>;
 }
 
 export function defineApp<S extends ScreenFactories<M>, M extends SessionMock = SessionMock>(
   definition: AppDefinition<S, M>,
-): App<S, M> {
+): App<SessionContext<S, M>> {
   return {
     session(role = "default"): ScenarioFixture<SessionContext<S, M>> {
       return {
@@ -88,7 +110,8 @@ export function defineApp<S extends ScreenFactories<M>, M extends SessionMock = 
             if (definition.login) await definition.login({ ...device, role });
             if (definition.join) await definition.join({ ...device, role });
             const screens: Record<string, unknown> = {};
-            for (const [name, factory] of Object.entries(definition.screens)) {
+            const factories = Object.entries(definition.screens) as [string, ScreenFactory<unknown, M>][];
+            for (const [name, factory] of factories) {
               screens[name] = factory(device);
             }
             // Dynamic assembly: the screen factories' precise return types are

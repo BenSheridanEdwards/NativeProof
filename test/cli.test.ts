@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { helpText, parseArgs, resolveRunner, version } from "../src/cli.js";
+import {
+  helpText,
+  parseArgs,
+  resolveRunner,
+  type ScaffoldIo,
+  scaffold,
+  scaffoldFiles,
+  version,
+} from "../src/cli.js";
 
 /**
  * CLI argument parsing + runner resolution — pure, no spawning. Importing the module
@@ -71,4 +79,38 @@ test("resolveRunner errors when an explicit --config is missing", () => {
 test("helpText names the framework and version is semver", () => {
   assert.match(helpText(), /Native Mobile E2E test framework inspired by Playwright/);
   assert.match(version(), /^\d+\.\d+\.\d+$/);
+});
+
+test("parseArgs surfaces the init command, and help lists it", () => {
+  assert.equal(parseArgs(["init"]).command, "init");
+  assert.match(helpText(), /nativeproof init/);
+});
+
+test("scaffoldFiles are a well-formed config + sample spec", () => {
+  const files = scaffoldFiles();
+  const config = files.find((f) => f.path === "nativeproof.config.ts");
+  const spec = files.find((f) => f.path === "tests/example.spec.ts");
+  assert.ok(config, "writes nativeproof.config.ts");
+  assert.ok(spec, "writes a sample spec");
+  // The config wires the three pieces a consumer must keep: app, harness, exported config.
+  assert.match(config.contents, /defineApp\(/);
+  assert.match(config.contents, /createHarness\(app\)/);
+  assert.match(config.contents, /export default defineConfig\(/);
+  // The spec imports the harness the config exports and uses the Playwright-style facade.
+  assert.match(spec.contents, /from "\.\.\/nativeproof\.config"/);
+  assert.match(spec.contents, /test\.describe\(/);
+});
+
+test("scaffold writes missing files and never overwrites existing ones", () => {
+  const written = new Map<string, string>();
+  const present = new Set<string>(["/proj/nativeproof.config.ts"]); // config already exists
+  const io: ScaffoldIo = {
+    exists: (file) => present.has(file),
+    write: (file, contents) => written.set(file, contents),
+  };
+  const { created, skipped } = scaffold("/proj", io);
+  assert.deepEqual(created, ["tests/example.spec.ts"]); // only the missing one
+  assert.deepEqual(skipped, ["nativeproof.config.ts"]); // existing one left intact
+  assert.equal(written.has("/proj/nativeproof.config.ts"), false);
+  assert.ok(written.get("/proj/tests/example.spec.ts")?.includes("test.describe("));
 });

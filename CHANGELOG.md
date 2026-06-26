@@ -4,6 +4,31 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.3
+
+Out-of-the-box setup: scaffolding, minimal config, a route-optional mock contract, and typed
+contexts across the `createHarness` export boundary.
+
+**Added**
+
+- `nativeproof init` scaffolds a starter `nativeproof.config.ts` (app + harness + android/ios
+  projects) and a sample spec, so a new project is runnable in one command. Idempotent — it
+  never overwrites an existing file.
+- `defineApp` now accepts any mock that exposes `frames()` + `stop()` (the new `SessionMock`);
+  `route()` is no longer required, since a session never routes (only a spec does). An app whose
+  mock only observes traffic can use `defineApp` / `createHarness` / `nativeproof.config` directly.
+- `buildWdioConfig` fills in `platformName` and `appium:automationName` per platform (Android →
+  UiAutomator2, iOS → XCUITest), so a project needs only `name` + `platform`. A project's own
+  capabilities still win, and `DeviceProject.capabilities` is now optional.
+
+**Fixed**
+
+- `export const { test } = createHarness(app)` consumed from a spec in another file now keeps a
+  fully-typed fixture context. The harness/app/config are parameterised by the *resolved* context
+  rather than the screens type `S` (which TS widened to its constraint — screens → `unknown` — when
+  computing the exported type), so behaviours get typed `mock` and screens across the import
+  boundary. `App<S, M>` is now `App<Ctx>`; `NativeProofConfig` / `defineConfig` follow.
+
 ## 0.10.2
 
 Generic mock typing and built-in evidence-on-failure.

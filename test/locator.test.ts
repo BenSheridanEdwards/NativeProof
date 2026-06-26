@@ -58,6 +58,17 @@ test("by.text matches a label exposed as content-desc (Compose), not just text="
   assert.equal(b.centerX, 60);
 });
 
+test("by.text matches a content-desc label by RegExp even when an empty text= precedes it", async () => {
+  // Compose nodes often carry both attributes: an empty text="" first, the real label in
+  // content-desc. The RegExp path must test every alternation attribute, not just the first.
+  const driver = new FakeDriver('<node text="" content-desc="Add to cart" bounds="[10,10][110,60]" />');
+  const loc = new Locator(driver, by.text(/add to cart/i));
+  assert.equal(await loc.isVisible(), true);
+  const b = await loc.bounds();
+  assert.ok(b);
+  assert.equal(b.centerX, 60);
+});
+
 test("regex selectors match, read and locate a label by pattern (decoded, case-insensitive)", async () => {
   const driver = new FakeDriver(
     '<node text="Save &amp; Close" bounds="[0,0][120,60]" /><node text="Cancel" bounds="[0,80][120,140]" />',

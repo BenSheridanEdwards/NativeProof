@@ -49,6 +49,47 @@ test("defineApp teardown runs the app hook before the mock stops", async () => {
   assert.deepEqual(order, ["app.teardown", "mock.stop"]);
 });
 
+test("defineApp threads a richer mock type through the session context (no cast)", async () => {
+  // An app whose mock extends the base contract with extra controls. Before the generic-mock
+  // change, defineApp pinned the base MockBackend, so `mock.setVirtualUsers` below would not
+  // type-check — forcing a cast. Now the concrete mock type flows to screens/teardown/context.
+  interface RichMock extends MockBackend {
+    setVirtualUsers(n: number): number;
+  }
+  let lastUsers = -1;
+  const richBackend = (): RichMock => ({
+    async frames() {
+      return [];
+    },
+    route(): MockRoute {
+      return { fulfill() {}, reject() {}, abort() {} };
+    },
+    async stop() {},
+    setVirtualUsers(n) {
+      lastUsers = n;
+      return n;
+    },
+  });
+
+  const app = defineApp({
+    driver: () => driver,
+    mock: richBackend,
+    screens: {
+      room: ({ mock }) => ({ seed: (n: number) => mock.setVirtualUsers(n) }),
+    },
+    teardown: ({ mock }) => {
+      mock.setVirtualUsers(0);
+    },
+  });
+
+  const session = app.session();
+  const context = await session.setup();
+  assert.equal(context.room.seed(5), 5); // a screen used the richer mock API, fully typed
+  assert.equal(context.mock.setVirtualUsers(7), 7); // context.mock is the richer type, no cast
+  await session.teardown(context);
+  assert.equal(lastUsers, 0); // teardown used the richer mock API
+});
+
 test("defineApp still stops the mock when the teardown hook throws", async () => {
   let stopped = false;
   const app = defineApp({

@@ -12,32 +12,37 @@ import type { MockBackend } from "./mock.js";
  * `app.session(role)` turns that into a {@link ScenarioFixture} the `test` facade runs.
  */
 
-/** The device handles every session provides before app screens are layered on. */
-export interface DeviceContext {
+/**
+ * The device handles every session provides before app screens are layered on.
+ * Generic over the mock type `M` (default {@link MockBackend}) so an app with a richer
+ * mock — extra socket/presence controls beyond the base contract — gets `mock` typed as
+ * that richer type throughout, with no casts. Existing one-arg uses keep the base mock.
+ */
+export interface DeviceContext<M extends MockBackend = MockBackend> {
   driver: Driver;
-  mock: MockBackend;
+  mock: M;
 }
 
 /** A screen-object factory: given the device context, build that screen's locators/actions. */
-export type ScreenFactory<S> = (context: DeviceContext) => S;
-export type ScreenFactories = Record<string, ScreenFactory<unknown>>;
+export type ScreenFactory<S, M extends MockBackend = MockBackend> = (context: DeviceContext<M>) => S;
+export type ScreenFactories<M extends MockBackend = MockBackend> = Record<string, ScreenFactory<unknown, M>>;
 
 /** Context passed to the login/join flows. */
-export type FlowContext = DeviceContext & { role: string };
+export type FlowContext<M extends MockBackend = MockBackend> = DeviceContext<M> & { role: string };
 
-export interface AppDefinition<S extends ScreenFactories> {
+export interface AppDefinition<S extends ScreenFactories<M>, M extends MockBackend = MockBackend> {
   /** Acquire the device/driver (e.g. wdioDriver()). */
   driver: () => Driver | Promise<Driver>;
-  /** Start the app's mock backend. */
-  mock: () => MockBackend | Promise<MockBackend>;
+  /** Start the app's mock backend (its concrete type `M` flows through the whole session). */
+  mock: () => M | Promise<M>;
   /** App-specific secret patterns to keep out of evidence (injected, never baked into the core). */
   secrets?: readonly RegExp[];
   /** App-specific evidence-redaction patterns. */
   redact?: readonly RegExp[];
   /** Reach a logged-in state for the role. */
-  login?: (context: FlowContext) => Promise<void>;
+  login?: (context: FlowContext<M>) => Promise<void>;
   /** Enter the role's main surface. */
-  join?: (context: FlowContext) => Promise<void>;
+  join?: (context: FlowContext<M>) => Promise<void>;
   /** Screen-object factories, bound to the device context. */
   screens: S;
   /**
@@ -46,33 +51,38 @@ export interface AppDefinition<S extends ScreenFactories> {
    * so its background sockets are gone before `deleteSession`. The mock is still stopped
    * even if this throws.
    */
-  teardown?: (context: SessionContext<S>) => Promise<void> | void;
+  teardown?: (context: SessionContext<S, M>) => Promise<void> | void;
   /**
    * Invoked when a behaviour throws, before the failure propagates — wire on-failure
    * evidence here (e.g. `captureState(...)`) so capture lives in one place, not in every
    * behaviour. Its own errors are swallowed so they never mask the real failure.
    */
-  onFailure?: (context: SessionContext<S>, info: FailureInfo) => Promise<void> | void;
+  onFailure?: (context: SessionContext<S, M>, info: FailureInfo) => Promise<void> | void;
 }
 
 /** The fixture context a session injects: the device handles plus each app screen. */
-export type SessionContext<S extends ScreenFactories> = DeviceContext & {
+export type SessionContext<
+  S extends ScreenFactories<M>,
+  M extends MockBackend = MockBackend,
+> = DeviceContext<M> & {
   [K in keyof S]: ReturnType<S[K]>;
 };
 
-export interface App<S extends ScreenFactories> {
+export interface App<S extends ScreenFactories<M>, M extends MockBackend = MockBackend> {
   /** A scenario fixture that provisions a logged-in, joined session for `role`. */
-  session(role?: string): ScenarioFixture<SessionContext<S>>;
+  session(role?: string): ScenarioFixture<SessionContext<S, M>>;
 }
 
-export function defineApp<S extends ScreenFactories>(definition: AppDefinition<S>): App<S> {
+export function defineApp<S extends ScreenFactories<M>, M extends MockBackend = MockBackend>(
+  definition: AppDefinition<S, M>,
+): App<S, M> {
   return {
-    session(role = "default"): ScenarioFixture<SessionContext<S>> {
+    session(role = "default"): ScenarioFixture<SessionContext<S, M>> {
       return {
-        async setup(): Promise<SessionContext<S>> {
+        async setup(): Promise<SessionContext<S, M>> {
           const driver = await definition.driver();
           const mock = await definition.mock();
-          const device: DeviceContext = { driver, mock };
+          const device: DeviceContext<M> = { driver, mock };
           try {
             if (definition.login) await definition.login({ ...device, role });
             if (definition.join) await definition.join({ ...device, role });
@@ -82,7 +92,7 @@ export function defineApp<S extends ScreenFactories>(definition: AppDefinition<S
             }
             // Dynamic assembly: the screen factories' precise return types are
             // recovered by SessionContext<S>, so the boundary cast is the honest seam.
-            return { ...device, ...screens } as unknown as SessionContext<S>;
+            return { ...device, ...screens } as unknown as SessionContext<S, M>;
           } catch (error) {
             await mock.stop().catch(() => {});
             throw error;

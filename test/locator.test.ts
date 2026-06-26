@@ -84,6 +84,23 @@ test("regex selectors match, read and locate a label by pattern (decoded, case-i
   assert.equal(await new Locator(driver, by.text(/^nope$/)).isVisible(), false);
 });
 
+test("resolves iOS x/y/width/height geometry (no Android `bounds`) for visibility and tap", async () => {
+  // iOS XCUITest exposes geometry as separate x/y/width/height attributes, not Android's
+  // bounds="[x1,y1][x2,y2]". Without nodeBounds the element has null bounds and tap() finds nothing.
+  const driver = new FakeDriver(
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" name="Submit" label="Submit" enabled="true" visible="true" x="41" y="412" width="311" height="41" />',
+  );
+  driver.platform = "ios";
+  const submit = new Locator(driver, by.label("Submit"));
+  assert.equal(await submit.isVisible(), true);
+  const b = await submit.bounds();
+  assert.ok(b);
+  assert.equal(b.centerX, 197); // 41 + 311/2
+  assert.equal(b.centerY, 433); // 412 + 41/2
+  await submit.tap();
+  assert.deepEqual(driver.taps, [{ x: 197, y: 433 }]);
+});
+
 test("checkbox state — isChecked, check()/uncheck() drive it, expect(...).toBeChecked()", async () => {
   let checked = false; // a tap toggles the box, modelling a real checkbox
   const driver: Driver = {

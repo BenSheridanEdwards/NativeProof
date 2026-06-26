@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { App, ScreenFactories } from "../src/app.js";
 import { buildWdioConfig, defineConfig, findConfigFile, resolveProject } from "../src/config.js";
+import { failureEvidenceName } from "../src/evidence.js";
 
 const android = {
   name: "android",
@@ -47,6 +48,24 @@ test("buildWdioConfig honours a spec override and Appium env", () => {
   assert.deepEqual(wdio.specs, ["/proj/tests/x.spec.ts"]);
   assert.equal(wdio.hostname, "1.2.3.4");
   assert.equal(wdio.port, 4444);
+});
+
+test("buildWdioConfig adds a built-in evidence-on-failure afterTest hook", async () => {
+  const wdio = buildWdioConfig({ projects }, { platform: "android" }, "/proj");
+  assert.equal(typeof wdio.afterTest, "function");
+  const afterTest = wdio.afterTest as (t: unknown, c: unknown, r: { passed: boolean }) => Promise<void>;
+  // A passing test captures nothing; a failing test attempts capture but never throws
+  // (best-effort — no live device in this unit context).
+  await afterTest({ title: "t", parent: "p" }, {}, { passed: true });
+  await afterTest({ title: "t", parent: "p" }, {}, { passed: false });
+});
+
+test("failureEvidenceName builds a filesystem-safe, capped prefix", () => {
+  assert.equal(
+    failureEvidenceName({ parent: "Room · onboarding", title: "Accept is inert!" }),
+    "failure-Room_onboarding-Accept_is_inert_",
+  );
+  assert.ok(failureEvidenceName({ parent: "x".repeat(200), title: "y" }).length <= 120);
 });
 
 test("findConfigFile locates nativeproof.config.* via the injected exists check", () => {

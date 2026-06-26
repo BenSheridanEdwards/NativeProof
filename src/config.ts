@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type { App, ScreenFactories } from "./app.js";
+import { captureState, failureEvidenceName } from "./evidence.js";
 import type { MockBackend } from "./mock.js";
 
 /**
@@ -118,6 +119,18 @@ export function buildWdioConfig(
     framework: "mocha",
     reporters: ["spec"],
     mochaOpts: { ui: "bdd", timeout: config.mochaTimeout ?? 240_000 },
+    // Evidence on failure, out of the box: on a failed behaviour, snapshot a screenshot +
+    // redacted page source into the artifact dir, named after the spec. Best-effort — a
+    // capture error never masks the real failure — and consumers get it without writing
+    // their own afterTest hook.
+    afterTest: async (
+      test: { title: string; parent: string },
+      _context: unknown,
+      result: { passed: boolean },
+    ): Promise<void> => {
+      if (result.passed) return;
+      await captureState(failureEvidenceName(test)).catch(() => {});
+    },
   };
 }
 

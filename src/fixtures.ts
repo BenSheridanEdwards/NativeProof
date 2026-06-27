@@ -14,7 +14,39 @@
  * surface intended for extraction into a standalone package.
  */
 
-import { type BddHooks, runner } from "./runner.js";
+import { type BddContext, type BddHooks, runner } from "./runner.js";
+
+/** Error thrown by {@link skipScenario}; public so consumers can identify it if needed. */
+export class ScenarioSkipError extends Error {
+  constructor(readonly reason: string) {
+    super(reason);
+    this.name = "ScenarioSkipError";
+  }
+}
+
+/**
+ * Skip the current scenario from fixture setup.
+ *
+ * Use this when a mobile scenario depends on an optional app seam, simulator state,
+ * native build marker, or device capability. It mirrors Playwright's "assumption"
+ * shape at the scenario-fixture boundary: the fixture owns the precondition and
+ * the behaviours remain clean.
+ */
+export function skipScenario(reason: string): never {
+  throw new ScenarioSkipError(reason);
+}
+
+function isScenarioSkip(error: unknown): error is ScenarioSkipError {
+  return error instanceof ScenarioSkipError;
+}
+
+function skipCurrent(runnerContext: BddContext, reason: string): void {
+  if (typeof runnerContext.skip === "function") {
+    runnerContext.skip();
+    return;
+  }
+  console.warn(`[nativeproof] scenario skipped but the active runner has no skip(): ${reason}`);
+}
 
 /**
  * Provisioning + teardown for one behaviour scenario's shared fixture context.
@@ -93,9 +125,16 @@ export function describeScenario<Ctx>(
   const { describe, before, after, it } = hooks;
   describe(title, () => {
     let context: Ctx | undefined;
+    let skippedReason: string | undefined;
 
-    before(async () => {
-      context = await fixture.setup();
+    before(async function () {
+      try {
+        context = await fixture.setup();
+      } catch (error) {
+        if (!isScenarioSkip(error)) throw error;
+        skippedReason = error.reason;
+        skipCurrent(this, error.reason);
+      }
     });
 
     after(async () => {
@@ -117,13 +156,21 @@ export function describeScenario<Ctx>(
       if (!hook) {
         throw new Error(`The active runner has no ${name} hook; scenario ${name} is unavailable`);
       }
-      hook(async () => {
+      hook(async function () {
+        if (skippedReason) {
+          skipCurrent(this, skippedReason);
+          return;
+        }
         await body(requireContext());
       });
     };
 
     const test = ((behaviourTitle: string, body: (context: Ctx) => void | Promise<void>): void => {
-      it(behaviourTitle, async () => {
+      it(behaviourTitle, async function () {
+        if (skippedReason) {
+          skipCurrent(this, skippedReason);
+          return;
+        }
         const context = requireContext();
         try {
           await body(context);

@@ -8,16 +8,22 @@
  * the way Playwright owns its own.
  */
 /** A per-behaviour hook (`beforeEach` / `afterEach`). */
-type PerTestHook = (fn: () => void | Promise<void>) => void;
+type PerTestHook = (fn: (this: BddContext) => void | Promise<void>) => void;
+
+/** Minimal runner context NativeProof needs from Mocha-like hosts. */
+export interface BddContext {
+  /** Mark the current suite/test skipped when the host runner supports it. */
+  skip?(): void;
+}
 
 export interface BddHooks {
   describe(title: string, fn: () => void): void;
-  before(fn: () => void | Promise<void>): void;
-  after(fn: () => void | Promise<void>): void;
+  before(fn: (this: BddContext) => void | Promise<void>): void;
+  after(fn: (this: BddContext) => void | Promise<void>): void;
   /** Optional per-behaviour hooks; present on Mocha and node:test. */
-  beforeEach?(fn: () => void | Promise<void>): void;
-  afterEach?(fn: () => void | Promise<void>): void;
-  it(title: string, fn: () => void | Promise<void>): void;
+  beforeEach?(fn: (this: BddContext) => void | Promise<void>): void;
+  afterEach?(fn: (this: BddContext) => void | Promise<void>): void;
+  it(title: string, fn: (this: BddContext) => void | Promise<void>): void;
 }
 
 let configured: BddHooks | null = null;

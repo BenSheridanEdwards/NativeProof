@@ -399,6 +399,29 @@ repeatable reset without per-spec boilerplate. `teardown` runs before the mock s
 is deleted (e.g. force-stop the app); `onFailure` runs when a behaviour throws, before the failure
 propagates, so on-failure evidence lives in one place instead of every behaviour.
 
+If setup discovers that a scenario cannot run on the current native app build or device, call
+`skipScenario(reason)` from the fixture. NativeProof marks the whole scenario skipped and still runs
+`teardown(undefined)`, so app-owned seam checks stay in one fixture instead of leaking raw Mocha
+`this.skip()` calls into specs:
+
+```ts
+import { skipScenario, type ScenarioFixture } from "nativeproof";
+
+export function speechStallScenario(): ScenarioFixture<SpeechCtx> {
+  return {
+    async setup() {
+      if (!process.env.WORDLY_E2E_PRESENTER_SPEECH_RESULT_STATE) {
+        skipScenario("speech-result seam is not enabled for this app build");
+      }
+      return startSpeechSession();
+    },
+    async teardown(context) {
+      await context?.mock.stop();
+    },
+  };
+}
+```
+
 > NativeProof locators **read, tap and fill** (text entry). For input `fill()` doesn't cover
 > (clearing a field first, custom keyboards, key chords), drive WebdriverIO's `$(...).setValue(...)`
 > directly inside `login` (the `@wdio/globals` `browser`/`$` are available in the live session).
@@ -805,6 +828,7 @@ mysteries, and it beats guessing label strings every time.
 - `expect(locator)` → `toBeVisible` / `toShow` / `toHaveText` / `toBeChecked` / `toHaveCount` (+ `.not`), each `(value?, { timeout?, interval? })`.
 - `expect(mock | frameLog)` → `toHaveSent` / `toHaveReceived` (+ `.not`), matched by partial frame; accepts any `FrameLog` (`{ frames() }`).
 - `expect(value)` → `toBe` / `toEqual` / `toContain` / `toBeTruthy` / `toBeFalsy` / `toBeDefined` / `toBeNull` (+ `.not`) — synchronous matchers for plain values.
+- `skipScenario(reason)` — call from a `ScenarioFixture.setup()` precondition to skip every behaviour in that scenario while still running teardown.
 - `startMockServer({ port?, host? })` → a `MockServer` (`url`, `wsUrl`, `route()`, `frames()`, `send()`, `stop()`).
 - `swipe`, `tapAt`, `pause` — low-level pointer gestures.
 - `captureState(prefix)` / `captureScreenshot` / `captureText` / `redactEvidenceText` — evidence.

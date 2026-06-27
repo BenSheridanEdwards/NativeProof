@@ -4,6 +4,34 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.5
+
+Native-first setup and config-owned control, so generated projects read like runner-native tests
+instead of framework plumbing.
+
+**Added**
+
+- `createNative(...)` — a direct native app control surface for runner-native specs that import
+  `native` and `expect` from `nativeproof.config.ts`.
+- Agent-facing north-star guidance in `.agents/NORTH_STAR_GOAL.md`, `CLAUDE.md`, `AGENT.md`, and
+  `AGENTS.md`.
+
+**Changed**
+
+- `nativeproof init --ios|--android` now scaffolds a minimal single-platform project with
+  `nativeproof.config.ts`, one readable `describe`/`it` spec, and a plain `test:e2e` npm script.
+- `nativeproof.config.ts` is the single control plane for app paths, device capabilities, Appium
+  host/port/path, artifacts, spec globs, timeouts, and WebdriverIO tuning.
+- The README and generated examples now default to direct `native.*` interactions and plain
+  `expect(...)` assertions; the fixture harness remains documented as legacy/advanced compatibility.
+
+**Removed**
+
+- Public `test.*` mini-runner exports from the primary API.
+- Raw `wdio.conf.ts` discovery, `--config`, and Appium endpoint CLI flags from the user-facing CLI
+  path.
+- Generated `NATIVEPROOF_*` app/device env overrides and the artifact env escape hatch.
+
 ## 0.10.4
 
 Per-project spec sets and WebdriverIO tuning pass-through, for suites that run a different set of

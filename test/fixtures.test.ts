@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { describeScenario, type ScenarioFixture } from "../src/fixtures.js";
-import { type BddHooks, useRunner } from "../src/runner.js";
+import { describeScenario, type ScenarioFixture, skipScenario } from "../src/fixtures.js";
+import { type BddContext, type BddHooks, useRunner } from "../src/runner.js";
 
 /**
  * describeScenario's onFailure seam, driven by a recording fake runner so we can run the
@@ -12,19 +12,43 @@ import { type BddHooks, useRunner } from "../src/runner.js";
 function recordingRunner(): {
   its: Array<{ title: string; fn: () => Promise<void> }>;
   runSetup(): Promise<void>;
+  runTeardown(): Promise<void>;
+  setupSkipped(): boolean;
+  behaviourSkipCount(): number;
 } {
   const its: Array<{ title: string; fn: () => Promise<void> }> = [];
   let setup: (() => Promise<void>) | undefined;
+  let teardown: (() => Promise<void>) | undefined;
+  let setupWasSkipped = false;
+  let behaviourSkips = 0;
+  const setupContext: BddContext = {
+    skip: () => {
+      setupWasSkipped = true;
+    },
+  };
+  const behaviourContext: BddContext = {
+    skip: () => {
+      behaviourSkips += 1;
+    },
+  };
   const hooks: BddHooks = {
     describe: (_title, fn) => fn(),
     before: (fn) => {
-      setup = fn as () => Promise<void>;
+      setup = () => Promise.resolve(fn.call(setupContext));
     },
-    after: () => {},
-    it: (title, fn) => its.push({ title, fn: fn as () => Promise<void> }),
+    after: (fn) => {
+      teardown = () => Promise.resolve(fn.call({}));
+    },
+    it: (title, fn) => its.push({ title, fn: () => Promise.resolve(fn.call(behaviourContext)) }),
   };
   useRunner(hooks);
-  return { its, runSetup: () => setup?.() ?? Promise.resolve() };
+  return {
+    its,
+    runSetup: () => setup?.() ?? Promise.resolve(),
+    runTeardown: () => teardown?.() ?? Promise.resolve(),
+    setupSkipped: () => setupWasSkipped,
+    behaviourSkipCount: () => behaviourSkips,
+  };
 }
 
 test("onFailure fires with the failing behaviour's title + error and context, then rethrows", async () => {
@@ -81,4 +105,41 @@ test("a thrown onFailure hook is swallowed; the original error still propagates"
   const [only] = its;
   assert.ok(only);
   await assert.rejects(() => only.fn(), /real failure/); // not "hook exploded"
+});
+
+test("skipScenario from setup skips behaviours and still runs teardown", async () => {
+  const { its, runSetup, runTeardown, setupSkipped, behaviourSkipCount } = recordingRunner();
+  let behaviourRan = false;
+  let failureCaptured = false;
+  let teardownContext: unknown = "not called";
+  const fixture: ScenarioFixture<{ id: number }> = {
+    async setup() {
+      skipScenario("missing app seam");
+    },
+    async teardown(context) {
+      teardownContext = context;
+    },
+    async onFailure() {
+      failureCaptured = true;
+    },
+  };
+
+  describeScenario("optional native seam", fixture, (t) => {
+    t("would fail if it ran", async () => {
+      behaviourRan = true;
+      throw new Error("should not run");
+    });
+  });
+
+  await runSetup();
+  await runTeardown();
+  const [only] = its;
+  assert.ok(only);
+  await only.fn();
+
+  assert.equal(setupSkipped(), true);
+  assert.equal(behaviourSkipCount(), 1);
+  assert.equal(behaviourRan, false);
+  assert.equal(failureCaptured, false);
+  assert.equal(teardownContext, undefined);
 });

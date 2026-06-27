@@ -11,7 +11,13 @@ import { browser } from "@wdio/globals";
  * touches disk. Part of the reusable framework core.
  */
 
-const artifactDir = process.env.E2E_ARTIFACT_DIR ?? ".e2e-artifacts";
+const DEFAULT_ARTIFACT_DIR = ".e2e-artifacts";
+let artifactDir = DEFAULT_ARTIFACT_DIR;
+
+/** Configure where evidence files are written. The CLI sets this from nativeproof.config.ts. */
+export function setArtifactDir(dir: string | undefined): void {
+  artifactDir = dir?.trim() ? dir : DEFAULT_ARTIFACT_DIR;
+}
 
 export function redactEvidenceText(contents: string): string {
   return String(contents)

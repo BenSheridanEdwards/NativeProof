@@ -19,12 +19,9 @@ if (!userConfig) {
 }
 
 const env: RunnerEnv = {};
-const { PLATFORM, NATIVEPROOF_PROJECT, SPEC, APPIUM_HOST, APPIUM_PORT, APPIUM_PATH } = process.env;
+const { PLATFORM, NATIVEPROOF_PROJECT, SPEC } = process.env;
 if (PLATFORM) env.platform = PLATFORM;
 if (NATIVEPROOF_PROJECT) env.project = NATIVEPROOF_PROJECT;
 if (SPEC) env.spec = SPEC;
-if (APPIUM_HOST) env.appiumHost = APPIUM_HOST;
-if (APPIUM_PORT) env.appiumPort = Number(APPIUM_PORT);
-if (APPIUM_PATH) env.appiumPath = APPIUM_PATH;
 
 export const config = buildWdioConfig(userConfig, env);

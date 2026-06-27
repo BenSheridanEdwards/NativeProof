@@ -1,21 +1,17 @@
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import { describe, it } from "node:test";
 import { defineApp } from "../src/app.js";
 import type { Driver, Platform } from "../src/driver.js";
 import { expect } from "../src/expect.js";
 import { by, Locator } from "../src/locator.js";
 import type { MockBackend, MockFrame, MockRoute } from "../src/mock.js";
-import { useRunner } from "../src/runner.js";
-import { test } from "../src/test.js";
+import { createNative } from "../src/native.js";
 
 /**
  * End-to-end demo of the full DX against a fake device — no emulator, no real app.
- * This is the "it reads like Playwright AND works standalone" proof: defineApp (the
- * single seam), the test/test.describe facade, locators, expect, and route-style mock
- * assertions, all composed and run here under node:test (wired as the BDD runner).
+ * This is the "it reads like a native Playwright test AND works standalone" proof: runner-native
+ * describe/it, direct native controls, locators, expect, and route-style mock assertions.
  */
-useRunner({ describe, before, after, it });
-
 class FakeBackend implements MockBackend {
   private readonly recorded: MockFrame[] = [];
 
@@ -52,6 +48,10 @@ class FakeDriver implements Driver {
     // Model the app reacting to a tap by sending a frame to its backend.
     this.backend.record({ path: "/action", type: "submit", direction: "sent" });
   }
+
+  async typeText(text: string): Promise<void> {
+    this.backend.record({ path: "/input", type: "typed", payload: { text }, direction: "sent" });
+  }
 }
 
 const backend = new FakeBackend();
@@ -72,15 +72,23 @@ const demoApp = defineApp({
   },
 });
 
-test.describe("demo app (fake device, no emulator)", demoApp.session(), (test) => {
-  test("shows the greeting, taps submit, and observes the sent frame", async ({ home, mock }) => {
-    await expect(home.greeting).toShow("Welcome");
-    await home.submit.tap();
-    await expect(mock).toHaveSent({ path: "/action", type: "submit" });
-    await expect(mock).not.toHaveReceived({ type: "incoming" }, { timeout: 20, interval: 5 });
+const native = createNative({
+  driver: () => driver,
+  async navigate(route) {
+    assert.equal(route, "/demo");
+  },
+});
+
+describe("demo app (fake device, no emulator)", () => {
+  it("shows the greeting, taps submit, and observes the sent frame", async () => {
+    await native.navigate("/demo");
+    await expect(native.getByText("Welcome")).toShow("Welcome");
+    await native.tap("Submit");
+    await expect(backend).toHaveSent({ path: "/action", type: "submit" });
+    await expect(backend).not.toHaveReceived({ type: "incoming" }, { timeout: 20, interval: 5 });
   });
 
-  test("defineApp exposes a session fixture", () => {
+  it("defineApp remains available for advanced fixture scenarios", () => {
     assert.equal(typeof demoApp.session, "function");
   });
 });

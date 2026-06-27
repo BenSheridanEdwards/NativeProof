@@ -2,40 +2,34 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { findConfigFile } from "./config.js";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { type AppiumOptions, findConfigFile, type NativeProofConfig } from "./config.js";
 
 /**
  * The `nativeproof` CLI — the single-command entry, in the spirit of `playwright test`.
  *
- * It resolves a config (an `nativeproof.config.ts`, else a raw `wdio.conf.ts`), ensures an
- * Appium server is up (starting one if needed), and runs the suite with sane env
- * (PLATFORM / SPEC / NATIVEPROOF_PROJECT / APPIUM_*) — so a consumer types one command
- * instead of remembering env vars and a runner invocation. The device/emulator itself is
- * the environment (the mobile analogue of needing a display) and is left to the host.
+ * It resolves `nativeproof.config.ts`, ensures the configured Appium server is up (starting one
+ * if needed), and runs the suite with sane env (PLATFORM / SPEC / NATIVEPROOF_PROJECT) — so a
+ * consumer types one command instead of remembering env vars and a runner invocation. The
+ * device/emulator itself is the environment (the mobile analogue of needing a display) and is left
+ * to the host.
  */
 
 export interface CliArgs {
   command: "test" | "init" | "help" | "version";
-  config: string | undefined;
   platform: "android" | "ios" | undefined;
+  initPlatform: "android" | "ios" | undefined;
   project: string | undefined;
   spec: string | undefined;
-  appiumHost: string;
-  appiumPort: number;
-  appiumPath: string;
   startAppium: boolean;
 }
 
 const DEFAULTS: CliArgs = {
   command: "test",
-  config: undefined,
   platform: undefined,
+  initPlatform: undefined,
   project: undefined,
   spec: undefined,
-  appiumHost: "127.0.0.1",
-  appiumPort: 4723,
-  appiumPath: "/wd/hub",
   startAppium: true,
 };
 
@@ -43,6 +37,17 @@ function valueFor(argv: readonly string[], index: number, flag: string): string 
   const value = argv[index];
   if (value === undefined) throw new Error(`${flag} requires a value`);
   return value;
+}
+
+function setPlatform(args: CliArgs, platform: "android" | "ios", source: string): void {
+  if (args.platform && args.platform !== platform) {
+    throw new Error(`${source} conflicts with --platform ${args.platform}`);
+  }
+  if (args.initPlatform && args.initPlatform !== platform) {
+    throw new Error(`${source} conflicts with --${args.initPlatform}`);
+  }
+  args.platform = platform;
+  args.initPlatform = platform;
 }
 
 export function parseArgs(argv: readonly string[]): CliArgs {
@@ -56,11 +61,12 @@ export function parseArgs(argv: readonly string[]): CliArgs {
     }
     if (arg === "-h" || arg === "--help") return { ...args, command: "help" };
     if (arg === "-v" || arg === "--version") return { ...args, command: "version" };
-    if (arg === "--no-appium") {
+    if (arg === "--ios") {
+      setPlatform(args, "ios", "--ios");
+    } else if (arg === "--android") {
+      setPlatform(args, "android", "--android");
+    } else if (arg === "--no-appium") {
       args.startAppium = false;
-    } else if (arg === "--config") {
-      i += 1;
-      args.config = valueFor(argv, i, "--config");
     } else if (arg === "--project") {
       i += 1;
       args.project = valueFor(argv, i, "--project");
@@ -73,21 +79,7 @@ export function parseArgs(argv: readonly string[]): CliArgs {
       if (platform !== "android" && platform !== "ios") {
         throw new Error('--platform must be "android" or "ios"');
       }
-      args.platform = platform;
-    } else if (arg === "--appium-host") {
-      i += 1;
-      args.appiumHost = valueFor(argv, i, "--appium-host");
-    } else if (arg === "--appium-port") {
-      i += 1;
-      const raw = valueFor(argv, i, "--appium-port");
-      const port = Number(raw);
-      if (!Number.isInteger(port) || port < 0 || port > 65535) {
-        throw new Error(`--appium-port must be an integer between 0 and 65535, got "${raw}"`);
-      }
-      args.appiumPort = port;
-    } else if (arg === "--appium-path") {
-      i += 1;
-      args.appiumPath = valueFor(argv, i, "--appium-path");
+      setPlatform(args, platform, "--platform");
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -107,69 +99,151 @@ export function version(): string {
 
 export function helpText(): string {
   return [
-    "nativeproof — Native Mobile E2E test framework inspired by Playwright",
+    "nativeproof — Playwright-feeling native mobile E2E for Appium/WebdriverIO",
     "",
     "Usage:",
     "  nativeproof [test] [options]   run the suite (default)",
-    "  nativeproof init               scaffold nativeproof.config.ts + a sample spec",
+    "  nativeproof init --ios         scaffold nativeproof.config.ts + a sample spec for iOS",
+    "  nativeproof init --android     scaffold nativeproof.config.ts + a sample spec for Android",
     "",
-    "Config is auto-discovered: nativeproof.config.ts (preferred), else wdio.conf.ts.",
+    "Config is auto-discovered from nativeproof.config.ts.",
     "",
     "Options:",
+    "  --ios                      shorthand for --platform ios",
+    "  --android                  shorthand for --platform android",
     "  --platform <android|ios>   platform to run (sets PLATFORM)",
     "  --project <name>           run a named project from nativeproof.config.ts",
     "  --spec <glob>              run only matching specs (sets SPEC)",
-    "  --config <path>            use a raw WebdriverIO config instead of discovery",
-    "  --appium-host <host>       Appium host (default: 127.0.0.1)",
-    "  --appium-port <port>       Appium port (default: 4723)",
-    "  --appium-path <path>       Appium base path (default: /wd/hub)",
     "  --no-appium                do not auto-start an Appium server",
     "  -h, --help                 show this help",
     "  -v, --version              print the version",
   ].join("\n");
 }
 
-const CONFIG_TEMPLATE = `import { createHarness, defineApp, defineConfig, page, startMockServer, wdioDriver } from "nativeproof";
+type InitPlatform = "android" | "ios";
 
-/**
- * One file declares your app, your devices, and where your specs live — the
- * \`nativeproof\` CLI discovers it and runs the suite. Replace the TODOs with your app.
- */
-const app = defineApp({
-  // Acquire the device/driver (Appium/WebdriverIO under the hood).
-  driver: () => wdioDriver(),
-  // Start a mock backend; swap startMockServer() for your own if you have one.
-  mock: () => startMockServer(),
-  // Screen objects: build locators/actions from the device context. Replace these.
-  screens: {
-    home: ({ driver }) => ({
-      heading: page(driver).getByText("Welcome"),
-    }),
+export interface ScaffoldOptions {
+  platform: InitPlatform;
+}
+
+function projectTemplate(platform: InitPlatform): string {
+  if (platform === "android") {
+    return `    {
+      name: "android",
+      platform: "android",
+      capabilities: {
+        "appium:app": "./app/build/outputs/apk/debug/app-debug.apk",
+        "appium:deviceName": "Android Emulator",
+      },
+    }`;
+  }
+  return `    {
+      name: "ios",
+      platform: "ios",
+      capabilities: {
+        "appium:app": "./build/ios/MyApp.app",
+        "appium:deviceName": "iPhone 15",
+      },
+    }`;
+}
+
+function configTemplate(options: ScaffoldOptions): string {
+  const projects = projectTemplate(options.platform);
+  return `import { createNative, defineConfig, expect, wdioDriver } from "nativeproof";
+
+const driver = () => wdioDriver();
+
+export const native = createNative({
+  driver,
+  async navigate(route) {
+    // Keep app-specific routing here: deep links, reset flows, mock-backend state, etc.
+    if (route !== "/login") {
+      throw new Error(\`Configure native.navigate(\${JSON.stringify(route)}) in nativeproof.config.ts\`);
+    }
   },
 });
 
-// Specs import these: \`import { test, expect } from "../nativeproof.config";\`
-export const { test, expect } = createHarness(app);
+export { expect };
 
 export default defineConfig({
-  app,
   testDir: "tests",
-  // platformName + automationName are filled in from \`platform\`; set \`appium:app\` to your build.
+  artifacts: { dir: ".e2e-artifacts" },
+  mochaTimeout: 240_000,
   projects: [
-    { name: "android", platform: "android", capabilities: { /* "appium:app": "/path/to/app.apk" */ } },
-    { name: "ios", platform: "ios", capabilities: { /* "appium:app": "/path/to/app.app" */ } },
+${projects},
   ],
 });
 `;
+}
 
-const SPEC_TEMPLATE = `import { expect, test } from "../nativeproof.config";
+const SPEC_TEMPLATE = `import { expect, native } from "../nativeproof.config";
 
-test.describe("example", () => {
-  test("the home screen shows its heading", async ({ home }) => {
-    await expect(home.heading).toBeVisible();
+describe("login", () => {
+  it("should be able to log in", async () => {
+    await native.navigate("/login");
+    await native.tap("Log in");
+
+    await expect(native.getByText("Welcome back")).toBeVisible();
   });
 });
 `;
+
+function packageTemplate(): string {
+  return `${JSON.stringify(
+    {
+      private: true,
+      scripts: {
+        "test:e2e": "nativeproof",
+      },
+      devDependencies: {
+        nativeproof: "latest",
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+function packageCommand(): string {
+  return "nativeproof";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function ensurePackageJson(raw: string): { contents: string; changed: boolean } {
+  const pkg = JSON.parse(raw) as unknown;
+  if (!isRecord(pkg)) {
+    throw new Error("nativeproof: package.json must contain a JSON object");
+  }
+
+  let changed = false;
+  const scripts = isRecord(pkg.scripts) ? pkg.scripts : {};
+  if (!isRecord(pkg.scripts)) {
+    pkg.scripts = scripts;
+    changed = true;
+  }
+  if (typeof scripts["test:e2e"] !== "string") {
+    scripts["test:e2e"] = packageCommand();
+    changed = true;
+  }
+
+  const dependencies = isRecord(pkg.dependencies) ? pkg.dependencies : {};
+  const devDependencies = isRecord(pkg.devDependencies) ? pkg.devDependencies : {};
+  const alreadyDependsOnNativeProof =
+    typeof dependencies.nativeproof === "string" || typeof devDependencies.nativeproof === "string";
+  if (!isRecord(pkg.devDependencies)) {
+    pkg.devDependencies = devDependencies;
+    changed = true;
+  }
+  if (!alreadyDependsOnNativeProof) {
+    devDependencies.nativeproof = "latest";
+    changed = true;
+  }
+
+  return { contents: `${JSON.stringify(pkg, null, 2)}\n`, changed };
+}
 
 export interface ScaffoldFile {
   path: string;
@@ -177,50 +251,74 @@ export interface ScaffoldFile {
 }
 
 /** The starter files \`nativeproof init\` writes — pure, so they can be asserted in a test. */
-export function scaffoldFiles(): ScaffoldFile[] {
+export function scaffoldFiles(options: ScaffoldOptions): ScaffoldFile[] {
   return [
-    { path: "nativeproof.config.ts", contents: CONFIG_TEMPLATE },
+    { path: "nativeproof.config.ts", contents: configTemplate(options) },
     { path: "tests/example.spec.ts", contents: SPEC_TEMPLATE },
+    { path: "package.json", contents: packageTemplate() },
   ];
 }
 
 /** Minimal filesystem seam so \`scaffold\` is testable without touching disk. */
 export interface ScaffoldIo {
   exists(file: string): boolean;
+  read(file: string): string;
   write(file: string, contents: string): void;
 }
 
 const diskIo: ScaffoldIo = {
   exists: existsSync,
+  read: (file) => readFileSync(file, "utf8"),
   write(file, contents) {
     mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, contents);
   },
 };
 
+export interface ScaffoldResult {
+  created: string[];
+  skipped: string[];
+  updated: string[];
+}
+
 /** Write the starter files under \`cwd\`, never overwriting an existing one. */
-export function scaffold(cwd: string, io: ScaffoldIo = diskIo): { created: string[]; skipped: string[] } {
+export function scaffold(cwd: string, options: ScaffoldOptions, io: ScaffoldIo = diskIo): ScaffoldResult {
   const created: string[] = [];
   const skipped: string[] = [];
-  for (const file of scaffoldFiles()) {
-    if (io.exists(path.join(cwd, file.path))) {
+  const updated: string[] = [];
+  for (const file of scaffoldFiles(options)) {
+    const target = path.join(cwd, file.path);
+    if (io.exists(target)) {
+      if (file.path === "package.json") {
+        const merged = ensurePackageJson(io.read(target));
+        if (merged.changed) {
+          io.write(target, merged.contents);
+          updated.push(file.path);
+        } else {
+          skipped.push(file.path);
+        }
+        continue;
+      }
       skipped.push(file.path);
       continue;
     }
-    io.write(path.join(cwd, file.path), file.contents);
+    io.write(target, file.contents);
     created.push(file.path);
   }
-  return { created, skipped };
+  return { created, skipped, updated };
 }
 
-export function init(cwd: string = process.cwd()): number {
-  const { created, skipped } = scaffold(cwd);
+export function init(cwd: string = process.cwd(), options: ScaffoldOptions): number {
+  const { created, skipped, updated } = scaffold(cwd, options);
   for (const file of created) console.log(`nativeproof: created ${file}`);
+  for (const file of updated) console.log(`nativeproof: updated ${file}`);
   for (const file of skipped) console.log(`nativeproof: ${file} already exists — skipped`);
-  if (created.length === 0) {
+  if (created.length === 0 && updated.length === 0) {
     console.log("nativeproof: nothing to scaffold (all files already exist)");
   } else {
-    console.log("\nNext: set capabilities + screens in nativeproof.config.ts, then run `nativeproof`.");
+    console.log(
+      `\nNext: set the app path + native.navigate(...) in nativeproof.config.ts, then run \`npm run test:e2e\`.`,
+    );
   }
   return 0;
 }
@@ -230,9 +328,18 @@ function localBin(name: string): string {
   return existsSync(bin) ? bin : name;
 }
 
-async function appiumReachable(args: CliArgs): Promise<boolean> {
+function appiumEndpoint(options: AppiumOptions = {}): Required<AppiumOptions> {
+  return {
+    host: options.host ?? "127.0.0.1",
+    port: options.port ?? 4723,
+    path: options.path ?? "/wd/hub",
+  };
+}
+
+async function appiumReachable(options: AppiumOptions = {}): Promise<boolean> {
+  const endpoint = appiumEndpoint(options);
   try {
-    const response = await fetch(`http://${args.appiumHost}:${args.appiumPort}${args.appiumPath}/status`, {
+    const response = await fetch(`http://${endpoint.host}:${endpoint.port}${endpoint.path}/status`, {
       signal: AbortSignal.timeout(1500),
     });
     return response.ok;
@@ -241,21 +348,37 @@ async function appiumReachable(args: CliArgs): Promise<boolean> {
   }
 }
 
-async function ensureAppium(args: CliArgs): Promise<ChildProcess | null> {
-  if (await appiumReachable(args)) return null;
-  if (!args.startAppium) {
+async function ensureAppium(
+  appium: AppiumOptions | undefined,
+  startAppium: boolean,
+): Promise<ChildProcess | null> {
+  const endpoint = appiumEndpoint(appium);
+  if (await appiumReachable(endpoint)) return null;
+  if (!startAppium) {
     throw new Error(
-      `Appium is not reachable at http://${args.appiumHost}:${args.appiumPort}${args.appiumPath} (and --no-appium was set)`,
+      `Appium is not reachable at http://${endpoint.host}:${endpoint.port}${endpoint.path} (and --no-appium was set)`,
     );
   }
   console.log("nativeproof: starting Appium …");
-  const child = spawn(localBin("appium"), ["--base-path", args.appiumPath, "--relaxed-security"], {
-    stdio: "ignore",
-  });
+  const child = spawn(
+    localBin("appium"),
+    [
+      "--address",
+      endpoint.host,
+      "--port",
+      String(endpoint.port),
+      "--base-path",
+      endpoint.path,
+      "--relaxed-security",
+    ],
+    {
+      stdio: "ignore",
+    },
+  );
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 500));
-    if (await appiumReachable(args)) return child;
+    if (await appiumReachable(endpoint)) return child;
   }
   child.kill();
   throw new Error("nativeproof: Appium did not become reachable within 30s");
@@ -264,9 +387,6 @@ async function ensureAppium(args: CliArgs): Promise<ChildProcess | null> {
 function runnerEnv(args: CliArgs): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    APPIUM_HOST: args.appiumHost,
-    APPIUM_PORT: String(args.appiumPort),
-    APPIUM_PATH: args.appiumPath,
   };
   if (args.platform) env.PLATFORM = args.platform;
   if (args.project) env.NATIVEPROOF_PROJECT = args.project;
@@ -276,34 +396,56 @@ function runnerEnv(args: CliArgs): NodeJS.ProcessEnv {
 
 interface ResolvedRunner {
   wdioConfig: string;
+  configPath: string;
   extraEnv: NodeJS.ProcessEnv;
 }
 
-/** Pick what to hand WebdriverIO: an explicit config, an nativeproof.config.ts, or wdio.conf.ts. */
-export function resolveRunner(args: CliArgs, cwd: string = process.cwd()): ResolvedRunner {
-  if (args.config) {
-    const resolved = path.resolve(cwd, args.config);
-    if (!existsSync(resolved)) throw new Error(`nativeproof: config not found: ${args.config}`);
-    return { wdioConfig: resolved, extraEnv: {} };
-  }
+/** Pick what to hand WebdriverIO: the discovered nativeproof.config.ts. */
+export function resolveRunner(_args: CliArgs, cwd: string = process.cwd()): ResolvedRunner {
   const nativeproofConfig = findConfigFile(cwd);
   if (nativeproofConfig) {
     return {
       wdioConfig: fileURLToPath(new URL("./runner-config.js", import.meta.url)),
+      configPath: nativeproofConfig,
       extraEnv: {
         NATIVEPROOF_CONFIG: nativeproofConfig,
         NODE_OPTIONS: `--import tsx ${process.env.NODE_OPTIONS ?? ""}`.trim(),
       },
     };
   }
-  const wdioConf = path.resolve(cwd, "wdio.conf.ts");
-  if (existsSync(wdioConf)) return { wdioConfig: wdioConf, extraEnv: {} };
-  throw new Error("nativeproof: no nativeproof.config.ts or wdio.conf.ts found (pass --config <path>)");
+  throw new Error(
+    "nativeproof: no nativeproof.config.ts found (run `nativeproof init --ios` or `nativeproof init --android`)",
+  );
+}
+
+export async function loadNativeProofConfig(configPath: string): Promise<NativeProofConfig> {
+  const { tsImport } = await import("tsx/esm/api");
+  const loaded = await tsImport(pathToFileURL(configPath).href, import.meta.url);
+  const config = nativeProofConfigFromModule(loaded);
+  if (!config) {
+    throw new Error(`${configPath} must \`export default defineConfig(...)\``);
+  }
+  return config;
+}
+
+function isNativeProofConfig(value: unknown): value is NativeProofConfig {
+  return typeof value === "object" && value !== null && Array.isArray((value as NativeProofConfig).projects);
+}
+
+function nativeProofConfigFromModule(loaded: unknown): NativeProofConfig | undefined {
+  let current: unknown = loaded;
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (isNativeProofConfig(current)) return current;
+    if (typeof current !== "object" || current === null || !("default" in current)) return undefined;
+    current = (current as { default?: unknown }).default;
+  }
+  return isNativeProofConfig(current) ? current : undefined;
 }
 
 async function runTests(args: CliArgs): Promise<number> {
-  const { wdioConfig, extraEnv } = resolveRunner(args);
-  const appium = await ensureAppium(args);
+  const { wdioConfig, configPath, extraEnv } = resolveRunner(args);
+  const userConfig = await loadNativeProofConfig(configPath);
+  const appium = await ensureAppium(userConfig.appium, args.startAppium);
   try {
     return await new Promise<number>((resolve, reject) => {
       const runner = spawn(localBin("wdio"), ["run", wdioConfig], {
@@ -329,7 +471,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
   if (args.command === "init") {
-    return init();
+    if (!args.initPlatform) {
+      throw new Error("nativeproof init requires --ios or --android");
+    }
+    return init(process.cwd(), { platform: args.initPlatform });
   }
   return runTests(args);
 }

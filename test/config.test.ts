@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 import type { App, ScreenFactories } from "../src/app.js";
 import { buildWdioConfig, defineConfig, findConfigFile, resolveProject } from "../src/config.js";
-import { failureEvidenceName } from "../src/evidence.js";
+import { captureText, failureEvidenceName, setArtifactDir } from "../src/evidence.js";
 
 const android = {
   name: "android",
@@ -21,6 +24,7 @@ test("defineConfig returns the config unchanged (typed identity)", () => {
   const cfg = defineConfig({ app, projects });
   assert.equal(cfg.app, app);
   assert.equal(cfg.projects.length, 2);
+  assert.equal(defineConfig({ projects }).app, undefined);
 });
 
 test("resolveProject picks by name, then platform, then the first project", () => {
@@ -56,15 +60,16 @@ test("buildWdioConfig defaults platformName + automationName per platform, and a
   assert.deepEqual(ios.capabilities, [{ platformName: "iOS", "appium:automationName": "Custom" }]);
 });
 
-test("buildWdioConfig honours a spec override and Appium env", () => {
+test("buildWdioConfig honours a spec override and Appium settings from config", () => {
   const wdio = buildWdioConfig(
-    { projects, appium: { port: 4444 } },
-    { spec: "tests/x.spec.ts", appiumHost: "1.2.3.4" },
+    { projects, appium: { host: "1.2.3.4", port: 4444, path: "/" } },
+    { spec: "tests/x.spec.ts" },
     "/proj",
   );
   assert.deepEqual(wdio.specs, ["/proj/tests/x.spec.ts"]);
   assert.equal(wdio.hostname, "1.2.3.4");
   assert.equal(wdio.port, 4444);
+  assert.equal(wdio.path, "/");
 });
 
 test("buildWdioConfig uses a project's own specs (per-platform sets), and --spec wins", () => {
@@ -128,6 +133,30 @@ test("buildWdioConfig forwards wdio tuning options only when set", () => {
   assert.equal(tuned.waitforTimeout, 15_000);
   assert.equal(tuned.bail, 0);
   assert.equal(tuned.logLevel, "warn");
+});
+
+test("buildWdioConfig lets nativeproof.config.ts own the artifact directory", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-artifacts-"));
+  const configuredDir = path.join(dir, "configured");
+  const envDir = path.join(dir, "env");
+  const previous = process.env.E2E_ARTIFACT_DIR;
+  try {
+    process.env.E2E_ARTIFACT_DIR = envDir;
+    buildWdioConfig({ projects, artifacts: { dir: configuredDir } }, { platform: "ios" }, "/proj");
+
+    const target = await captureText("state.xml", '<node text="1234" />');
+    assert.equal(target, path.join(configuredDir, "state.xml"));
+    assert.match(readFileSync(target, "utf8"), /\[REDACTED\]/);
+    assert.equal(existsSync(envDir), false);
+  } finally {
+    setArtifactDir(undefined);
+    if (previous === undefined) {
+      delete process.env.E2E_ARTIFACT_DIR;
+    } else {
+      process.env.E2E_ARTIFACT_DIR = previous;
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("buildWdioConfig adds a built-in evidence-on-failure afterTest hook", async () => {

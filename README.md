@@ -1,27 +1,29 @@
 # NativeProof
 
-A **Native Mobile E2E test framework inspired by Playwright**. NativeProof brings Playwright's
-developer experience — **`test` / `describe` blocks, locators, auto-waiting `expect`,
-route-style network interception, fixtures, per-test isolation, evidence capture** — to
+A **Playwright-feeling native mobile E2E layer for Appium/WebdriverIO**. NativeProof brings Playwright's
+developer experience — **runner-native `describe` / `it`, direct `native.*` interactions,
+locators, auto-waiting `expect`, route-style network interception, fixtures, evidence capture** — to
 **native iOS and Android** apps, layered on **Appium / WebdriverIO** (which can drive the
 native surfaces Playwright itself cannot).
 
 ```ts
-import { test, expect } from "./nativeproof.config";
+import { expect, native } from "./nativeproof.config";
 
-test.describe("chat room", "member", () => {
-  test("renders the latest message and posts a reply", async ({ member, mock }) => {
-    await expect(member.messages).toShow("Welcome to the room");
-    await member.sendButton.tap();
-    await expect(mock).toHaveSent({ path: "/messages", type: "create", roomId: "general" });
+describe("login", () => {
+  it("should be able to log in", async () => {
+    await native.navigate("/login");
+    await native.tap("Log in");
+
+    await expect(native.getByText("Welcome back")).toBeVisible();
   });
 });
 ```
 
-One command runs it on a device or emulator:
+One command scaffolds the project, then one command runs it on a device or emulator:
 
 ```bash
-nativeproof --platform android
+npx nativeproof init --android
+npm run test:e2e
 ```
 
 ---
@@ -36,7 +38,7 @@ nativeproof --platform android
 - [Android setup](#android-setup)
 - [iOS setup](#ios-setup)
 - [Writing tests](#writing-tests)
-  - [Test blocks](#test-blocks-describe--test)
+  - [Test blocks](#test-blocks-describe--it)
   - [Fixtures, roles & the app seam](#fixtures-roles--the-app-seam)
   - [Locators](#locators)
   - [Assertions](#assertions)
@@ -55,8 +57,8 @@ nativeproof --platform android
 
 ## Features
 
-- **Reads like Playwright** — `test.describe` / `test(...)` blocks with a typed fixture
-  context injected; no per-test setup/teardown in the spec.
+- **Reads like a normal test** — runner-native `describe` / `it` / `expect`, with direct
+  `native.navigate`, `native.tap`, and `native.getByText` calls in the spec.
 - **Locators** — `by.text/testId/label/desc/id` and `page(driver).getByText/getByTestId/
   getByLabel/getById/getByRole`, each mapped to the right native attribute per platform (so you
   never guess `content-desc` vs `accessibilityIdentifier`), with built-in auto-waiting and
@@ -68,8 +70,8 @@ nativeproof --platform android
 - **Network interception** — a first-party HTTP + WebSocket mock server with
   `route().fulfill/reject/abort` (like `page.route()`) and `expect(mock).toHaveSent()/
   toHaveReceived()` traffic assertions. No per-app adapter.
-- **One seam, by injection** — a single `defineApp(...)` declares the device, mock,
-  login/join flows, screens and secret patterns; the core imports nothing app-specific.
+- **One config** — `nativeproof.config.ts` owns device projects, app paths, artifacts,
+  Appium/WebdriverIO tuning, and any app-specific `native.navigate` / `native.launch` hooks.
 - **Cross-platform** — the same spec runs on Android (UiAutomator2) and iOS (XCUITest).
 - **One command** — `nativeproof` resolves your config, ensures Appium is up, and runs the suite.
 - **TypeScript-first**, strict, with evidence (redacted screenshots + page source) for an
@@ -86,9 +88,7 @@ nativeproof --platform android
 ## Install
 
 ```bash
-npm i -D nativeproof \
-  webdriverio @wdio/cli @wdio/local-runner @wdio/mocha-framework \
-  appium
+npm i -D nativeproof
 
 # install the Appium driver(s) you need
 npx appium driver install uiautomator2   # Android
@@ -100,44 +100,45 @@ npx appium driver doctor uiautomator2
 
 ## Quick start
 
-Scaffold the starting files with one command, then fill in your app's seam:
+Scaffold the starting files with one command, then fill in the app path and the app-owned route hook:
 
 ```bash
-npx nativeproof init   # writes nativeproof.config.ts + a sample spec (never overwrites)
+npx nativeproof init --android
+# or
+npx nativeproof init --ios
 ```
 
 Then four steps from zero to a green run on Android — or set it all up by hand:
 
-**1. Configure** — one `nativeproof.config.ts` at the project root:
+**1. Configure** — one `nativeproof.config.ts` at the project root owns the app/device control:
 
 ```ts
-import { createHarness, defineApp, defineConfig, page, startMockServer, wdioDriver } from "nativeproof";
+import { createNative, defineConfig, expect, wdioDriver } from "nativeproof";
 
-const app = defineApp({
-  driver: () => wdioDriver(),
-  mock: () => startMockServer({ port: 18113, host: "0.0.0.0" }), // 0.0.0.0 so a device can reach it
-  screens: {
-    home: ({ driver }) => ({
-      title: page(driver).getByText("Welcome"),
-      start: page(driver).getByRole("button", { name: "Get started" }),
-    }),
+const driver = () => wdioDriver();
+
+export const native = createNative({
+  driver,
+  async navigate(route) {
+    if (route !== "/login") {
+      throw new Error(`Configure native.navigate(${JSON.stringify(route)}) in nativeproof.config.ts`);
+    }
+    // Put app-specific deep links, reset flows, or mock-backend state here.
   },
 });
 
-export const { test, expect } = createHarness(app); // specs import these
+export { expect };
 
 export default defineConfig({
-  app,
   testDir: "tests",
+  artifacts: { dir: ".e2e-artifacts" },
   projects: [
     {
       name: "android",
       platform: "android",
       capabilities: {
-        platformName: "Android",
-        "appium:automationName": "UiAutomator2",
-        "appium:app": process.env.ANDROID_APP ?? "app/android/app-debug.apk",
-        "appium:autoGrantPermissions": true,
+        "appium:app": "./app/build/outputs/apk/debug/app-debug.apk",
+        "appium:deviceName": "Android Emulator",
       },
     },
   ],
@@ -147,12 +148,14 @@ export default defineConfig({
 **2. Write a spec** — `tests/home.spec.ts`:
 
 ```ts
-import { test, expect } from "../nativeproof.config";
+import { expect, native } from "../nativeproof.config";
 
-test.describe("home screen", () => {
-  test("greets the user and starts", async ({ home }) => {
-    await expect(home.title).toBeVisible();
-    await home.start.tap();
+describe("login", () => {
+  it("should be able to log in", async () => {
+    await native.navigate("/login");
+    await native.tap("Log in");
+
+    await expect(native.getByText("Welcome back")).toBeVisible();
   });
 });
 ```
@@ -163,7 +166,7 @@ test.describe("home screen", () => {
 **4. Run:**
 
 ```bash
-npx nativeproof --platform android
+npm run test:e2e
 ```
 
 `nativeproof` discovers the config, starts Appium if it isn't already up, and runs the suite.
@@ -171,15 +174,17 @@ npx nativeproof --platform android
 ## Project setup
 
 Everything lives in one **`nativeproof.config.ts`** — the `playwright.config.ts` analogue. It
-declares the app (the injected seam), exports the typed `test` / `expect` your specs import,
-and lists the device **projects**. The CLI auto-discovers it and synthesises the WebdriverIO
-run, so there's no hand-written `wdio.conf.ts`.
+declares device projects, app paths, artifacts, Appium/WebdriverIO tuning, and the app-owned
+`native.navigate` / `native.launch` hooks. Specs import `native` and `expect` from this file, while
+`describe` / `it` stay runner-native. The CLI auto-discovers the config and synthesises the
+WebdriverIO run, so there's no hand-written `wdio.conf.ts`.
 
 A typical project:
 
 ```
 my-app-e2e/
-├─ nativeproof.config.ts  # the single config — app, device projects, test/expect exports
+├─ nativeproof.config.ts  # the single config — native, device projects, artifacts
+├─ package.json           # includes npm run test:e2e
 ├─ tests/
 │  ├─ home.spec.ts
 │  └─ chat.spec.ts
@@ -192,66 +197,49 @@ The full, cross-platform config:
 
 ```ts
 // nativeproof.config.ts
-import { createHarness, defineApp, defineConfig, page, startMockServer, wdioDriver } from "nativeproof";
+import { createNative, defineConfig, expect, wdioDriver } from "nativeproof";
 
-const app = defineApp({
-  driver: () => wdioDriver(),                       // the live WebdriverIO/Appium session
-  mock: () => startMockServer({ port: 18113, host: "0.0.0.0" }), // first-party mock; route()/frames built in
-  secrets: [/\b\d{6}\b/],                           // app-specific patterns kept out of captured evidence
-  login: async ({ role, driver, mock }) => {
-    // drive your app's sign-in; `mock` is the running backend, `role` comes from the describe
-  },
-  screens: {
-    member: ({ driver }) => {
-      const p = page(driver);
-      return {
-        messages: p.getByTestId("message-list"),
-        roomTitle: p.getByTestId("room-title"),
-        composer: p.getByTestId("composer"),
-        sendButton: p.getByRole("button", { name: "Send" }),
-        errorBanner: p.getByTestId("error-banner"),
-        spinner: p.getByTestId("loading"),
-        signOut: p.getByLabel("Sign out"),
-      };
-    },
+const driver = () => wdioDriver(); // the live WebdriverIO/Appium session
+
+export const native = createNative({
+  driver,
+  async navigate(route) {
+    // Keep app-specific routing here: deep links, reset flows, mock-backend state, etc.
+    if (route !== "/login") {
+      throw new Error(`Configure native.navigate(${JSON.stringify(route)}) in nativeproof.config.ts`);
+    }
   },
 });
 
-// specs do:  import { test, expect } from "../nativeproof.config";
-export const { test, expect } = createHarness(app);
+// specs do:  import { expect, native } from "../nativeproof.config";
+export { expect };
 
 export default defineConfig({
-  app,
   testDir: "tests",
+  artifacts: { dir: ".e2e-artifacts" },
   projects: [
     {
       name: "android",
       platform: "android",
       capabilities: {
-        platformName: "Android",
-        "appium:automationName": "UiAutomator2",
-        "appium:app": process.env.ANDROID_APP ?? "app/android/app-debug.apk",
-        "appium:autoGrantPermissions": true,
+        "appium:app": "./app/build/outputs/apk/debug/app-debug.apk",
+        "appium:deviceName": "Android Emulator",
       },
     },
     {
       name: "ios",
       platform: "ios",
       capabilities: {
-        platformName: "iOS",
-        "appium:automationName": "XCUITest",
+        "appium:app": "./build/ios/MyApp.app",
         "appium:deviceName": "iPhone 15",
-        "appium:platformVersion": "17.5",
-        "appium:app": process.env.IOS_APP ?? "app/ios/MyApp.app",
       },
     },
   ],
 });
 ```
 
-> File names are conventions, not requirements. Prefer a raw WebdriverIO config? Keep a
-> `wdio.conf.ts` (or pass `nativeproof --config <path>`) — NativeProof uses it when there's no
-> `nativeproof.config.ts`.
+> File names are conventions, not requirements. The important rule is that native app/device
+> control lives in `nativeproof.config.ts`; NativeProof synthesises the WebdriverIO run from it.
 
 ## Android setup
 
@@ -268,8 +256,9 @@ export default defineConfig({
    adb wait-for-device
    adb devices            # should list the emulator
    ```
-4. **App build.** Point `ANDROID_APP` at your debug/E2E `.apk` (or use `appium:appPackage` +
-   `appium:appActivity` for an already-installed build).
+4. **App build.** Set `projects[].capabilities["appium:app"]` in `nativeproof.config.ts` to your
+   debug/E2E `.apk` (or use `appium:appPackage` + `appium:appActivity` for an already-installed
+   build).
 5. **Mock host.** From an emulator, the host machine is reachable at **`10.0.2.2`** — build your
    E2E app so its backend base URL is `http://10.0.2.2:18113` (the mock server's port). Bind the
    mock with `host: "0.0.0.0"` so the device can reach it (a real device uses your Mac's LAN IP,
@@ -300,10 +289,11 @@ export default defineConfig({
    Match `appium:deviceName` / `appium:platformVersion` to a simulator that exists, or pin a
    specific one with `appium:udid`.
 4. **App build.**
-   - **Simulator:** point `IOS_APP` at a simulator-built `.app` (an `arm64`/`x86_64` simulator
-     binary, not a device build), e.g. `app/ios/MyApp.app`.
-   - **Real device:** point `IOS_APP` at a signed `.ipa`, set `appium:udid`, and use a
-     provisioning profile that covers both the app and WebDriverAgent.
+   - **Simulator:** set `projects[].capabilities["appium:app"]` in `nativeproof.config.ts` to a
+     simulator-built `.app` (an `arm64`/`x86_64` simulator binary, not a device build), e.g.
+     `app/ios/MyApp.app`.
+   - **Real device:** set `projects[].capabilities["appium:app"]` to a signed `.ipa`, set
+     `appium:udid`, and use a provisioning profile that covers both the app and WebDriverAgent.
    - **Already installed:** skip `appium:app` and set `appium:bundleId` instead.
 5. **Mock host.** The simulator shares the host's network, so the backend base URL is
    `http://127.0.0.1:18113` (the mock server's port). A **real device** must reach your Mac by
@@ -311,49 +301,52 @@ export default defineConfig({
 
 ## Writing tests
 
-### Test blocks (`describe` / `test`)
+### Test blocks (`describe` / `it`)
 
-`test.describe(title, role?, body)` opens a scenario for a role; each `test(name, fn)` is one
-behaviour with the app's fixture context injected — fully typed, no setup/teardown in the spec:
+Use the runner's own `describe` / `it` / `beforeEach` / `describe.skip` words. NativeProof should
+make native controls feel first-class inside those tests, not replace the runner:
 
 ```ts
-import { test, expect } from "../nativeproof.config";
+import { expect, native } from "../nativeproof.config";
 
-test.describe("chat room", "member", () => {
-  test("opens the room", async ({ member }) => {
-    await expect(member.messages).toBeVisible();
-  });
+describe("login", () => {
+  it("should be able to log in", async () => {
+    await native.navigate("/login");
+    await native.tap("Log in");
 
-  test("signs out", async ({ member }) => {
-    await member.signOut.tap();
-  });
-});
-
-// role is optional — omit it for the default session
-test.describe("home screen", () => {
-  test("shows the start button", async ({ home }) => {
-    await expect(home.start).toBeVisible();
+    await expect(native.getByText("Welcome back")).toBeVisible();
   });
 });
 ```
 
-The destructured fixtures (`member`, `home`, `mock`, `driver`, …) are exactly the `screens` you
-declared in `defineApp`, plus `mock` and `driver` — typed to your app.
+Keep meaningful setup visible:
 
-> **Where imports come from:** specs import **`test` / `expect`** from your
-> `nativeproof.config.ts` (the typed pair `createHarness` returns). Everything else —
-> `page`, `by`, the gesture helpers (`swipe` / `tapAt`), `captureState`, and the types —
-> imports from the **`nativeproof`** package directly.
+```ts
+beforeEach(async () => {
+  await native.launch({ route: "/login", reset: true });
+});
+```
+
+> **Where imports come from:** specs import **`native` / `expect`** from your
+> `nativeproof.config.ts`. Everything else — `page`, `by`, the gesture helpers (`swipe` / `tapAt`),
+> `captureState`, and the types — imports from the **`nativeproof`** package directly.
+
+For stateful flows where a fixture genuinely exposes intent better than visible setup, the lower-level
+fixture APIs remain available. Keep them out of generated projects and first-read specs.
 
 ### Fixtures, roles & the app seam
+
+This is the legacy/advanced compatibility surface for suites that already need shared scenario
+fixtures. New specs should prefer runner-native `describe` / `it` with visible setup and direct
+`native.*` calls.
 
 A scenario's context is provisioned **once** before its behaviours and torn down **once** after
 (the analogue of a Playwright scoped fixture / `describe.serial`) — so a single sign-in underpins
 many ordered checks instead of re-logging-in per test. The order is: `driver` → `mock` →
 `login(role)` → `join(role)` → build `screens`.
 
-The **role** string from `test.describe(title, role, …)` flows into `login`/`join`, so one app
-definition drives many roles:
+The **role** string from a harness scenario flows into `login`/`join`, so one app definition drives
+many roles:
 
 ```ts
 const app = defineApp({
@@ -560,25 +553,31 @@ The mock backend works like Playwright's `page.route()`. **Intercept** a path to
 reply, and **assert** the traffic the app exchanged — over both REST and WebSocket:
 
 ```ts
-test.describe("send failures", "member", () => {
-  test("surfaces a rejected send", async ({ member, mock }) => {
+import { expect, mock, native } from "../nativeproof.config";
+
+describe("send failures", () => {
+  it("surfaces a rejected send", async () => {
     // Interception — routes apply to the next request/connect on that path:
-    await mock.route("/messages").reject({ code: 503 }); // HTTP status, or WS close code (3000–4999)
-    await member.sendButton.tap();
-    await expect(member.errorBanner).toShow("Couldn't send message");
+    mock.route("/messages").reject({ code: 503 }); // HTTP status, or WS close code (3000–4999)
+    await native.tap("Send");
+    await expect(native.getByText("Couldn't send message")).toBeVisible();
   });
 });
 
-test.describe("loading a room", "member", () => {
-  test("renders history fetched on open", async ({ member, mock }) => {
+describe("loading a room", () => {
+  it("renders history fetched on open", async () => {
     // fulfill answers the request/connect with a canned frame/body:
-    await mock.route("/messages").fulfill({ type: "history", messages: ["Hello", "Hi there"] });
-    await expect(member.messages).toShow("Hi there");
+    mock.route("/messages").fulfill({ type: "history", messages: ["Hello", "Hi there"] });
+    await native.navigate("/rooms/general");
+    await expect(native.getByText("Hi there")).toBeVisible();
   });
 });
 
-test.describe("chat room", "member", () => {
-  test("sends a message and receives the next one", async ({ mock }) => {
+describe("chat room", () => {
+  it("sends a message and receives the next one", async () => {
+    await native.fill("Message", "Hello");
+    await native.tap("Send");
+
     // Assertions — matched by path + type + any payload field:
     await expect(mock).toHaveSent({ path: "/messages", type: "create" });     // a WS message
     await expect(mock).toHaveSent({ path: "/profile", type: "request", method: "GET" }); // a REST call
@@ -608,15 +607,25 @@ server also synthesises types for primitives so you can assert on them:
 `startMockServer()` is a real HTTP + WebSocket server (`url` / `wsUrl`), so there's no per-app
 adapter — your app just points at it. It can also push a server-initiated frame to open sockets
 with `server.send(path, frame)` (useful for simulating an incoming message in a config-level helper).
+When specs need traffic assertions, export the mock handle from `nativeproof.config.ts` next to
+`native` so the test still reads directly.
 
 ### Bring your own backend
 
-`startMockServer` is the batteries-included option, but `defineApp({ mock })` accepts **any**
-`MockBackend`. An app with its own protocol (or an existing mock server) injects a small adapter
-that exposes the three-method contract — then `route()` and the traffic assertions work unchanged:
+`startMockServer` is the batteries-included option, but an app with its own protocol or an existing
+mock server can export a small config-owned adapter that exposes the `MockBackend` contract — then
+`route()` and the traffic assertions work unchanged:
 
 ```ts
-import { defineApp, type MockBackend, type MockFrame, type MockRoute, wdioDriver } from "nativeproof";
+import {
+  createNative,
+  defineConfig,
+  expect,
+  type MockBackend,
+  type MockFrame,
+  type MockRoute,
+  wdioDriver,
+} from "nativeproof";
 
 function adapt(server: MyExistingMock): MockBackend {
   return {
@@ -636,12 +645,19 @@ function adapt(server: MyExistingMock): MockBackend {
   };
 }
 
-const app = defineApp({
+export const mock = adapt(startMyMock());
+
+export const native = createNative({
   driver: () => wdioDriver(),
-  mock: () => adapt(startMyMock()),
-  screens: {
-    /* … */
+  async navigate(route) {
+    // Use route plus mock.url/mock.wsUrl to put the app in the state this test needs.
   },
+});
+
+export { expect };
+
+export default defineConfig({
+  projects: [{ name: "android", platform: "android", capabilities: { "appium:app": "./app.apk" } }],
 });
 ```
 
@@ -687,7 +703,8 @@ await member.sendButton.tap();
 await captureState("after-send"); // writes .e2e-artifacts/after-send.png + after-send.xml (redacted)
 ```
 
-- Artifacts land in `.e2e-artifacts/` (override with the `E2E_ARTIFACT_DIR` env var).
+- Artifacts land in `.e2e-artifacts/` by default; set `artifacts: { dir: "..." }` in
+  `nativeproof.config.ts` to keep that control in config.
 - Source is redacted before it touches disk: built-in patterns strip 4–8 digit values, `passcode`
   fields, and `Bearer` tokens; add your app's own patterns via `secrets` / `redact` in `defineApp`.
 
@@ -696,20 +713,23 @@ await captureState("after-send"); // writes .e2e-artifacts/after-send.png + afte
 One command, in the spirit of `playwright test`:
 
 ```bash
+nativeproof init --android          # scaffold config, package script and sample spec
+nativeproof init --ios              # same, for an iOS project
 nativeproof                          # auto-discovers nativeproof.config.ts, runs the suite
 nativeproof --platform android       # or: --platform ios
+nativeproof --android                # shorthand for --platform android
+nativeproof --ios                    # shorthand for --platform ios
 nativeproof --project tablet         # a named project from nativeproof.config.ts
 nativeproof --spec tests/chat.spec.ts
-nativeproof --config wdio.conf.ts    # escape hatch: a raw WebdriverIO config
 nativeproof --no-appium              # use an Appium server you started yourself
-nativeproof --appium-host 10.0.0.5 --appium-port 4723   # point at a remote/farm Appium
 nativeproof --help
 ```
 
-`nativeproof` discovers `nativeproof.config.ts` (or falls back to a `wdio.conf.ts`), ensures an
+`nativeproof` discovers `nativeproof.config.ts`, ensures an
 Appium server is reachable (starting one with `--relaxed-security` unless `--no-appium`), and runs
-the suite with `PLATFORM` / `SPEC` / `NATIVEPROOF_PROJECT` / `APPIUM_*` set for you. A device or
-emulator must already be running — the mobile analogue of needing a display.
+the suite with `PLATFORM` / `SPEC` / `NATIVEPROOF_PROJECT` set for you. Appium host/port/path live
+in `nativeproof.config.ts` under `appium`. A device or emulator must already be running — the mobile
+analogue of needing a display.
 
 ## CI
 
@@ -749,9 +769,9 @@ jobs:
       - run: npx nativeproof --platform ios
 ```
 
-To offload either platform, point a project's Appium `host`/`port` (in `nativeproof.config.ts`,
-or `nativeproof --appium-host/--appium-port`) at a **device farm** (BrowserStack, Sauce Labs,
-Firebase Test Lab) — NativeProof is just Appium, so no test changes are needed.
+To offload either platform, point `appium.host` / `appium.port` in `nativeproof.config.ts` at a
+**device farm** (BrowserStack, Sauce Labs, Firebase Test Lab) — NativeProof is just Appium, so no
+test changes are needed.
 
 The framework's own unit suite (`npm test`) needs **no device** and runs anywhere.
 
@@ -761,12 +781,21 @@ The framework's own unit suite (`npm test`) needs **no device** and runs anywher
 
 | Field | Type | Default | What |
 |---|---|---|---|
-| `app` | `App` | — | the app under test (from `defineApp`) |
+| `app` | `App` | — | optional fixture surface from `defineApp` |
 | `projects` | `DeviceProject[]` | — | device targets; each `{ name, platform, capabilities }` |
 | `testDir` | `string` | `"tests"` | directory holding the specs |
 | `testMatch` | `string` | `"**/*.spec.ts"` | glob within `testDir` |
 | `appium` | `{ host?, port?, path? }` | `127.0.0.1` : `4723` `/wd/hub` | Appium connection |
+| `artifacts` | `{ dir? }` | `.e2e-artifacts` | screenshot/source output |
 | `mochaTimeout` | `number` | `240000` | per-test timeout (ms) |
+
+**`createNative({ ... })`** — direct spec control
+
+| Field | Type | What |
+|---|---|---|
+| `driver` | `() => Driver` | acquire the device (e.g. `wdioDriver()`) |
+| `navigate?` | `(route, { driver, native }) => Promise` | app-owned route/deep-link/reset hook |
+| `launch?` | `(options, { driver, native }) => Promise` | optional app launch/reset hook for visible setup |
 
 **`defineApp({ ... })`** — the seam
 
@@ -787,8 +816,6 @@ The framework's own unit suite (`npm test`) needs **no device** and runs anywher
 | `--platform <android\|ios>` | `PLATFORM` | — |
 | `--project <name>` | `NATIVEPROOF_PROJECT` | first project |
 | `--spec <glob>` | `SPEC` | all specs in `testDir` |
-| `--config <path>` | — | auto-discovered |
-| `--appium-host/-port/-path` | `APPIUM_HOST/PORT/PATH` | `127.0.0.1` / `4723` / `/wd/hub` |
 | `--no-appium` | — | auto-start Appium |
 
 ## Troubleshooting
@@ -796,7 +823,7 @@ The framework's own unit suite (`npm test`) needs **no device** and runs anywher
 | Symptom | Likely cause / fix |
 |---|---|
 | `Appium is not reachable …` | No device, or `--no-appium` set without a server. Boot the emulator/simulator; drop `--no-appium` to let NativeProof start Appium. |
-| `no nativeproof.config.ts or wdio.conf.ts found` | Run from the project root, or pass `--config <path>`. |
+| `no nativeproof.config.ts found` | Run from the project root, or run `nativeproof init --ios` / `nativeproof init --android`. |
 | "No specs found" | Specs must match `testDir`/`testMatch` (default `tests/**/*.spec.ts`), or pass `--spec`. |
 | App can't reach the mock | Emulator → use `10.0.2.2`; real device → your machine's LAN IP. Bind the mock with `host: "0.0.0.0"`. |
 | `expect(...)` times out | The selector never matched — confirm the attribute mapping (see the [Locators](#locators) table) and the **exact** value (see below); raise `{ timeout }` for slow screens. |
@@ -816,11 +843,16 @@ mysteries, and it beats guessing label strings every time.
 
 ## API reference
 
-- `defineApp(definition)` → `app` — the seam; `app.session(role?)` is a scenario fixture. `definition` also
+- `createNative({ driver, navigate?, launch? })` → `native` — the direct control surface for
+  runner-native specs: `native.navigate`, `native.launch`, `native.tap`, `native.fill`, and
+  `native.getByText/getByTestId/getByLabel/getById/getByRole`.
+- `defineApp(definition)` → `app` — the fixture seam; `app.session(role?)` is a scenario fixture. `definition` also
   takes optional `teardown(ctx)` (before mock stop / session delete) and `onFailure(ctx, { title, error })`.
-- `createHarness(app)` → `{ test, expect }` — typed, app-bound test surface; `test.beforeEach` / `test.afterEach`
-  register per-behaviour hooks with the context injected.
-- `defineConfig({ app, projects, testDir?, testMatch?, appium?, mochaTimeout? })` — the config the CLI runs.
+- `createHarness(app)` → `{ test, expect }` — legacy/advanced fixture harness for existing suites
+  that need a shared scenario context. Do not use it in generated projects; prefer runner-native
+  `describe` / `it` and visible setup.
+- `defineConfig({ projects, testDir?, testMatch?, appium?, artifacts?, mochaTimeout? })` — the config the CLI runs.
+  `app` is optional for fixture-heavy suites.
 - `by.text/desc/id/testId/label` (string **or** `RegExp`), `page(driver).getByText/getByTestId/getByLabel/getById/getByRole`,
   `page(driver).locator(selector)`, `new Locator(driver, selector)` — locators
   (`isVisible`, `textContent`, `bounds`, `shows`, `waitFor`, `tap`, `fill`, `isChecked`, `check`, `uncheck`,
@@ -838,11 +870,12 @@ mysteries, and it beats guessing label strings every time.
 ## How it works
 
 The engine is Appium/WebdriverIO; NativeProof is the DX layer. It's app-agnostic by contract:
-a consuming app injects all of its specifics through `defineApp`, and nothing in the package
-imports app code (the dependency is one-way, app → framework). The whole DX self-verifies against
+a consuming app keeps all specifics in `nativeproof.config.ts` through `createNative` and, where useful,
+`defineApp`; nothing in the package imports app code (the dependency is one-way, app → framework).
+The whole DX self-verifies against
 an in-memory fake device — see `test/demo.test.ts` and run `npm test` (no emulator needed).
 
-Package layout: `app.ts` (`defineApp`), `harness.ts` (`createHarness`), `config.ts`
+Package layout: `native.ts` (`createNative`), `app.ts` (`defineApp`), `harness.ts` (legacy fixture harness), `config.ts`
 (`defineConfig`) + `runner-config.ts` (the wdio bridge), `fixtures.ts`, `locator.ts` +
 `page.ts`, `expect.ts`, `mock.ts` + `mock-server.ts`, `driver.ts`, `runner.ts`, `cli.ts`
 (the `nativeproof` bin), plus source/wait/gesture/adb/ios/log/evidence primitives.

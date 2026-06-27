@@ -3,15 +3,14 @@ import { expect } from "./expect.js";
 import { type BehaviourRegistrar, describeScenario } from "./fixtures.js";
 
 /**
- * `createHarness(app)` — the Playwright `@playwright/test` pattern.
+ * `createHarness(app)` — legacy/advanced scenario fixture harness.
  *
- * Returns a `test` / `expect` pair bound to one app, so specs import them from a single
- * project file and write module-level `test(...)` / `test.describe(...)` with the app's
- * fixture context flowing in fully typed — no `(test) =>` registrar to thread, no
- * per-spec wiring:
+ * New specs should prefer runner-native `describe` / `it`, direct `native.*` interactions, and
+ * visible setup in the spec. This helper remains for fixture-heavy suites where a shared scenario
+ * context is genuinely clearer than repeated visible setup:
  *
  * ```ts
- * // harness.ts
+ * // compatibility-harness.ts
  * export const { test, expect } = createHarness(app);
  * // chat.spec.ts
  * import { test, expect } from "./harness";

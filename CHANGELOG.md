@@ -4,6 +4,23 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.4
+
+Per-project spec sets and WebdriverIO tuning pass-through, for suites that run a different set of
+specs per platform and need longer timeouts on slow devices.
+
+**Added**
+
+- `DeviceProject.specs` — per-project spec globs that override the top-level `testDir`/`testMatch`,
+  for suites where platforms run different specs (e.g. a shared set plus a platform-specific set:
+  `["e2e/shared/**\/*.spec.ts", "e2e/android/**\/*.spec.ts"]`). A `--spec` CLI override still wins.
+  Precedence: `--spec` (comma-separated) > `project.specs` > `testDir`/`testMatch`.
+- WebdriverIO tuning pass-throughs on `RunnerConfig`: `connectionRetryTimeout`,
+  `connectionRetryCount`, `waitforTimeout`, `bail`, and `logLevel`. Each is forwarded to the
+  synthesised WebdriverIO config only when set, so WebdriverIO's own defaults apply otherwise —
+  slow software-GPU emulators in particular often need longer connection/wait timeouts. `bail: 0`
+  is meaningful (never bail) and is still forwarded.
+
 ## 0.10.3
 
 Out-of-the-box setup: scaffolding, minimal config, a route-optional mock contract, and typed

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type { App } from "./app.js";
-import { captureState, failureEvidenceName } from "./evidence.js";
+import { captureState, failureEvidenceName, setArtifactDir } from "./evidence.js";
 
 /**
  * The Playwright-style config: one `nativeproof.config.ts` declares the app, the device
@@ -10,15 +10,12 @@ import { captureState, failureEvidenceName } from "./evidence.js";
  *
  * ```ts
  * // nativeproof.config.ts
- * const app = defineApp({ ... });
- * export const { test, expect } = createHarness(app);   // specs import these
+ * export const native = createNative({ driver: () => wdioDriver(), navigate: async (route) => { ... } });
+ * export { expect };
  * export default defineConfig({
- *   app,
  *   testDir: "tests",
- *   projects: [
- *     { name: "android", platform: "android", capabilities: { ... } },
- *     { name: "ios", platform: "ios", capabilities: { ... } },
- *   ],
+ *   artifacts: { dir: ".e2e-artifacts" },
+ *   projects: [{ name: "android", platform: "android", capabilities: { ... } }],
  * });
  * ```
  */
@@ -70,6 +67,10 @@ export interface RunnerConfig {
   testMatch?: string;
   projects: DeviceProject[];
   appium?: AppiumOptions;
+  /** Failure screenshots and source dumps (default: `.e2e-artifacts`). */
+  artifacts?: {
+    dir?: string;
+  };
   /** Per-test timeout in ms (default 240000). */
   mochaTimeout?: number;
   /**
@@ -90,8 +91,11 @@ export interface RunnerConfig {
 }
 
 export interface NativeProofConfig<Ctx = unknown> extends RunnerConfig {
-  /** The app under test (from `defineApp`). */
-  app: App<Ctx>;
+  /**
+   * Optional app fixture surface (from `defineApp`). New runner-native specs can use `createNative`
+   * from `nativeproof.config.ts` instead; fixture-heavy suites can still expose an app here.
+   */
+  app?: App<Ctx>;
 }
 
 /** Identity helper for typed config + editor autocomplete (mirrors Playwright's `defineConfig`). */
@@ -104,9 +108,6 @@ export interface RunnerEnv {
   platform?: string;
   project?: string;
   spec?: string;
-  appiumHost?: string;
-  appiumPort?: number;
-  appiumPath?: string;
 }
 
 /** Pick the project by explicit name, else by platform, else the first one. */
@@ -149,11 +150,12 @@ export function buildWdioConfig(
   cwd: string = process.cwd(),
 ): Record<string, unknown> {
   const project = resolveProject(config, env);
+  setArtifactDir(config.artifacts?.dir);
   const wdio: Record<string, unknown> = {
     runner: "local",
-    hostname: env.appiumHost ?? config.appium?.host ?? "127.0.0.1",
-    port: env.appiumPort ?? config.appium?.port ?? 4723,
-    path: env.appiumPath ?? config.appium?.path ?? "/wd/hub",
+    hostname: config.appium?.host ?? "127.0.0.1",
+    port: config.appium?.port ?? 4723,
+    path: config.appium?.path ?? "/wd/hub",
     specs: resolveSpecs(config, project, env, cwd),
     maxInstances: 1,
     capabilities: [{ ...defaultCapabilities(project.platform), ...project.capabilities }],

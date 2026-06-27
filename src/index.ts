@@ -1,11 +1,10 @@
 /**
- * NativeProof — a Native Mobile E2E test framework inspired by Playwright.
+ * NativeProof — Playwright-feeling native mobile E2E for Appium/WebdriverIO.
  *
- * Playwright's developer experience (fixtures, locators, expect, route-style mocking,
- * evidence) layered on Appium/WebdriverIO, which can drive the native iOS/Android
- * surfaces Playwright cannot. App-agnostic: consumers wire all app-specifics (selectors,
- * secret patterns, login/join flows, mock backend) in by injection; nothing in this
- * package imports app-specific code.
+ * Playwright's native-testing feel (runner-native describe/it, direct native controls, locators,
+ * expect, route-style mocking, evidence) layered on Appium/WebdriverIO, which can drive the native
+ * iOS/Android surfaces Playwright cannot. App-agnostic: consumers keep app-specifics in
+ * nativeproof.config.ts; nothing in this package imports app-specific code.
  */
 export * from "./adb.js";
 export * from "./app.js";
@@ -21,7 +20,7 @@ export * from "./locator.js";
 export * from "./log.js";
 export * from "./mock.js";
 export * from "./mock-server.js";
+export * from "./native.js";
 export * from "./page.js";
 export * from "./runner.js";
 export * from "./source.js";
-export * from "./test.js";

@@ -3,13 +3,13 @@ import type { FailureInfo, ScenarioFixture } from "./fixtures.js";
 import type { SessionMock } from "./mock.js";
 
 /**
- * `defineApp` — the single seam script.
+ * `defineApp` — the advanced fixture seam.
  *
- * Everything app-specific the framework needs lives in one declarative definition,
- * supplied by injection: how to get the device, how to start the mock backend, the
- * secret/redaction patterns, the login/join flows, and the screen objects. The
- * framework core imports nothing from the app; the app describes itself here once.
- * `app.session(role)` turns that into a {@link ScenarioFixture} the `test` facade runs.
+ * New specs should usually keep app/device control in `nativeproof.config.ts` via `createNative`.
+ * `defineApp` remains for fixture-heavy suites that need shared session setup: how to get the
+ * device, how to start the mock backend, secret/redaction patterns, login/join flows, and screen
+ * objects. The framework core imports nothing from the app; the app describes itself here once.
+ * `app.session(role)` turns that into a {@link ScenarioFixture} for the legacy/advanced harness.
  */
 
 /**
@@ -73,9 +73,9 @@ type Prettify<T> = { [K in keyof T]: T[K] } & {};
 /**
  * The fixture context a session injects: the device handles plus each app screen's value. Flattened
  * with {@link Prettify} so it is a single object type rather than a lazy intersection — that lets
- * `export const { test } = createHarness(app)` carry fully-typed screens into specs in other files.
- * (Portability still needs the mock type `M` to be nameable — a single exported interface, not an
- * anonymous intersection — so a consumer's mock should be one named type.)
+ * legacy harness exports carry fully-typed screens into specs in other files. (Portability still
+ * needs the mock type `M` to be nameable — a single exported interface, not an anonymous
+ * intersection — so a consumer's mock should be one named type.)
  */
 export type SessionContext<S extends ScreenFactories<M>, M extends SessionMock = SessionMock> = Prettify<
   DeviceContext<M> & {
@@ -86,10 +86,10 @@ export type SessionContext<S extends ScreenFactories<M>, M extends SessionMock =
 /**
  * Parameterised by the *resolved* session context `Ctx` (`{ driver; mock; …screens }`), not by
  * the screens type `S`. `S` is only ever used inside the mapped `SessionContext<S, M>`, a
- * non-inferable position — so a consumer's `export const { test } = createHarness(app)` would
- * lose the concrete screen return types across the import boundary (TS falls back to the
- * `ScreenFactories<M>` constraint, whose screens are `unknown`). `defineApp` resolves the context
- * here, where `S` is still concrete, so `Ctx` is a plain object type that ports cleanly into specs.
+ * non-inferable position — so a legacy harness export would lose the concrete screen return types
+ * across the import boundary (TS falls back to the `ScreenFactories<M>` constraint, whose screens
+ * are `unknown`). `defineApp` resolves the context here, where `S` is still concrete, so `Ctx` is a
+ * plain object type that ports cleanly into specs.
  */
 export interface App<Ctx> {
   /** A scenario fixture that provisions a logged-in, joined session for `role`. */

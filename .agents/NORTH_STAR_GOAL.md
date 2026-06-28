@@ -10,11 +10,23 @@ npx nativeproof-init --ios
 npx nativeproof-init --android
 ```
 
+For an existing project, the onboarding promise is:
+
+```sh
+npx nativeproof-onboard /path/to/ios-app-repo
+npx nativeproof-onboard /path/to/MyApp.app
+# or
+npx nativeproof-onboard /path/to/app-debug.apk
+```
+
 The package command remains equivalent:
 
 ```sh
 npx nativeproof init --ios
 npx nativeproof init --android
+npx nativeproof onboard /path/to/ios-app-repo
+npx nativeproof onboard /path/to/MyApp.app
+npx nativeproof onboard /path/to/app-debug.apk
 ```
 
 After that, the user should have a minimal runnable native E2E project:
@@ -23,7 +35,17 @@ After that, the user should have a minimal runnable native E2E project:
 - one readable example spec
 - npm scripts
 - sensible Appium/WebdriverIO/device/app/artifact defaults
+- automatic Appium platform-driver provisioning when NativeProof starts local Appium
+- booted iOS simulator selection when no explicit simulator/device is pinned
 - no runner archaeology
+
+`nativeproof-onboard <path>` should point `nativeproof.config.ts` at a runnable local app artifact.
+For iOS repos, NativeProof should own the standard simulator onboarding path: detect a top-level
+`.xcodeproj` / `.xcworkspace`, choose a shared app scheme, run a Debug `iphonesimulator` build,
+stage the produced `.app`, and put that staged path in config. If the app needs custom setup,
+NativeProof should fail with concrete build evidence instead of pretending the project is ready.
+Android repo onboarding may still require a built `.apk` until NativeProof owns the equivalent
+Gradle path.
 
 Tests should look like tests, not framework plumbing:
 
@@ -41,7 +63,8 @@ it("should be able to log in", async () => {
 1. All control lives in `nativeproof.config.ts`.
 
    Device selection, app paths, platform, capabilities, backend URL, artifacts, retries, timeouts,
-   spec globs, and WebdriverIO escape hatches belong in the config.
+   spec globs, Appium driver provisioning, booted-simulator selection, and WebdriverIO escape
+   hatches belong in the config.
 
 2. Specs keep meaningful setup visible.
 

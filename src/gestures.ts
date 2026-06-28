@@ -10,6 +10,10 @@ import { browser } from "@wdio/globals";
  */
 
 export async function tapAt(x: number, y: number): Promise<void> {
+  if (!browser.isAndroid) {
+    await browser.execute("mobile: tap", { x, y });
+    return;
+  }
   await browser.performActions([
     {
       type: "pointer",

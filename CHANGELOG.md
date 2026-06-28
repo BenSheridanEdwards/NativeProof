@@ -4,6 +4,51 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.14
+
+iOS project onboarding that builds and stages a simulator app.
+
+**Added**
+
+- `nativeproof onboard <path-to-ios-project>` can now detect a top-level `.xcodeproj` or
+  `.xcworkspace`, choose an app-like shared scheme, run a Debug `iphonesimulator` build, and stage
+  the newest produced `.app` at `./build/ios/<AppName>.app`.
+- iOS onboarding uses NativeProof-owned build cache paths under `.nativeproof/ios` so fresh E2E
+  projects do not need hand-written Xcode output paths before they can write a spec.
+
+**Changed**
+
+- If Xcode exits non-zero after producing a simulator `.app`, onboarding now warns and continues
+  with the staged app. This matches real projects where a late script phase can fail after the
+  runnable app artifact already exists.
+- NativeProof runs the onboarding `xcodebuild` step with `-quiet` so first-run package/build logs do
+  not swamp the setup experience.
+
+## 0.10.13
+
+NativeProof-owned onboarding for built app artifacts.
+
+**Added**
+
+- `nativeproof-onboard <path>` is now a package bin alias for onboarding a built Android `.apk` or
+  iOS simulator `.app`.
+- `nativeproof onboard <path>` provides the same flow through the main CLI. It creates a minimal
+  NativeProof project when no config exists, or updates the matching project in
+  `nativeproof.config.ts` when one already exists.
+- Onboarding can discover built `.apk` / `.app` artifacts inside native app repo directories and
+  fails clearly when a repo has no built artifact instead of guessing app-owned build commands.
+- Generated configs opt into `appium.autoInstallDrivers` and
+  `appium.autoSelectBootedSimulator`, so the first local run can install the missing Appium
+  platform driver and use the currently booted iOS simulator without pinning a fake device model.
+
+**Fixed**
+
+- NativeProof now depends on `@wdio/spec-reporter`, matching the generated WebdriverIO config so
+  fresh installs do not fail with a missing `spec` reporter.
+- iOS `Locator.tap()` now clicks native accessible controls directly before falling back to
+  coordinate taps. Real XCUITest sessions were accepting coordinate taps without activating a
+  standard UIKit button, which broke the generated sign-in spec against a real app.
+
 ## 0.10.12
 
 iOS focused text input through Appium element send keys.

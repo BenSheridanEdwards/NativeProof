@@ -54,6 +54,23 @@ test("locators match, read and tap labels the source XML-escaped", async () => {
   assert.deepEqual(driver.taps, [{ x: 60, y: 30 }]);
 });
 
+test("Locator.tap prefers the driver's native node click before coordinate fallback", async () => {
+  const driver = new FakeDriver('<node label="Log in" bounds="[0,0][120,60]" />');
+  driver.platform = "ios";
+  const clicked: string[] = [];
+  (driver as unknown as Driver & { clickNode: NonNullable<Driver["clickNode"]> }).clickNode = async (
+    node,
+  ) => {
+    clicked.push(node);
+    return true;
+  };
+
+  await new Locator(driver, by.text("Log in")).tap();
+
+  assert.equal(clicked.length, 1);
+  assert.deepEqual(driver.taps, []);
+});
+
 test("by.text matches a label exposed as content-desc (Compose), not just text=", async () => {
   const driver = new FakeDriver('<node text="" content-desc="Add to cart" bounds="[10,10][110,60]" />');
   const loc = new Locator(driver, by.text("Add to cart"));

@@ -154,6 +154,29 @@ test("by.role matches elements by class (Android), with checked state and count"
   assert.equal(await new Locator(driver, by.role("button")).isVisible(), false); // none present
 });
 
+test("by.role with name matches the role and accessible name together", async () => {
+  let checked = false;
+  const driver: Driver = {
+    platform: "android",
+    async source() {
+      return (
+        '<node class="android.widget.TextView" content-desc="Accept Agreement" bounds="[100,0][400,80]" />' +
+        `<node class="android.widget.CheckBox" content-desc="Accept Agreement" checked="${checked}" bounds="[0,0][80,80]" />`
+      );
+    },
+    async pause() {},
+    async tapAt() {
+      checked = !checked;
+    },
+  };
+
+  const AcceptAgreementCheckbox = new Locator(driver, by.role("checkbox", { name: /Accept Agreement/ }));
+  assert.equal(await new Locator(driver, by.role("button", { name: /Accept Agreement/ })).isVisible(), false);
+
+  await AcceptAgreementCheckbox.check();
+  await expect(AcceptAgreementCheckbox).toBeChecked();
+});
+
 test("toBeEnabled / toBeDisabled read the enabled attribute", async () => {
   const driver = new FakeDriver(
     '<node content-desc="Submit" enabled="false" bounds="[0,0][100,40]" />' +

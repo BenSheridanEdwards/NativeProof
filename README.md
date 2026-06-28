@@ -431,7 +431,7 @@ p.getByText(/Sign ?in/i);                // ...or a RegExp, matched against the 
 p.getByTestId("login-button");           // your test id
 p.getByLabel("Sign out");                // accessibility label
 p.getById("message-list");               // resource id
-p.getByRole("button", { name: "Send" }); // accessible name
+p.getByRole("button", { name: "Send" }); // role + accessible name
 p.getByRole("checkbox");                 // by role/class — checkbox/switch/button/textfield/image
 p.locator(by.desc("Open menu"));         // escape hatch: a raw selector
 ```
@@ -452,7 +452,8 @@ How each maps to the page source:
 | Locator | Android attribute | iOS attribute |
 |---|---|---|
 | `getByText` / `by.text` | `text` or `content-desc` | `label` or `value` |
-| `getByLabel` / `by.label` / `getByRole({name})` | `content-desc` | `label` |
+| `getByLabel` / `by.label` | `content-desc` | `label` |
+| `getByRole(role, { name })` | widget `class` + `content-desc` or `text` | XCUITest `type` + `label` or `value` |
 | `getByRole(role)` / `by.role` (no name) | widget `class` | XCUITest `type` |
 | `getByTestId` / `by.testId` | `resource-id` | `name` |
 | `getById` / `by.id` | `resource-id` | `name` |
@@ -479,6 +480,10 @@ await p.getByText("Item").nth(1).tap();  // the 2nd match (.first() / .last(); n
 await member.terms.check();              // checkbox/switch → tap to checked (no-op if already there); also uncheck()
 await member.terms.isChecked();          // boolean
 await p.getByRole("checkbox").near(p.getByText("Wi-Fi")).check(); // the checkbox in the Wi-Fi row
+
+const AcceptAgreementCheckbox = p.getByRole("checkbox", { name: /Accept Agreement/ });
+await AcceptAgreementCheckbox.check();
+await expect(AcceptAgreementCheckbox).toBeChecked();
 ```
 
 **Relative locators.** `getByRole(role)` matches by element class/type (`checkbox`, `switch`, `button`,

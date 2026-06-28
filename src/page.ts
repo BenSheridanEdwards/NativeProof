@@ -15,8 +15,8 @@ export interface Page {
   getByLabel(label: string | RegExp, options?: WaitOptions): Locator;
   getById(id: string | RegExp, options?: WaitOptions): Locator;
   /**
-   * Match by role. With `{ name }`, matches the element's accessibility label (a string or RegExp) —
-   * the dependable signal on native. Without a name, matches by element class/type
+   * Match by role. With `{ name }`, matches the element role and accessible name together.
+   * Without a name, matches by element class/type
    * (`checkbox`, `switch`, `button`, `textfield`, `image`) — e.g. `getByRole("checkbox")`.
    */
   getByRole(role: string, options?: { name?: string | RegExp } & WaitOptions): Locator;
@@ -36,9 +36,7 @@ export function page(driver: Driver): Page {
           `getByRole(${JSON.stringify(role)}, { name: "" }) — name must be non-empty; omit it to match by role`,
         );
       }
-      return name !== undefined
-        ? locator(driver, by.label(name), wait) // name is the dependable signal on native
-        : locator(driver, by.role(role), wait); // no name → match by element class/type
+      return locator(driver, by.role(role, name === undefined ? undefined : { name }), wait);
     },
   };
 }

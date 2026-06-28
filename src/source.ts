@@ -158,12 +158,12 @@ function nodeAccessibleNameMatches(
  * `class`, iOS an XCUITest `type`. Matched as a substring, so framework variants
  * (`SwitchCompat`, `MaterialButton`, Compose's `android.widget.CheckBox`) all resolve.
  */
-const ROLE_PATTERNS: Record<string, { android: string; ios: string }> = {
-  checkbox: { android: "CheckBox", ios: "XCUIElementTypeSwitch" },
-  switch: { android: "Switch", ios: "XCUIElementTypeSwitch" },
-  button: { android: "Button", ios: "XCUIElementTypeButton" },
-  textfield: { android: "EditText", ios: "XCUIElementTypeTextField" },
-  image: { android: "ImageView", ios: "XCUIElementTypeImage" },
+const ROLE_PATTERNS: Record<string, { android: readonly string[]; ios: readonly string[] }> = {
+  checkbox: { android: ["CheckBox"], ios: ["XCUIElementTypeSwitch"] },
+  switch: { android: ["Switch"], ios: ["XCUIElementTypeSwitch"] },
+  button: { android: ["Button"], ios: ["XCUIElementTypeButton"] },
+  textfield: { android: ["EditText"], ios: ["XCUIElementTypeTextField"] },
+  image: { android: ["ImageView"], ios: ["XCUIElementTypeImage"] },
 };
 
 /** Roles `by.role` / `getByRole(role)` can match without a name. */
@@ -179,17 +179,30 @@ export function nodesForRole(
   platform: "android" | "ios",
   name?: string | RegExp,
 ): string[] {
-  const patterns = ROLE_PATTERNS[role.toLowerCase()];
+  const normalizedRole = role.toLowerCase();
+  const patterns = ROLE_PATTERNS[normalizedRole];
   if (!patterns) {
     throw new Error(
       `Unknown role "${role}". Known roles: ${KNOWN_ROLES.join(", ")}. Use getByLabel / getByText for arbitrary elements.`,
     );
   }
   const attribute = platform === "ios" ? "type" : "class";
-  const pattern = escapeRegExp(platform === "ios" ? patterns.ios : patterns.android);
-  const nodes = [...source.matchAll(new RegExp(`<[^>]*${attribute}="[^"]*${pattern}[^"]*"[^>]*>`, "g"))].map(
-    (m) => m[0],
-  );
+  const rolePatterns = platform === "ios" ? patterns.ios : patterns.android;
+  const nodes = [...source.matchAll(/<[^>]*>/g)]
+    .map((m) => m[0])
+    .filter((node) => {
+      const roleAttributeMatches = rolePatterns.some((pattern) =>
+        attributeValueMatches(node, attribute, new RegExp(escapeRegExp(pattern))),
+      );
+      if (roleAttributeMatches) return true;
+
+      return (
+        platform === "ios" &&
+        normalizedRole === "checkbox" &&
+        attributeValueMatches(node, "type", /XCUIElementTypeButton/) &&
+        nodeAccessibleNameMatches(node, platform, /checkbox/i)
+      );
+    });
   return name === undefined ? nodes : nodes.filter((node) => nodeAccessibleNameMatches(node, platform, name));
 }
 

@@ -177,6 +177,36 @@ test("by.role with name matches the role and accessible name together", async ()
   await expect(AcceptAgreementCheckbox).toBeChecked();
 });
 
+test("iOS checkbox-like buttons can be checked through semantic checkbox locators", async () => {
+  let checked = false;
+  const driver: Driver = {
+    platform: "ios",
+    async source() {
+      const label = checked ? "Checkbox is checked" : "Checkbox is unchecked";
+      const value = checked ? "1" : "0";
+      const traits = checked ? "Selected, Button" : "Button";
+      return (
+        `<XCUIElementTypeButton type="XCUIElementTypeButton" name="acc_agreement_checkbox" label="${label}" value="${value}" traits="${traits}" x="44" y="720" width="22" height="23" />` +
+        '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" label="I have read and agreed to the Terms of Service" x="78" y="720" width="260" height="40" />'
+      );
+    },
+    async pause() {},
+    async tapAt() {
+      checked = !checked;
+    },
+  };
+
+  const AcceptAgreementCheckbox = new Locator(driver, by.role("checkbox")).near(
+    new Locator(driver, by.text(/I have read and agreed/)),
+  );
+
+  assert.equal(await new Locator(driver, by.role("checkbox")).count(), 1);
+  await expect(AcceptAgreementCheckbox).not.toBeChecked();
+
+  await AcceptAgreementCheckbox.check();
+  await expect(AcceptAgreementCheckbox).toBeChecked();
+});
+
 test("toBeEnabled / toBeDisabled read the enabled attribute", async () => {
   const driver = new FakeDriver(
     '<node content-desc="Submit" enabled="false" bounds="[0,0][100,40]" />' +

@@ -245,6 +245,7 @@ function packageTemplate(): string {
   return `${JSON.stringify(
     {
       private: true,
+      type: "module",
       scripts: {
         "test:e2e": "nativeproof",
       },
@@ -272,6 +273,11 @@ function ensurePackageJson(raw: string): { contents: string; changed: boolean } 
   }
 
   let changed = false;
+  if (typeof pkg.type !== "string") {
+    pkg.type = "module";
+    changed = true;
+  }
+
   const scripts = isRecord(pkg.scripts) ? pkg.scripts : {};
   if (!isRecord(pkg.scripts)) {
     pkg.scripts = scripts;

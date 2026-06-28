@@ -273,6 +273,7 @@ test("scaffoldFiles are a platform-specific config, package script and readable 
   assert.match(spec.contents, /it\("should be able to log in"/);
   assert.match(spec.contents, /native\.tap\("Log in"\)/);
   assert.doesNotMatch(spec.contents, /test\.describe\(/);
+  assert.match(pkg.contents, /"type": "module"/);
   assert.match(pkg.contents, /"test:e2e": "nativeproof"/);
 });
 
@@ -315,9 +316,11 @@ test("scaffold updates an existing package.json without overwriting its scripts"
   assert.deepEqual(skipped, []);
   assert.deepEqual(updated, ["package.json"]);
   const pkg = JSON.parse(written.get("/proj/package.json") ?? "{}") as {
+    type?: string;
     scripts?: Record<string, string>;
     devDependencies?: Record<string, string>;
   };
+  assert.equal(pkg.type, "module");
   assert.equal(pkg.scripts?.test, "vitest");
   assert.equal(pkg.scripts?.["test:e2e"], "nativeproof");
   assert.equal(pkg.devDependencies?.nativeproof, "latest");
@@ -497,11 +500,13 @@ test("onboard updates an existing nativeproof config and package.json", () => {
     assert.deepEqual(result.updated, ["nativeproof.config.ts", "package.json"]);
     const updatedConfig = readFileSync(path.join(dir, "nativeproof.config.ts"), "utf8");
     const updatedPackage = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8")) as {
+      type?: string;
       scripts?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
     assert.match(updatedConfig, /"appium:app": "\.\/build\/ios\/Wordly\.app"/);
     assert.doesNotMatch(updatedConfig, /"\.\/build\/ios\/MyApp\.app"/);
+    assert.equal(updatedPackage.type, "module");
     assert.equal(updatedPackage.scripts?.test, "node test.js");
     assert.equal(updatedPackage.scripts?.["test:e2e"], "nativeproof");
     assert.equal(updatedPackage.devDependencies?.nativeproof, "latest");

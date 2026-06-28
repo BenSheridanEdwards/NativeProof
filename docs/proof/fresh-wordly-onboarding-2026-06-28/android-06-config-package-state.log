@@ -1,0 +1,4 @@
+package.json:8:    "test:e2e": "nativeproof"
+package.json:16:  "type": "module",
+nativeproof.config.ts:28:      platform: "android",
+nativeproof.config.ts:30:        "appium:app": "/Users/agents/Agents/Jeeves/workspace/ralph_wordly_mobile_e2e_continue_2026-05-29/evidence/installed_base_20260530T013219Z.apk",

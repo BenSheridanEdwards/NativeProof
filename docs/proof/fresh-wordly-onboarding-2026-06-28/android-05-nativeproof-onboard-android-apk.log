@@ -1,0 +1,5 @@
+nativeproof: updated nativeproof.config.ts
+nativeproof: package.json already exists — skipped
+nativeproof: onboarded android app at /Users/agents/Agents/Jeeves/workspace/ralph_wordly_mobile_e2e_continue_2026-05-29/evidence/installed_base_20260530T013219Z.apk
+
+Next: run `npm run test:e2e` or `nativeproof --android`.

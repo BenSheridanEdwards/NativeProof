@@ -204,6 +204,19 @@ test("by.role with name matches Android Compose controls labelled by child nodes
   assert.equal((await EmailAddressField.bounds())?.centerY, 160);
 });
 
+test("by.role with name tolerates tiny iOS label geometry drift", async () => {
+  const driver = new FakeDriver(
+    '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" label="name@work-email.com" x="56" y="708" width="179" height="22" />' +
+      '<XCUIElementTypeTextField type="XCUIElementTypeTextField" label="" x="56" y="706" width="309" height="23" />',
+  );
+  driver.platform = "ios";
+
+  const SsoProviderSearchField = new Locator(driver, by.role("textfield", { name: /name@work-email\.com/i }));
+
+  assert.equal(await SsoProviderSearchField.isVisible(), true);
+  assert.equal((await SsoProviderSearchField.bounds())?.centerY, 718);
+});
+
 test("by.role with name does not borrow unrelated visible text outside the control bounds", async () => {
   const driver = new FakeDriver(
     '<node class="android.widget.TextView" text="Search" bounds="[400,0][520,80]" />' +

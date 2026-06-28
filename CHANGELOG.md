@@ -4,6 +4,17 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.11
+
+Tolerant named role matching for native text fields.
+
+**Fixed**
+
+- `getByRole("textfield", { name })` now tolerates tiny native geometry rounding drift when a
+  visible iOS placeholder/label is exposed as a sibling just inside the field. This keeps readable
+  specs on direct named role locators instead of falling back to `.first()` for common XCUITest
+  text-field source shapes.
+
 ## 0.10.10
 
 Named role locators for Compose-labelled controls.

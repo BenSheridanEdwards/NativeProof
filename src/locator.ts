@@ -8,6 +8,7 @@ import {
   nodesForRole,
   parseNodeBounds,
   smallestClickableAncestorBounds,
+  smallestClickableAncestorNode,
 } from "./source.js";
 
 /**
@@ -298,10 +299,21 @@ export class Locator {
     await this.driver.tapAt(target.centerX, target.centerY);
   }
 
+  /** Focus the field and clear its existing text. */
+  async clear(options: WaitOptions = {}): Promise<void> {
+    if (!this.driver.clearText) {
+      throw new Error(
+        `${describeSelector(this.selector)}.clear() needs a driver that supports focused text clearing (Driver.clearText)`,
+      );
+    }
+    await this.tap(options);
+    await this.driver.clearText();
+  }
+
   /**
-   * Focus the field (tap it) and type `text`. Requires a driver with text input
-   * ({@link Driver.typeText}); throws a clear error otherwise. Types into the focused
-   * field — it does not clear existing content first.
+   * Replace the field's current value with `text`, Playwright-style. Requires a driver with
+   * focused text clearing and keyboard input ({@link Driver.clearText}, {@link Driver.typeText});
+   * throws a clear error otherwise.
    */
   async fill(text: string, options: WaitOptions = {}): Promise<void> {
     if (!this.driver.typeText) {
@@ -309,7 +321,7 @@ export class Locator {
         `${describeSelector(this.selector)}.fill(...) needs a driver that supports text input (Driver.typeText)`,
       );
     }
-    await this.tap(options);
+    await this.clear(options);
     await this.driver.typeText(text);
   }
 
@@ -321,14 +333,22 @@ export class Locator {
 
   /** True if the matched node is present and not `enabled="false"` (matches Playwright's default-enabled). */
   async isEnabled(): Promise<boolean> {
-    const node = this.pick(await this.matchedNodes());
+    const node = await this.controlStateNode();
     return node !== null && !/\benabled="false"/.test(node);
   }
 
   /** True if the matched node is present and explicitly `enabled="false"`. */
   async isDisabled(): Promise<boolean> {
-    const node = this.pick(await this.matchedNodes());
+    const node = await this.controlStateNode();
     return node !== null && /\benabled="false"/.test(node);
+  }
+
+  private async controlStateNode(): Promise<string | null> {
+    const node = this.pick(await this.matchedNodes());
+    if (!node || /\bclickable="true"/.test(node)) return node;
+    const bounds = parseNodeBounds(node);
+    if (!bounds) return node;
+    return smallestClickableAncestorNode(await this.driver.source(), bounds) ?? node;
   }
 
   /** Tap to bring a checkbox/switch to checked; a no-op if it already is. */

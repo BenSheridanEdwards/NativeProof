@@ -62,7 +62,7 @@ npm run test:e2e
 - **Locators** — `by.text/testId/label/desc/id` and `page(driver).getByText/getByTestId/
   getByLabel/getById/getByRole`, each mapped to the right native attribute per platform (so you
   never guess `content-desc` vs `accessibilityIdentifier`), with built-in auto-waiting and
-  `tap()` / `fill()` / `check()` for interaction. Each takes a string (exact) or a **`RegExp`**
+  `tap()` / `clear()` / `fill()` / `check()` for interaction. Each takes a string (exact) or a **`RegExp`**
   (`getByText(/Save( draft)?/)`); `.nth()` / `.first()` / `.last()` / `.count()` handle multiple matches.
 - **Auto-waiting `expect`** — `expect(locator).toBeVisible()/toShow()/toHaveText()/toBeChecked()/
   toHaveCount()` and `.not`, each polling until the condition holds (default 10s); plus synchronous
@@ -419,9 +419,10 @@ export function speechStallScenario(): ScenarioFixture<SpeechCtx> {
 }
 ```
 
-> NativeProof locators **read, tap and fill** (text entry). For input `fill()` doesn't cover
-> (clearing a field first, custom keyboards, key chords), drive WebdriverIO's `$(...).setValue(...)`
-> directly inside `login` (the `@wdio/globals` `browser`/`$` are available in the live session).
+> NativeProof locators **read, tap, clear and fill** text entry. `fill()` is Playwright-style:
+> it focuses the field, clears existing text, then types the replacement value. For custom
+> keyboards or key chords, keep the low-level WebdriverIO call inside `nativeproof.config.ts`
+> setup/control code instead of hiding it in a spec helper.
 
 ### Locators
 
@@ -477,7 +478,8 @@ await member.spinner.waitFor();         // wait until visible (throws on timeout
 await member.sendButton.tap();          // wait for it, then tap its centre
 await member.sendButton.tap({ timeout: 2_000, interval: 100 }); // tune the wait
 await member.row.tap({ clickableAncestor: true }); // tap the clickable parent of a non-clickable label
-await member.composer.fill("Hello team"); // focus the field (tap), then type
+await member.composer.clear();            // focus the field (tap), then clear existing text
+await member.composer.fill("Hello team"); // focus, clear existing text, then type
 
 await p.getByText("Item").count();       // how many elements match
 await p.getByText("Item").nth(1).tap();  // the 2nd match (.first() / .last(); negative counts from the end)
@@ -509,10 +511,10 @@ target (a list row, a card). `tap({ clickableAncestor: true })` taps the smalles
 `clickable="true"` ancestor that fully contains the matched node instead of the node's own centre,
 falling back to the node itself when nothing clickable wraps it.
 
-`fill(text, opts?)` focuses the field with a `tap()` and types `text` through the device keyboard
-— the native analogue of Playwright's `locator.fill()`. It types into the focused field and does
-**not** clear existing content first; it needs a driver with text input (the bundled `wdioDriver()`
-has it) and throws a clear error otherwise. `opts` is the same `{ timeout?, interval? }` as `tap()`.
+`clear(opts?)` focuses the field with a `tap()` and clears existing text. `fill(text, opts?)`
+does the Playwright thing: focus, clear, then type replacement text through the device keyboard.
+Both need a driver with focused text clearing and input (the bundled `wdioDriver()` has them) and
+throw a clear error otherwise. `opts` is the same `{ timeout?, interval? }` as `tap()`.
 
 ### Assertions
 
@@ -532,7 +534,10 @@ await expect(member.spinner).not.toBeVisible({ timeout: 5_000 });
 - `toShow(text, opts?)` — the selector is present **and** `text` appears in the source.
 - `toHaveText(text, opts?)` — the matched node's **own** text contains / matches `text`.
 - `toBeChecked(opts?)` — the matched checkbox / switch is checked (`checked="true"`).
-- `toBeEnabled(opts?)` / `toBeDisabled(opts?)` — the matched element's `enabled` state.
+- `toBeEnabled(opts?)` / `toBeDisabled(opts?)` — the matched element's `enabled` state. If the
+  visible label is a non-clickable child inside a clickable control, NativeProof reads the
+  clickable ancestor's state, so `expect(native.getByText("Search")).toBeDisabled()` follows the
+  real button.
 - `toHaveCount(n, opts?)` — exactly `n` elements match the selector.
 - `opts` is `{ timeout?, interval? }` (ms).
 
@@ -871,7 +876,7 @@ mysteries, and it beats guessing label strings every time.
   `app` is optional for fixture-heavy suites.
 - `by.text/desc/id/testId/label` (string **or** `RegExp`), `page(driver).getByText/getByTestId/getByLabel/getById/getByRole`,
   `page(driver).locator(selector)`, `new Locator(driver, selector)` — locators
-  (`isVisible`, `textContent`, `bounds`, `shows`, `waitFor`, `tap`, `fill`, `isChecked`, `check`, `uncheck`,
+  (`isVisible`, `textContent`, `bounds`, `shows`, `waitFor`, `tap`, `clear`, `fill`, `isChecked`, `check`, `uncheck`,
   `count`, `nth`, `first`, `last` — `tap({ clickableAncestor })` for non-clickable labels).
 - `expect(locator)` → `toBeVisible` / `toShow` / `toHaveText` / `toBeChecked` / `toHaveCount` (+ `.not`), each `(value?, { timeout?, interval? })`.
 - `expect(mock | frameLog)` → `toHaveSent` / `toHaveReceived` (+ `.not`), matched by partial frame; accepts any `FrameLog` (`{ frames() }`).

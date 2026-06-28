@@ -4,6 +4,23 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.9
+
+Playwright-style text replacement for native fields.
+
+**Added**
+
+- `Locator.clear()` focuses a text field and clears its current value through the active native
+  element.
+
+**Changed**
+
+- `Locator.fill(text)` now replaces existing field text: focus, clear, then type. This matches the
+  Playwright mental model and lets app specs avoid raw WebdriverIO field-clearing helpers.
+- `Locator.isEnabled()` / `isDisabled()` and `expect(locator).toBeEnabled()` / `toBeDisabled()` now
+  read the smallest clickable ancestor when the visible label is a non-clickable child. This lets
+  Compose/SwiftUI-style button labels assert the real control state without XPath parent selectors.
+
 ## 0.10.8
 
 One-command init alias for setup.

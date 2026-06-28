@@ -24,6 +24,11 @@ export interface Driver {
    * cannot type leave it undefined, and {@link Locator.fill} throws a clear error.
    */
   typeText?(text: string): Promise<void>;
+  /**
+   * Clear the currently focused text element. Optional: drivers that cannot clear focused
+   * input leave it undefined, and {@link Locator.fill} / {@link Locator.clear} throw clearly.
+   */
+  clearText?(): Promise<void>;
 }
 
 /** A {@link Driver} backed by the live WebdriverIO/Appium session. */
@@ -42,5 +47,26 @@ export function wdioDriver(): Driver {
     pause: (ms: number) => browser.pause(ms),
     tapAt: (x: number, y: number) => tapAt(x, y),
     typeText: (text: string) => browser.keys(text),
+    clearText: async () => {
+      const activeElement = await browser.getActiveElement();
+      const elementId = elementIdFromProtocolResponse(activeElement);
+      if (!elementId) {
+        throw new Error("Could not resolve the active text element to clear it");
+      }
+      await browser.elementClear(elementId);
+    },
   };
+}
+
+function elementIdFromProtocolResponse(response: unknown): string | null {
+  if (!response || typeof response !== "object") return null;
+  const record = response as Record<string, unknown>;
+  const elementId = record["element-6066-11e4-a52e-4f735466cecf"] ?? record.ELEMENT;
+  if (typeof elementId === "string") return elementId;
+
+  const value = record.value;
+  if (!value || typeof value !== "object") return null;
+  const valueRecord = value as Record<string, unknown>;
+  const valueElementId = valueRecord["element-6066-11e4-a52e-4f735466cecf"] ?? valueRecord.ELEMENT;
+  return typeof valueElementId === "string" ? valueElementId : null;
 }

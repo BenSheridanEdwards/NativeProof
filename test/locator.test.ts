@@ -11,6 +11,7 @@ import { by, Locator } from "../src/locator.js";
 class FakeDriver implements Driver {
   platform: Platform = "android";
   readonly taps: Array<{ x: number; y: number }> = [];
+  readonly cleared: string[] = [];
   readonly typed: string[] = [];
   private readonly sources: string[];
 
@@ -32,6 +33,10 @@ class FakeDriver implements Driver {
 
   async typeText(text: string): Promise<void> {
     this.typed.push(text);
+  }
+
+  async clearText(): Promise<void> {
+    this.cleared.push("focused");
   }
 }
 
@@ -218,6 +223,18 @@ test("toBeEnabled / toBeDisabled read the enabled attribute", async () => {
   await expect(new Locator(driver, by.label("Cancel"))).not.toBeDisabled();
 });
 
+test("toBeDisabled reads the clickable ancestor state for a label inside a disabled button", async () => {
+  const driver = new FakeDriver(
+    '<node clickable="true" enabled="false" bounds="[0,0][300,80]">' +
+      '<node text="Search" clickable="false" enabled="true" bounds="[120,20][180,60]" />' +
+      '<node class="android.widget.Button" clickable="false" enabled="true" bounds="[0,0][300,80]" />' +
+      "</node>",
+  );
+  const SearchButton = new Locator(driver, by.text("Search"));
+  await expect(SearchButton).toBeDisabled();
+  await expect(SearchButton).not.toBeEnabled();
+});
+
 test("by.role throws a helpful error on an unknown role", async () => {
   const driver = new FakeDriver("<node class='Whatever' />");
   await assert.rejects(() => new Locator(driver, by.role("slider")).isVisible(), /Unknown role "slider"/);
@@ -269,11 +286,20 @@ test("tap({ clickableAncestor: true }) taps the clickable parent of a non-clicka
   ]);
 });
 
-test("Locator.fill focuses the field (tap) then types via the driver", async () => {
+test("Locator.fill focuses, clears, then types replacement text via the driver", async () => {
   const driver = new FakeDriver('<node content-desc="Email" bounds="[0,0][200,80]" />');
   await new Locator(driver, by.label("Email")).fill("a@b.com");
   assert.deepEqual(driver.taps, [{ x: 100, y: 40 }]); // focused
+  assert.deepEqual(driver.cleared, ["focused"]); // existing text replaced
   assert.deepEqual(driver.typed, ["a@b.com"]); // then typed
+});
+
+test("Locator.clear focuses the field then clears via the driver", async () => {
+  const driver = new FakeDriver('<node content-desc="Email" bounds="[0,0][200,80]" />');
+  await new Locator(driver, by.label("Email")).clear();
+  assert.deepEqual(driver.taps, [{ x: 100, y: 40 }]);
+  assert.deepEqual(driver.cleared, ["focused"]);
+  assert.deepEqual(driver.typed, []);
 });
 
 test("Locator.fill throws when the driver has no text input", async () => {
@@ -284,6 +310,17 @@ test("Locator.fill throws when the driver has no text input", async () => {
     tapAt: async () => {},
   };
   await assert.rejects(() => new Locator(noInput, by.label("Email")).fill("x"), /text input/);
+});
+
+test("Locator.fill throws when the driver cannot clear focused text", async () => {
+  const noClear: Driver = {
+    platform: "android",
+    source: async () => '<node content-desc="Email" bounds="[0,0][200,80]" />',
+    pause: async () => {},
+    tapAt: async () => {},
+    typeText: async () => {},
+  };
+  await assert.rejects(() => new Locator(noClear, by.label("Email")).fill("x"), /focused text clearing/);
 });
 
 test("Locator.isVisible reflects whether the selector matches the source", async () => {

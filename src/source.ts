@@ -236,15 +236,24 @@ export function boundsForText(source: string, text: string): Bounds | null {
  * bounds, or the bounds themselves if none does — turns a non-clickable Compose node
  * into a reliable tap target (e.g. the "Members (3)" list rows).
  */
-export function smallestClickableAncestorBounds(source: string, nodeBounds: Bounds): Bounds {
+export function smallestClickableAncestorNode(source: string, nodeBounds: Bounds): string | null {
   const clickable = [...source.matchAll(/<[^>]*clickable="true"[^>]*>/g)]
-    .map((m) => parseNodeBounds(m[0]))
-    .filter((b): b is Bounds => b !== null)
+    .map((m) => ({ node: m[0], bounds: parseNodeBounds(m[0]) }))
+    .filter((entry): entry is { node: string; bounds: Bounds } => entry.bounds !== null)
     .filter(
-      (b) => b.x1 <= nodeBounds.x1 && b.x2 >= nodeBounds.x2 && b.y1 <= nodeBounds.y1 && b.y2 >= nodeBounds.y2,
+      ({ bounds }) =>
+        bounds.x1 <= nodeBounds.x1 &&
+        bounds.x2 >= nodeBounds.x2 &&
+        bounds.y1 <= nodeBounds.y1 &&
+        bounds.y2 >= nodeBounds.y2,
     )
-    .sort((a, b) => a.width * a.height - b.width * b.height);
-  return clickable[0] ?? nodeBounds;
+    .sort((a, b) => a.bounds.width * a.bounds.height - b.bounds.width * b.bounds.height);
+  return clickable[0]?.node ?? null;
+}
+
+export function smallestClickableAncestorBounds(source: string, nodeBounds: Bounds): Bounds {
+  const ancestor = smallestClickableAncestorNode(source, nodeBounds);
+  return ancestor ? (parseNodeBounds(ancestor) ?? nodeBounds) : nodeBounds;
 }
 
 /** The smallest clickable ancestor that fully contains the node with the given visible text. */

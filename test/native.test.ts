@@ -3,11 +3,18 @@ import { test } from "node:test";
 import type { Driver } from "../src/driver.js";
 import { createNative } from "../src/native.js";
 
-function fakeDriver(source: string): { driver: Driver; taps: [number, number][]; typed: string[] } {
+function fakeDriver(source: string): {
+  driver: Driver;
+  taps: [number, number][];
+  cleared: string[];
+  typed: string[];
+} {
   const taps: [number, number][] = [];
+  const cleared: string[] = [];
   const typed: string[] = [];
   return {
     taps,
+    cleared,
     typed,
     driver: {
       platform: "android",
@@ -19,12 +26,15 @@ function fakeDriver(source: string): { driver: Driver; taps: [number, number][];
       typeText: async (text) => {
         typed.push(text);
       },
+      clearText: async () => {
+        cleared.push("focused");
+      },
     },
   };
 }
 
 test("createNative exposes direct text interactions and locators", async () => {
-  const { driver, taps, typed } = fakeDriver(
+  const { driver, taps, cleared, typed } = fakeDriver(
     '<node text="Email" bounds="[0,0][100,40]" enabled="true" />' +
       '<node text="Log in" bounds="[10,50][110,90]" clickable="true" enabled="true" />',
   );
@@ -41,6 +51,7 @@ test("createNative exposes direct text interactions and locators", async () => {
   await native.tap("Log in");
 
   assert.deepEqual(visited, ["/login"]);
+  assert.deepEqual(cleared, ["focused"]);
   assert.deepEqual(typed, ["test@example.com"]);
   assert.deepEqual(taps, [
     [50, 20],

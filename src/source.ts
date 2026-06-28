@@ -153,8 +153,15 @@ function nodeAccessibleNameMatches(
   return accessibleNameAttributes(platform).some((attribute) => attributeValueMatches(node, attribute, name));
 }
 
-function nodeBoundsContain(outer: Bounds, inner: Bounds): boolean {
-  return outer.x1 <= inner.x1 && outer.x2 >= inner.x2 && outer.y1 <= inner.y1 && outer.y2 >= inner.y2;
+const ROLE_LABEL_BOUNDS_TOLERANCE_PX = 2;
+
+function nodeBoundsContain(outer: Bounds, inner: Bounds, tolerancePx = 0): boolean {
+  return (
+    outer.x1 - tolerancePx <= inner.x1 &&
+    outer.x2 + tolerancePx >= inner.x2 &&
+    outer.y1 - tolerancePx <= inner.y1 &&
+    outer.y2 + tolerancePx >= inner.y2
+  );
 }
 
 function namedNodesInSource(source: string, platform: "android" | "ios", name: string | RegExp): string[] {
@@ -171,7 +178,7 @@ function nodeContainsNamedDescendantOrSibling(node: string, namedNodes: readonly
 
   return namedNodes.some((namedNode) => {
     const namedBounds = parseNodeBounds(namedNode);
-    return namedBounds !== null && nodeBoundsContain(nodeBounds, namedBounds);
+    return namedBounds !== null && nodeBoundsContain(nodeBounds, namedBounds, ROLE_LABEL_BOUNDS_TOLERANCE_PX);
   });
 }
 

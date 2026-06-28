@@ -15,7 +15,8 @@ export interface Page {
   getByLabel(label: string | RegExp, options?: WaitOptions): Locator;
   getById(id: string | RegExp, options?: WaitOptions): Locator;
   /**
-   * Match by role. With `{ name }`, matches the element role and accessible name together.
+   * Match by role. With `{ name }`, matches the element role and accessible name together,
+   * including common native shapes where the label is exposed inside the control bounds.
    * Without a name, matches by element class/type
    * (`checkbox`, `switch`, `button`, `textfield`, `image`) — e.g. `getByRole("checkbox")`.
    */

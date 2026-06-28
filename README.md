@@ -458,7 +458,7 @@ How each maps to the page source:
 |---|---|---|
 | `getByText` / `by.text` | `text` or `content-desc` | `label` or `value` |
 | `getByLabel` / `by.label` | `content-desc` | `label` |
-| `getByRole(role, { name })` | widget `class` + `content-desc` or `text` | XCUITest `type` + `label` or `value` |
+| `getByRole(role, { name })` | widget `class` + own or in-bounds `content-desc`/`text` | XCUITest `type` + own or in-bounds `label`/`value` |
 | `getByRole(role)` / `by.role` (no name) | widget `class` | XCUITest `type` |
 | `getByTestId` / `by.testId` | `resource-id` | `name` |
 | `getById` / `by.id` | `resource-id` | `name` |
@@ -468,6 +468,12 @@ How each maps to the page source:
 > (Jetpack Compose) and as `label` *or* `value` on iOS (SwiftUI), so `getByText` / `by.text` finds
 > the label wherever the toolkit put it — not just the node's own `text`. Reach for `getByLabel` /
 > `by.desc` when you specifically want the accessibility description.
+
+> **Named roles understand split native labels.** Compose/SwiftUI can expose a button or text field's
+> visible name on a child/sibling label while the semantic role lives on a separate role node with the
+> same bounds. `getByRole("button", { name: "Search" })` and
+> `getByRole("textfield", { name: /email/i })` match that common shape, while unrelated same-named
+> text outside the control bounds is ignored.
 
 A `Locator` is a lazy, awaitable handle with built-in waiting:
 

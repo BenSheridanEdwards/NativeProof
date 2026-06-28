@@ -4,6 +4,22 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.6
+
+Semantic role locators for readable native specs.
+
+**Fixed**
+
+- `getByRole(role, { name })` / `by.role(role, { name })` now match the native element role and
+  accessible name together. Previously the named form matched only the accessibility label, which
+  meant a same-named non-control could satisfy a role locator. Specs can now trust readable patterns
+  such as `native.getByRole("checkbox", { name: /Accept Agreement/ })`.
+
+**Changed**
+
+- The north-star docs now explicitly prefer Jest/React Testing Library/Playwright-style semantic
+  locators and reject selector-name constants as a readability abstraction.
+
 ## 0.10.5
 
 Native-first setup and config-owned control, so generated projects read like runner-native tests

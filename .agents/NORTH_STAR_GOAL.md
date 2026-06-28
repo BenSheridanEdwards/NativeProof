@@ -57,7 +57,34 @@ it("should be able to log in", async () => {
    await expect(native.getByText("Welcome back")).toBeVisible();
    ```
 
-4. Use runner-native language.
+4. Prefer semantic locators over selector plumbing.
+
+   NativeProof specs should look like Jest + React Testing Library or Playwright: query the UI by
+   role, text, label, and accessible name whenever the app exposes that meaning.
+
+   Good:
+
+   ```ts
+   const AcceptAgreementCheckbox = native.getByRole("checkbox", { name: /Accept Agreement/ });
+
+   await AcceptAgreementCheckbox.check();
+   await expect(AcceptAgreementCheckbox).toBeChecked();
+   ```
+
+   Bad:
+
+   ```ts
+   const TERMS_CHECKBOX_NAME = "acc_agreement_checkbox";
+
+   await native.getById(TERMS_CHECKBOX_NAME).tap();
+   ```
+
+   Long descriptive locator variables are fine when they make a repeated control read like the
+   product. Abbreviated selector constants are not readability; they make the reader translate
+   implementation details. If a behaviour cannot be expressed semantically, prefer improving
+   NativeProof or the app accessibility surface before adding more test-side indirection.
+
+5. Use runner-native language.
 
    Keep `describe`, `describe.skip`, `it`, `it.skip`, and `expect`. NativeProof should not recreate
    Jest, Mocha, or Playwright Test. It should make native app control feel first-class inside those
@@ -66,7 +93,7 @@ it("should be able to log in", async () => {
    Do not add or promote public `test.*` facades. If a fixture-heavy compatibility API remains, keep
    it secondary and do not use it in generated projects or first-read documentation.
 
-5. Fixtures are allowed only when they expose intent.
+6. Fixtures are allowed only when they expose intent.
 
    Good:
 

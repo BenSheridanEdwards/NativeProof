@@ -33,6 +33,13 @@ const DEFAULTS: CliArgs = {
   startAppium: true,
 };
 
+type DefaultCommand = "test" | "init";
+
+export function defaultCommandForProgram(programName: string | undefined): DefaultCommand {
+  const name = path.basename(programName ?? "");
+  return name.startsWith("nativeproof-init") ? "init" : "test";
+}
+
 function valueFor(argv: readonly string[], index: number, flag: string): string {
   const value = argv[index];
   if (value === undefined) throw new Error(`${flag} requires a value`);
@@ -50,11 +57,17 @@ function setPlatform(args: CliArgs, platform: "android" | "ios", source: string)
   args.initPlatform = platform;
 }
 
-export function parseArgs(argv: readonly string[]): CliArgs {
-  const args: CliArgs = { ...DEFAULTS };
+export function parseArgs(
+  argv: readonly string[],
+  options: { defaultCommand?: DefaultCommand } = {},
+): CliArgs {
+  const args: CliArgs = { ...DEFAULTS, command: options.defaultCommand ?? DEFAULTS.command };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === "test") continue;
+    if (arg === "test") {
+      args.command = "test";
+      continue;
+    }
     if (arg === "init") {
       args.command = "init";
       continue;
@@ -105,6 +118,8 @@ export function helpText(): string {
     "  nativeproof [test] [options]   run the suite (default)",
     "  nativeproof init --ios         scaffold nativeproof.config.ts + a sample spec for iOS",
     "  nativeproof init --android     scaffold nativeproof.config.ts + a sample spec for Android",
+    "  nativeproof-init --ios         same init shortcut, useful from package-manager bins",
+    "  nativeproof-init --android     same init shortcut for Android",
     "",
     "Config is auto-discovered from nativeproof.config.ts.",
     "",
@@ -460,8 +475,13 @@ async function runTests(args: CliArgs): Promise<number> {
   }
 }
 
-export async function main(argv: readonly string[]): Promise<number> {
-  const args = parseArgs(argv);
+export async function main(
+  argv: readonly string[],
+  options: { programName?: string | undefined } = {},
+): Promise<number> {
+  const args = parseArgs(argv, {
+    defaultCommand: defaultCommandForProgram(options.programName ?? process.argv[1]),
+  });
   if (args.command === "help") {
     console.log(helpText());
     return 0;
@@ -491,7 +511,7 @@ function isCliEntry(): boolean {
 }
 
 if (isCliEntry()) {
-  main(process.argv.slice(2)).then(
+  main(process.argv.slice(2), { programName: process.argv[1] }).then(
     (code) => process.exit(code),
     (error: unknown) => {
       console.error(error instanceof Error ? error.message : String(error));

@@ -106,6 +106,10 @@ Scaffold the starting files with one command, then fill in the app path and the 
 npx nativeproof init --android
 # or
 npx nativeproof init --ios
+
+# same scaffold shortcut if you prefer an init-specific bin
+npx nativeproof-init --android
+npx nativeproof-init --ios
 ```
 
 Then four steps from zero to a green run on Android — or set it all up by hand:
@@ -725,6 +729,8 @@ One command, in the spirit of `playwright test`:
 ```bash
 nativeproof init --android          # scaffold config, package script and sample spec
 nativeproof init --ios              # same, for an iOS project
+nativeproof-init --android          # init-specific bin alias
+nativeproof-init --ios              # init-specific bin alias
 nativeproof                          # auto-discovers nativeproof.config.ts, runs the suite
 nativeproof --platform android       # or: --platform ios
 nativeproof --android                # shorthand for --platform android

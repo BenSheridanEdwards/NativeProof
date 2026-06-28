@@ -4,6 +4,16 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.8
+
+One-command init alias for setup.
+
+**Added**
+
+- `nativeproof-init` is now a package bin alias for the init flow, so
+  `npx nativeproof-init --ios` and `npx nativeproof-init --android` scaffold the same minimal
+  config-owned project as `npx nativeproof init --ios|--android`.
+
 ## 0.10.7
 
 iOS checkbox semantics for custom controls.

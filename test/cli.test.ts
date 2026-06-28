@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import {
+  defaultCommandForProgram,
   helpText,
   loadNativeProofConfig,
   main,
@@ -118,6 +119,25 @@ test("parseArgs surfaces the init command, and help lists it", () => {
   assert.equal(args.initPlatform, "ios");
   assert.match(helpText(), /nativeproof init --ios/);
   assert.match(helpText(), /nativeproof init --android/);
+  assert.match(helpText(), /nativeproof-init --ios/);
+  assert.match(helpText(), /nativeproof-init --android/);
+});
+
+test("nativeproof-init defaults to the init command", () => {
+  assert.equal(defaultCommandForProgram("nativeproof"), "test");
+  assert.equal(defaultCommandForProgram("nativeproof-init"), "init");
+  assert.equal(defaultCommandForProgram("nativeproof-init.cmd"), "init");
+
+  const args = parseArgs(["--android"], { defaultCommand: defaultCommandForProgram("nativeproof-init") });
+  assert.equal(args.command, "init");
+  assert.equal(args.platform, "android");
+  assert.equal(args.initPlatform, "android");
+
+  const explicitTest = parseArgs(["test", "--ios"], {
+    defaultCommand: defaultCommandForProgram("nativeproof-init"),
+  });
+  assert.equal(explicitTest.command, "test");
+  assert.equal(explicitTest.platform, "ios");
 });
 
 test("main rejects init without an explicit platform", async () => {

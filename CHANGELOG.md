@@ -4,6 +4,17 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.12
+
+iOS focused text input through Appium element send keys.
+
+**Fixed**
+
+- `Locator.fill()` now types into the focused iOS element with Appium `elementSendKeys` instead of
+  WebdriverIO key actions. This avoids XCUITest/WDA key-action failures such as
+  `Key Down action '1' must have a closing Key Up successor` while preserving Android's existing
+  keyboard-input path.
+
 ## 0.10.11
 
 Tolerant named role matching for native text fields.
@@ -328,8 +339,8 @@ Locator interaction, generic assertions, and Compose/SwiftUI robustness — plus
 
 - **`Locator.fill(text, opts?)`** — native text entry, the analogue of Playwright's `locator.fill()`:
   it focuses the field (a `tap()`) and types through the device keyboard. New optional `Driver.typeText?`
-  hook (`wdioDriver()` implements it via `browser.keys`); `fill()` throws a clear error on drivers
-  without text input. It does **not** clear existing content first. (#5)
+  hook (`wdioDriver()` implements it with platform-appropriate Appium text input); `fill()` throws a
+  clear error on drivers without text input. It does **not** clear existing content first. (#5)
 - **Generic `expect(value)` matchers** — `toBe` / `toEqual` / `toContain` / `toBeTruthy` / `toBeFalsy` /
   `toBeDefined` / `toBeNull` (+ `.not`). These are **synchronous** (unlike the auto-waiting locator/mock
   matchers), so non-UI checks (counts, ids, parsed payloads) need no second assertion library. (#4)

@@ -283,16 +283,23 @@ export class Locator {
   /** Wait for the element, then tap its centre (a source-bounds coordinate tap). */
   async tap(options: TapOptions = {}): Promise<void> {
     const opts: WaitOptions = { ...this.options, ...options, sleep: (ms) => this.driver.pause(ms) };
-    const bounds = await waitUntil(
-      () => this.bounds(),
-      (b) => b !== null,
+    const match = await waitUntil(
+      async () => {
+        const node = this.pick(await this.matchedNodes());
+        const bounds = node ? parseNodeBounds(node) : null;
+        return node && bounds ? { node, bounds } : null;
+      },
+      (value) => value !== null,
       opts,
     );
-    if (!bounds) {
+    if (!match) {
       throw new Error(
         `${describeSelector(this.selector)} was not found to tap within ${opts.timeout ?? DEFAULTS.timeout}ms`,
       );
     }
+    if (this.driver.clickNode && (await this.driver.clickNode(match.node))) return;
+
+    const bounds = match.bounds;
     const target = options.clickableAncestor
       ? smallestClickableAncestorBounds(await this.driver.source(), bounds)
       : bounds;

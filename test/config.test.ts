@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import type { App, ScreenFactories } from "../src/app.js";
-import { buildWdioConfig, defineConfig, findConfigFile, resolveProject } from "../src/config.js";
+import {
+  bootedIosSimulatorFromSimctl,
+  buildWdioConfig,
+  defineConfig,
+  findConfigFile,
+  resolveProject,
+} from "../src/config.js";
 import { captureText, failureEvidenceName, setArtifactDir } from "../src/evidence.js";
 
 const android = {
@@ -15,7 +21,7 @@ const android = {
 const ios = {
   name: "ios",
   platform: "ios" as const,
-  capabilities: { platformName: "iOS", "appium:app": "A.app" },
+  capabilities: { platformName: "iOS", "appium:app": "A.app", "appium:deviceName": "iPhone 15" },
 };
 const projects = [android, ios];
 
@@ -40,7 +46,12 @@ test("buildWdioConfig synthesises a WebdriverIO config with absolute specs for t
   assert.equal(wdio.framework, "mocha");
   // The project's caps, with the platform's automationName defaulted in (XCUITest for iOS).
   assert.deepEqual(wdio.capabilities, [
-    { platformName: "iOS", "appium:automationName": "XCUITest", "appium:app": "A.app" },
+    {
+      platformName: "iOS",
+      "appium:automationName": "XCUITest",
+      "appium:app": "A.app",
+      "appium:deviceName": "iPhone 15",
+    },
   ]);
   assert.deepEqual(wdio.specs, ["/proj/e2e/**/*.spec.ts"]);
   assert.equal(wdio.path, "/wd/hub");
@@ -56,8 +67,26 @@ test("buildWdioConfig defaults platformName + automationName per platform, and a
     { platformName: "Android", "appium:automationName": "UiAutomator2" },
   ]);
   // A project's own automationName overrides the platform default.
-  const ios = buildWdioConfig({ projects: minimal }, { project: "ios" }, "/p");
+  const ios = buildWdioConfig(
+    { projects: minimal, appium: { autoSelectBootedSimulator: false } },
+    { project: "ios" },
+    "/p",
+  );
   assert.deepEqual(ios.capabilities, [{ platformName: "iOS", "appium:automationName": "Custom" }]);
+});
+
+test("bootedIosSimulatorFromSimctl picks the first booted available iOS simulator", () => {
+  const raw = JSON.stringify({
+    devices: {
+      "com.apple.CoreSimulator.SimRuntime.iOS-26-5": [
+        { name: "iPhone 15", udid: "A", state: "Shutdown", isAvailable: true },
+        { name: "iPhone 16", udid: "B", state: "Booted", isAvailable: true },
+      ],
+    },
+  });
+
+  assert.deepEqual(bootedIosSimulatorFromSimctl(raw), { name: "iPhone 16", udid: "B" });
+  assert.equal(bootedIosSimulatorFromSimctl('{"devices":{}}'), null);
 });
 
 test("buildWdioConfig honours a spec override and Appium settings from config", () => {

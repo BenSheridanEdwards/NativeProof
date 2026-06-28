@@ -1,9 +1,23 @@
 #!/usr/bin/env node
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { type AppiumOptions, findConfigFile, type NativeProofConfig } from "./config.js";
+import {
+  type AppiumOptions,
+  findConfigFile,
+  type NativeProofConfig,
+  type RunnerEnv,
+  resolveProject,
+} from "./config.js";
 
 /**
  * The `nativeproof` CLI — the single-command entry, in the spirit of `playwright test`.
@@ -16,9 +30,10 @@ import { type AppiumOptions, findConfigFile, type NativeProofConfig } from "./co
  */
 
 export interface CliArgs {
-  command: "test" | "init" | "help" | "version";
+  command: "test" | "init" | "onboard" | "help" | "version";
   platform: "android" | "ios" | undefined;
   initPlatform: "android" | "ios" | undefined;
+  onboardPath: string | undefined;
   project: string | undefined;
   spec: string | undefined;
   startAppium: boolean;
@@ -28,15 +43,17 @@ const DEFAULTS: CliArgs = {
   command: "test",
   platform: undefined,
   initPlatform: undefined,
+  onboardPath: undefined,
   project: undefined,
   spec: undefined,
   startAppium: true,
 };
 
-type DefaultCommand = "test" | "init";
+type DefaultCommand = "test" | "init" | "onboard";
 
 export function defaultCommandForProgram(programName: string | undefined): DefaultCommand {
   const name = path.basename(programName ?? "");
+  if (name.startsWith("nativeproof-onboard")) return "onboard";
   return name.startsWith("nativeproof-init") ? "init" : "test";
 }
 
@@ -64,12 +81,17 @@ export function parseArgs(
   const args: CliArgs = { ...DEFAULTS, command: options.defaultCommand ?? DEFAULTS.command };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
+    if (arg === undefined) continue;
     if (arg === "test") {
       args.command = "test";
       continue;
     }
     if (arg === "init") {
       args.command = "init";
+      continue;
+    }
+    if (arg === "onboard") {
+      args.command = "onboard";
       continue;
     }
     if (arg === "-h" || arg === "--help") return { ...args, command: "help" };
@@ -93,6 +115,8 @@ export function parseArgs(
         throw new Error('--platform must be "android" or "ios"');
       }
       setPlatform(args, platform, "--platform");
+    } else if (args.command === "onboard" && !arg.startsWith("-") && !args.onboardPath) {
+      args.onboardPath = arg;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -118,8 +142,10 @@ export function helpText(): string {
     "  nativeproof [test] [options]   run the suite (default)",
     "  nativeproof init --ios         scaffold nativeproof.config.ts + a sample spec for iOS",
     "  nativeproof init --android     scaffold nativeproof.config.ts + a sample spec for Android",
+    "  nativeproof onboard <path>     point nativeproof.config.ts at a built .app or .apk",
     "  nativeproof-init --ios         same init shortcut, useful from package-manager bins",
     "  nativeproof-init --android     same init shortcut for Android",
+    "  nativeproof-onboard <path>     onboard shortcut, useful from package-manager bins",
     "",
     "Config is auto-discovered from nativeproof.config.ts.",
     "",
@@ -139,15 +165,22 @@ type InitPlatform = "android" | "ios";
 
 export interface ScaffoldOptions {
   platform: InitPlatform;
+  appPath?: string | undefined;
 }
 
-function projectTemplate(platform: InitPlatform): string {
-  if (platform === "android") {
+function defaultAppPath(platform: InitPlatform): string {
+  return platform === "android" ? "./app/build/outputs/apk/debug/app-debug.apk" : "./build/ios/MyApp.app";
+}
+
+function projectTemplate(options: ScaffoldOptions): string {
+  const appPath = options.appPath ?? defaultAppPath(options.platform);
+  const appPathLiteral = JSON.stringify(appPath);
+  if (options.platform === "android") {
     return `    {
       name: "android",
       platform: "android",
       capabilities: {
-        "appium:app": "./app/build/outputs/apk/debug/app-debug.apk",
+        "appium:app": ${appPathLiteral},
         "appium:deviceName": "Android Emulator",
       },
     }`;
@@ -156,14 +189,13 @@ function projectTemplate(platform: InitPlatform): string {
       name: "ios",
       platform: "ios",
       capabilities: {
-        "appium:app": "./build/ios/MyApp.app",
-        "appium:deviceName": "iPhone 15",
+        "appium:app": ${appPathLiteral},
       },
     }`;
 }
 
 function configTemplate(options: ScaffoldOptions): string {
-  const projects = projectTemplate(options.platform);
+  const projects = projectTemplate(options);
   return `import { createNative, defineConfig, expect, wdioDriver } from "nativeproof";
 
 const driver = () => wdioDriver();
@@ -183,6 +215,10 @@ export { expect };
 export default defineConfig({
   testDir: "tests",
   artifacts: { dir: ".e2e-artifacts" },
+  appium: {
+    autoInstallDrivers: true,
+    autoSelectBootedSimulator: true,
+  },
   mochaTimeout: 240_000,
   projects: [
 ${projects},
@@ -338,12 +374,282 @@ export function init(cwd: string = process.cwd(), options: ScaffoldOptions): num
   return 0;
 }
 
+interface CandidateArtifact {
+  path: string;
+  platform: InitPlatform;
+  mtimeMs: number;
+}
+
+export interface OnboardTarget {
+  platform: InitPlatform;
+  appPath: string;
+  sourcePath: string;
+}
+
+export interface OnboardResult {
+  target: OnboardTarget;
+  created: string[];
+  skipped: string[];
+  updated: string[];
+}
+
+function isDirectory(file: string): boolean {
+  try {
+    return statSync(file).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function isFile(file: string): boolean {
+  try {
+    return statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function candidate(platform: InitPlatform, artifactPath: string): CandidateArtifact {
+  return { path: artifactPath, platform, mtimeMs: statSync(artifactPath).mtimeMs };
+}
+
+function shouldSkipDiscoveryDirectory(name: string): boolean {
+  return name === ".git" || name === "node_modules" || name === "Pods" || name === "DerivedData";
+}
+
+function discoverBuiltArtifacts(root: string, platform: InitPlatform | undefined): CandidateArtifact[] {
+  const candidates: CandidateArtifact[] = [];
+  const pending: string[] = [root];
+  let visited = 0;
+  while (pending.length > 0 && visited < 8000) {
+    const dir = pending.pop();
+    if (!dir) continue;
+    visited += 1;
+
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (shouldSkipDiscoveryDirectory(entry.name)) continue;
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name.endsWith(".app")) {
+          if (!platform || platform === "ios") candidates.push(candidate("ios", entryPath));
+          continue;
+        }
+        pending.push(entryPath);
+        continue;
+      }
+      if (entry.isFile() && entry.name.endsWith(".apk") && (!platform || platform === "android")) {
+        candidates.push(candidate("android", entryPath));
+      }
+    }
+  }
+  return candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+}
+
+function hasAndroidProjectMarker(root: string): boolean {
+  return existsSync(path.join(root, "gradlew")) || existsSync(path.join(root, "settings.gradle"));
+}
+
+function hasIosProjectMarker(root: string): boolean {
+  return readdirSync(root, { withFileTypes: true }).some(
+    (entry) =>
+      entry.isDirectory() && (entry.name.endsWith(".xcodeproj") || entry.name.endsWith(".xcworkspace")),
+  );
+}
+
+export function detectOnboardTarget(
+  inputPath: string,
+  options: { platform?: InitPlatform | undefined } = {},
+  cwd: string = process.cwd(),
+): OnboardTarget {
+  const sourcePath = path.resolve(cwd, inputPath);
+  if (!existsSync(sourcePath)) {
+    throw new Error(`nativeproof onboard: app path does not exist: ${inputPath}`);
+  }
+
+  const requested = options.platform;
+  if (isFile(sourcePath) && sourcePath.endsWith(".apk")) {
+    if (requested && requested !== "android")
+      throw new Error("nativeproof onboard: .apk conflicts with --ios");
+    return { platform: "android", appPath: sourcePath, sourcePath };
+  }
+
+  if (isDirectory(sourcePath) && sourcePath.endsWith(".app")) {
+    if (requested && requested !== "ios")
+      throw new Error("nativeproof onboard: .app conflicts with --android");
+    return { platform: "ios", appPath: sourcePath, sourcePath };
+  }
+
+  if (!isDirectory(sourcePath)) {
+    throw new Error("nativeproof onboard: expected an Android .apk, iOS .app, or app project directory");
+  }
+
+  const discovered = discoverBuiltArtifacts(sourcePath, requested);
+  if (discovered.length > 0) {
+    const first = discovered[0];
+    if (!first) throw new Error("nativeproof onboard: no built app artifact found");
+    return { platform: first.platform, appPath: first.path, sourcePath };
+  }
+
+  if ((requested === "android" || !requested) && hasAndroidProjectMarker(sourcePath)) {
+    throw new Error(
+      "nativeproof onboard: Android project detected, but no built .apk was found. Build the app or pass the .apk path.",
+    );
+  }
+
+  if ((requested === "ios" || !requested) && hasIosProjectMarker(sourcePath)) {
+    throw new Error(
+      "nativeproof onboard: iOS project detected, but no built .app was found. Build the app for a simulator or pass the .app path.",
+    );
+  }
+
+  throw new Error("nativeproof onboard: could not detect an iOS .app or Android .apk from the provided path");
+}
+
+function pathForConfig(artifactPath: string, cwd: string): string {
+  const relative = path.relative(cwd, artifactPath);
+  if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) {
+    return relative.startsWith(".") ? relative : `./${relative.split(path.sep).join("/")}`;
+  }
+  return artifactPath.split(path.sep).join("/");
+}
+
+function findMatchingBrace(contents: string, openIndex: number): number {
+  let depth = 0;
+  let quote: '"' | "'" | "`" | undefined;
+  let escaped = false;
+  for (let index = openIndex; index < contents.length; index += 1) {
+    const char = contents[index];
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === "{") depth += 1;
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+export function updateConfigAppPath(
+  contents: string,
+  options: { platform: InitPlatform; appPath: string },
+): string {
+  const platformPattern = new RegExp(`platform:\\s*["']${options.platform}["']`);
+  const platformMatch = platformPattern.exec(contents);
+  if (!platformMatch) {
+    throw new Error(`nativeproof onboard: nativeproof.config.ts has no ${options.platform} project`);
+  }
+
+  const objectStart = contents.lastIndexOf("{", platformMatch.index);
+  const objectEnd = objectStart >= 0 ? findMatchingBrace(contents, objectStart) : -1;
+  if (objectStart < 0 || objectEnd < 0) {
+    throw new Error(
+      `nativeproof onboard: could not update the ${options.platform} project in nativeproof.config.ts`,
+    );
+  }
+
+  const before = contents.slice(0, objectStart);
+  const block = contents.slice(objectStart, objectEnd + 1);
+  const after = contents.slice(objectEnd + 1);
+  const appLiteral = JSON.stringify(options.appPath);
+  const existingApp = /(["']appium:app["']\s*:\s*)(["'])(?:\\.|(?!\2).)*\2/.exec(block);
+  if (existingApp) {
+    const updatedBlock = `${block.slice(0, existingApp.index)}${existingApp[1]}${appLiteral}${block.slice(
+      existingApp.index + existingApp[0].length,
+    )}`;
+    return `${before}${updatedBlock}${after}`;
+  }
+
+  const capabilities = /capabilities\s*:\s*\{/.exec(block);
+  if (!capabilities) {
+    throw new Error(`nativeproof onboard: ${options.platform} project has no capabilities object`);
+  }
+  const insertAt = capabilities.index + capabilities[0].length;
+  const updatedBlock = `${block.slice(0, insertAt)}\n        "appium:app": ${appLiteral},${block.slice(insertAt)}`;
+  return `${before}${updatedBlock}${after}`;
+}
+
+function ensurePackage(
+  cwd: string,
+  io: ScaffoldIo,
+): { created: string[]; skipped: string[]; updated: string[] } {
+  const packagePath = path.join(cwd, "package.json");
+  if (!io.exists(packagePath)) {
+    io.write(packagePath, packageTemplate());
+    return { created: ["package.json"], skipped: [], updated: [] };
+  }
+  const merged = ensurePackageJson(io.read(packagePath));
+  if (merged.changed) {
+    io.write(packagePath, merged.contents);
+    return { created: [], skipped: [], updated: ["package.json"] };
+  }
+  return { created: [], skipped: ["package.json"], updated: [] };
+}
+
+export function onboard(
+  cwd: string = process.cwd(),
+  inputPath: string,
+  options: { platform?: InitPlatform | undefined } = {},
+  io: ScaffoldIo = diskIo,
+): OnboardResult {
+  const target = detectOnboardTarget(inputPath, options, cwd);
+  const appPath = pathForConfig(target.appPath, cwd);
+  const configPath = findConfigFile(cwd);
+  let created: string[] = [];
+  let skipped: string[] = [];
+  let updated: string[] = [];
+
+  if (configPath) {
+    io.write(configPath, updateConfigAppPath(io.read(configPath), { platform: target.platform, appPath }));
+    updated.push(path.basename(configPath));
+    const packageResult = ensurePackage(cwd, io);
+    created = [...created, ...packageResult.created];
+    skipped = [...skipped, ...packageResult.skipped];
+    updated = [...updated, ...packageResult.updated];
+  } else {
+    const scaffoldResult = scaffold(cwd, { platform: target.platform, appPath }, io);
+    created = scaffoldResult.created;
+    skipped = scaffoldResult.skipped;
+    updated = scaffoldResult.updated;
+  }
+
+  return { target: { ...target, appPath }, created, skipped, updated };
+}
+
+export function onboardCommand(
+  cwd: string = process.cwd(),
+  inputPath: string,
+  options: { platform?: InitPlatform | undefined } = {},
+): number {
+  const { target, created, skipped, updated } = onboard(cwd, inputPath, options);
+  for (const file of created) console.log(`nativeproof: created ${file}`);
+  for (const file of updated) console.log(`nativeproof: updated ${file}`);
+  for (const file of skipped) console.log(`nativeproof: ${file} already exists — skipped`);
+  console.log(`nativeproof: onboarded ${target.platform} app at ${target.appPath}`);
+  console.log(`\nNext: run \`npm run test:e2e\` or \`nativeproof --${target.platform}\`.`);
+  return 0;
+}
+
 function localBin(name: string): string {
   const bin = path.join(process.cwd(), "node_modules", ".bin", name);
   return existsSync(bin) ? bin : name;
 }
 
-function appiumEndpoint(options: AppiumOptions = {}): Required<AppiumOptions> {
+type AppiumEndpoint = Required<Pick<AppiumOptions, "host" | "port" | "path">>;
+
+function appiumEndpoint(options: AppiumOptions = {}): AppiumEndpoint {
   return {
     host: options.host ?? "127.0.0.1",
     port: options.port ?? 4723,
@@ -363,9 +669,77 @@ async function appiumReachable(options: AppiumOptions = {}): Promise<boolean> {
   }
 }
 
+export function appiumDriverNameForPlatform(platform: InitPlatform): "uiautomator2" | "xcuitest" {
+  return platform === "android" ? "uiautomator2" : "xcuitest";
+}
+
+export function appiumDriverListHasDriver(raw: string, driverName: string): boolean {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return isRecord(parsed) && isRecord(parsed[driverName]);
+  } catch {
+    return false;
+  }
+}
+
+export interface AppiumCommandResult {
+  code: number;
+  stdout: string;
+  stderr: string;
+}
+
+export type AppiumCommandRunner = (
+  args: readonly string[],
+  options?: { stdio?: "pipe" | "inherit" },
+) => Promise<AppiumCommandResult>;
+
+const runAppiumCommand: AppiumCommandRunner = (args, options = {}) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(localBin("appium"), args, {
+      stdio: options.stdio === "inherit" ? "inherit" : ["ignore", "pipe", "pipe"],
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    if (child.stdout) child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    if (child.stderr) child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      resolve({
+        code: code ?? 1,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+      });
+    });
+  });
+
+export async function ensureAppiumDriver(
+  platform: InitPlatform,
+  appium: AppiumOptions | undefined,
+  runCommand: AppiumCommandRunner = runAppiumCommand,
+): Promise<boolean> {
+  if (appium?.autoInstallDrivers === false) return false;
+  if (platform === "ios" && process.platform !== "darwin") {
+    throw new Error("nativeproof: iOS runs require macOS with Xcode and the Appium XCUITest driver");
+  }
+
+  const driverName = appiumDriverNameForPlatform(platform);
+  const list = await runCommand(["driver", "list", "--installed", "--json"]);
+  if (list.code === 0 && appiumDriverListHasDriver(list.stdout, driverName)) return false;
+
+  console.log(`nativeproof: installing Appium ${driverName} driver …`);
+  const install = await runCommand(["driver", "install", driverName], { stdio: "inherit" });
+  if (install.code !== 0) {
+    throw new Error(
+      `nativeproof: could not install the Appium ${driverName} driver. Run \`npx appium driver install ${driverName}\` and retry.`,
+    );
+  }
+  return true;
+}
+
 async function ensureAppium(
   appium: AppiumOptions | undefined,
   startAppium: boolean,
+  platform: InitPlatform,
 ): Promise<ChildProcess | null> {
   const endpoint = appiumEndpoint(appium);
   if (await appiumReachable(endpoint)) return null;
@@ -374,6 +748,7 @@ async function ensureAppium(
       `Appium is not reachable at http://${endpoint.host}:${endpoint.port}${endpoint.path} (and --no-appium was set)`,
     );
   }
+  await ensureAppiumDriver(platform, appium);
   console.log("nativeproof: starting Appium …");
   const child = spawn(
     localBin("appium"),
@@ -434,13 +809,18 @@ export function resolveRunner(_args: CliArgs, cwd: string = process.cwd()): Reso
 }
 
 export async function loadNativeProofConfig(configPath: string): Promise<NativeProofConfig> {
-  const { tsImport } = await import("tsx/esm/api");
-  const loaded = await tsImport(pathToFileURL(configPath).href, import.meta.url);
-  const config = nativeProofConfigFromModule(loaded);
-  if (!config) {
-    throw new Error(`${configPath} must \`export default defineConfig(...)\``);
+  const { register } = await import("tsx/esm/api");
+  const unregister = register();
+  try {
+    const loaded = await import(pathToFileURL(configPath).href);
+    const config = nativeProofConfigFromModule(loaded);
+    if (!config) {
+      throw new Error(`${configPath} must \`export default defineConfig(...)\``);
+    }
+    return config;
+  } finally {
+    unregister?.();
   }
-  return config;
 }
 
 function isNativeProofConfig(value: unknown): value is NativeProofConfig {
@@ -460,7 +840,11 @@ function nativeProofConfigFromModule(loaded: unknown): NativeProofConfig | undef
 async function runTests(args: CliArgs): Promise<number> {
   const { wdioConfig, configPath, extraEnv } = resolveRunner(args);
   const userConfig = await loadNativeProofConfig(configPath);
-  const appium = await ensureAppium(userConfig.appium, args.startAppium);
+  const selection: RunnerEnv = {};
+  if (args.platform) selection.platform = args.platform;
+  if (args.project) selection.project = args.project;
+  const project = resolveProject(userConfig, selection);
+  const appium = await ensureAppium(userConfig.appium, args.startAppium, project.platform);
   try {
     return await new Promise<number>((resolve, reject) => {
       const runner = spawn(localBin("wdio"), ["run", wdioConfig], {
@@ -495,6 +879,14 @@ export async function main(
       throw new Error("nativeproof init requires --ios or --android");
     }
     return init(process.cwd(), { platform: args.initPlatform });
+  }
+  if (args.command === "onboard") {
+    if (!args.onboardPath) {
+      throw new Error(
+        "nativeproof onboard requires a path to an iOS .app, Android .apk, or built app project",
+      );
+    }
+    return onboardCommand(process.cwd(), args.onboardPath, { platform: args.platform ?? undefined });
   }
   return runTests(args);
 }

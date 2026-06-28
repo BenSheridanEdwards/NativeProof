@@ -1,5 +1,6 @@
 import { browser } from "@wdio/globals";
 import { tapAt } from "./gestures.js";
+import { decodeXmlEntities } from "./source.js";
 
 /**
  * The minimal device contract the locator and expect layers drive.
@@ -19,6 +20,8 @@ export interface Driver {
   pause(ms: number): Promise<void>;
   /** Tap an absolute screen coordinate. */
   tapAt(x: number, y: number): Promise<void>;
+  /** Click a matched native source node directly when the live driver can resolve it. */
+  clickNode?(node: string): Promise<boolean>;
   /**
    * Type into the currently focused element (keyboard input). Optional: drivers that
    * cannot type leave it undefined, and {@link Locator.fill} throws a clear error.
@@ -46,6 +49,18 @@ export function wdioDriver(): Driver {
       }),
     pause: (ms: number) => browser.pause(ms),
     tapAt: (x: number, y: number) => tapAt(x, y),
+    clickNode: async (node: string) => {
+      if (browser.isAndroid || !iOSNodeLooksClickable(node)) return false;
+      const name =
+        nodeAttribute(node, "name") ?? nodeAttribute(node, "label") ?? nodeAttribute(node, "value");
+      if (!name) return false;
+      try {
+        await browser.$(`~${name}`).click();
+        return true;
+      } catch {
+        return false;
+      }
+    },
     typeText: async (text: string) => {
       if (browser.isAndroid) {
         await browser.keys(text);
@@ -62,6 +77,15 @@ export function wdioDriver(): Driver {
       );
     },
   };
+}
+
+function nodeAttribute(node: string, name: string): string | null {
+  const value = new RegExp(`\\b${name}="([^"]*)"`).exec(node)?.[1];
+  return value ? decodeXmlEntities(value) : null;
+}
+
+function iOSNodeLooksClickable(node: string): boolean {
+  return /\btype="XCUIElementType(?:Button|Switch|TextField|SecureTextField|Cell)"/.test(node);
 }
 
 async function activeElementId(errorMessage: string): Promise<string> {

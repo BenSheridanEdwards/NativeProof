@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type { App } from "./app.js";
@@ -20,11 +21,21 @@ import { captureState, failureEvidenceName, setArtifactDir } from "./evidence.js
  * ```
  */
 
-/** Appium connection settings (defaults: 127.0.0.1 : 4723 /wd/hub). */
+/** Appium connection/settings (defaults: 127.0.0.1 : 4723 /wd/hub). */
 export interface AppiumOptions {
   host?: string;
   port?: number;
   path?: string;
+  /**
+   * Install the platform Appium driver automatically when NativeProof starts Appium and the driver
+   * is missing. Defaults to true; set false when CI/device-farm setup owns driver provisioning.
+   */
+  autoInstallDrivers?: boolean;
+  /**
+   * For iOS projects with no explicit `appium:deviceName`/`appium:udid`, use the booted simulator.
+   * Defaults to true so generated projects do not pin a simulator model the machine may not have.
+   */
+  autoSelectBootedSimulator?: boolean;
 }
 
 /** One device target — the NativeProof analogue of a Playwright project. */
@@ -57,6 +68,66 @@ export function defaultCapabilities(platform: "android" | "ios"): Record<string,
   return platform === "android"
     ? { platformName: "Android", "appium:automationName": "UiAutomator2" }
     : { platformName: "iOS", "appium:automationName": "XCUITest" };
+}
+
+export interface IosSimulator {
+  name: string;
+  udid: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function bootedIosSimulatorFromSimctl(raw: string): IosSimulator | null {
+  const parsed = JSON.parse(raw) as unknown;
+  if (!isRecord(parsed) || !isRecord(parsed.devices)) return null;
+  for (const devices of Object.values(parsed.devices)) {
+    if (!Array.isArray(devices)) continue;
+    for (const device of devices) {
+      if (!isRecord(device)) continue;
+      if (device.state !== "Booted" || device.isAvailable === false) continue;
+      if (typeof device.name !== "string" || typeof device.udid !== "string") continue;
+      return { name: device.name, udid: device.udid };
+    }
+  }
+  return null;
+}
+
+function bootedIosSimulator(): IosSimulator | null {
+  try {
+    return bootedIosSimulatorFromSimctl(
+      execFileSync("xcrun", ["simctl", "list", "devices", "booted", "-j"], {
+        encoding: "utf8",
+        timeout: 3000,
+      }),
+    );
+  } catch {
+    return null;
+  }
+}
+
+function hasCapability(capabilities: Record<string, unknown> | undefined, name: string): boolean {
+  return capabilities?.[name] !== undefined;
+}
+
+function hostDeviceDefaults(config: RunnerConfig, project: DeviceProject): Record<string, unknown> {
+  if (project.platform !== "ios") return {};
+  if (config.appium?.autoSelectBootedSimulator === false) return {};
+  if (
+    hasCapability(project.capabilities, "appium:udid") ||
+    hasCapability(project.capabilities, "appium:deviceName")
+  ) {
+    return {};
+  }
+
+  const simulator = bootedIosSimulator();
+  return simulator
+    ? {
+        "appium:deviceName": simulator.name,
+        "appium:udid": simulator.udid,
+      }
+    : {};
 }
 
 /** The device/run config the CLI turns into a WebdriverIO run. */
@@ -158,7 +229,13 @@ export function buildWdioConfig(
     path: config.appium?.path ?? "/wd/hub",
     specs: resolveSpecs(config, project, env, cwd),
     maxInstances: 1,
-    capabilities: [{ ...defaultCapabilities(project.platform), ...project.capabilities }],
+    capabilities: [
+      {
+        ...defaultCapabilities(project.platform),
+        ...hostDeviceDefaults(config, project),
+        ...project.capabilities,
+      },
+    ],
     framework: "mocha",
     reporters: ["spec"],
     mochaOpts: { ui: "bdd", timeout: config.mochaTimeout ?? 240_000 },

@@ -73,14 +73,14 @@ npm run test:e2e
 - **One config** — `nativeproof.config.ts` owns device projects, app paths, artifacts,
   Appium/WebdriverIO tuning, and any app-specific `native.navigate` / `native.launch` hooks.
 - **Cross-platform** — the same spec runs on Android (UiAutomator2) and iOS (XCUITest).
-- **One command** — `nativeproof` resolves your config, ensures Appium is up, and runs the suite.
+- **One command** — `nativeproof` resolves your config, installs the missing Appium platform driver,
+  ensures Appium is up, and runs the suite.
 - **TypeScript-first**, strict, with evidence (redacted screenshots + page source) for an
   auditable green run.
 
 ## Requirements
 
 - **Node.js ≥ 20**
-- **Appium 3** + the platform driver(s): `uiautomator2` (Android) and/or `xcuitest` (iOS, macOS only)
 - **Android:** Android SDK (platform-tools + emulator) and JDK 17
 - **iOS:** macOS with Xcode + Command Line Tools
 - A **debug / E2E build** of the app under test (`.apk` for Android, `.app`/`.ipa` for iOS)
@@ -89,18 +89,11 @@ npm run test:e2e
 
 ```bash
 npm i -D nativeproof
-
-# install the Appium driver(s) you need
-npx appium driver install uiautomator2   # Android
-npx appium driver install xcuitest        # iOS (macOS only)
-
-# optional: verify the toolchain is wired up
-npx appium driver doctor uiautomator2
 ```
 
 ## Quick start
 
-Scaffold the starting files with one command, then fill in the app path and the app-owned route hook:
+Scaffold the starting files with one command, then onboard a built app artifact:
 
 ```bash
 npx nativeproof init --android
@@ -110,9 +103,22 @@ npx nativeproof init --ios
 # same scaffold shortcut if you prefer an init-specific bin
 npx nativeproof-init --android
 npx nativeproof-init --ios
+
+# point nativeproof.config.ts at your real built app
+npx nativeproof-onboard /path/to/app-debug.apk
+npx nativeproof-onboard /path/to/MyApp.app
 ```
 
-Then four steps from zero to a green run on Android — or set it all up by hand:
+`nativeproof-onboard <path>` accepts an Android `.apk`, an iOS simulator `.app`, or a native app repo
+directory that already contains a built `.apk`/`.app`. It updates `nativeproof.config.ts` so app
+control stays in config. If a repo has no built artifact, it fails clearly and asks you to build the
+app or pass the artifact path.
+
+On the first run, NativeProof installs the missing Appium driver for the selected platform before
+starting Appium. For iOS generated projects, NativeProof uses the booted simulator when no
+`appium:deviceName` or `appium:udid` is pinned in `nativeproof.config.ts`.
+
+Then a few steps from zero to a green run on Android — or set it all up by hand:
 
 **1. Configure** — one `nativeproof.config.ts` at the project root owns the app/device control:
 
@@ -136,12 +142,16 @@ export { expect };
 export default defineConfig({
   testDir: "tests",
   artifacts: { dir: ".e2e-artifacts" },
+  appium: {
+    autoInstallDrivers: true,
+    autoSelectBootedSimulator: true,
+  },
   projects: [
     {
       name: "android",
       platform: "android",
       capabilities: {
-        "appium:app": "./app/build/outputs/apk/debug/app-debug.apk",
+        "appium:app": "/path/to/app-debug.apk",
         "appium:deviceName": "Android Emulator",
       },
     },
@@ -221,6 +231,10 @@ export { expect };
 export default defineConfig({
   testDir: "tests",
   artifacts: { dir: ".e2e-artifacts" },
+  appium: {
+    autoInstallDrivers: true,
+    autoSelectBootedSimulator: true,
+  },
   projects: [
     {
       name: "android",
@@ -235,7 +249,6 @@ export default defineConfig({
       platform: "ios",
       capabilities: {
         "appium:app": "./build/ios/MyApp.app",
-        "appium:deviceName": "iPhone 15",
       },
     },
   ],
@@ -253,17 +266,16 @@ export default defineConfig({
    export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
    export JAVA_HOME="$(/usr/libexec/java_home -v 17)"  # JDK 17
    ```
-2. **Driver:** `npx appium driver install uiautomator2`.
-3. **Emulator.** Create an AVD (Android Studio → Device Manager, or `avdmanager`) and boot it:
+2. **Emulator.** Create an AVD (Android Studio → Device Manager, or `avdmanager`) and boot it:
    ```bash
    emulator -avd Pixel_7_API_34 -no-window -no-audio &
    adb wait-for-device
    adb devices            # should list the emulator
    ```
-4. **App build.** Set `projects[].capabilities["appium:app"]` in `nativeproof.config.ts` to your
+3. **App build.** Set `projects[].capabilities["appium:app"]` in `nativeproof.config.ts` to your
    debug/E2E `.apk` (or use `appium:appPackage` + `appium:appActivity` for an already-installed
    build).
-5. **Mock host.** From an emulator, the host machine is reachable at **`10.0.2.2`** — build your
+4. **Mock host.** From an emulator, the host machine is reachable at **`10.0.2.2`** — build your
    E2E app so its backend base URL is `http://10.0.2.2:18113` (the mock server's port). Bind the
    mock with `host: "0.0.0.0"` so the device can reach it (a real device uses your Mac's LAN IP,
    e.g. `http://192.168.1.20:18113`). Then `mock.route(...)` and `expect(mock)` see the traffic.
@@ -278,28 +290,22 @@ export default defineConfig({
    xcodebuild -version          # confirms the toolchain is wired up
    sudo xcodebuild -license accept
    ```
-2. **Driver:** `npx appium driver install xcuitest`. On the first run it builds
-   **WebDriverAgent** (the on-device agent Appium drives). For the simulator this is automatic;
-   for a **real device** you must sign WDA once — set `appium:xcodeOrgId` (your Apple Team ID)
-   and `appium:xcodeSigningId` ("Apple Development"), or open
-   `node_modules/appium-xcuitest-driver/.../WebDriverAgent.xcodeproj` in Xcode and select a
-   signing team. Give the first launch room with `appium:wdaLaunchTimeout`.
-3. **Simulator.** List and boot one (Xcode → Settings → Components installs runtimes):
+2. **Simulator.** List and boot one (Xcode → Settings → Components installs runtimes):
    ```bash
    xcrun simctl list devices            # names + UDIDs of installed simulators
-   xcrun simctl boot "iPhone 15"        # or boot by UDID
+   xcrun simctl boot "iPhone 16"        # or boot by UDID
    open -a Simulator                    # optional: watch it run
    ```
-   Match `appium:deviceName` / `appium:platformVersion` to a simulator that exists, or pin a
-   specific one with `appium:udid`.
-4. **App build.**
+   Generated configs use the booted simulator automatically. Pin `appium:deviceName` or
+   `appium:udid` only when you want a specific simulator/device.
+3. **App build.**
    - **Simulator:** set `projects[].capabilities["appium:app"]` in `nativeproof.config.ts` to a
      simulator-built `.app` (an `arm64`/`x86_64` simulator binary, not a device build), e.g.
      `app/ios/MyApp.app`.
    - **Real device:** set `projects[].capabilities["appium:app"]` to a signed `.ipa`, set
      `appium:udid`, and use a provisioning profile that covers both the app and WebDriverAgent.
    - **Already installed:** skip `appium:app` and set `appium:bundleId` instead.
-5. **Mock host.** The simulator shares the host's network, so the backend base URL is
+4. **Mock host.** The simulator shares the host's network, so the backend base URL is
    `http://127.0.0.1:18113` (the mock server's port). A **real device** must reach your Mac by
    its LAN IP instead — bind the mock with `host: "0.0.0.0"` so both ends use the same interface.
 
@@ -740,8 +746,10 @@ One command, in the spirit of `playwright test`:
 ```bash
 nativeproof init --android          # scaffold config, package script and sample spec
 nativeproof init --ios              # same, for an iOS project
+nativeproof onboard /path/to/app.apk # update/scaffold config with a built app artifact
 nativeproof-init --android          # init-specific bin alias
 nativeproof-init --ios              # init-specific bin alias
+nativeproof-onboard /path/to/app.apk # onboard-specific bin alias
 nativeproof                          # auto-discovers nativeproof.config.ts, runs the suite
 nativeproof --platform android       # or: --platform ios
 nativeproof --android                # shorthand for --platform android
@@ -752,10 +760,11 @@ nativeproof --no-appium              # use an Appium server you started yourself
 nativeproof --help
 ```
 
-`nativeproof` discovers `nativeproof.config.ts`, ensures an
-Appium server is reachable (starting one with `--relaxed-security` unless `--no-appium`), and runs
-the suite with `PLATFORM` / `SPEC` / `NATIVEPROOF_PROJECT` set for you. Appium host/port/path live
-in `nativeproof.config.ts` under `appium`. A device or emulator must already be running — the mobile
+`nativeproof` discovers `nativeproof.config.ts`, installs the missing Appium platform driver when
+NativeProof owns the local Appium server, ensures Appium is reachable (starting one with
+`--relaxed-security` unless `--no-appium`), and runs the suite with `PLATFORM` / `SPEC` /
+`NATIVEPROOF_PROJECT` set for you. Appium host/port/path and the auto-provisioning switches live in
+`nativeproof.config.ts` under `appium`. A device or emulator must already be running — the mobile
 analogue of needing a display.
 
 ## CI
@@ -773,7 +782,6 @@ jobs:
       - uses: actions/setup-node@v5
         with: { node-version: 24 }
       - run: npm ci
-      - run: npx appium driver install uiautomator2
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -791,8 +799,7 @@ jobs:
       - uses: actions/setup-node@v5
         with: { node-version: 24 }
       - run: npm ci
-      - run: npx appium driver install xcuitest
-      - run: xcrun simctl boot "iPhone 15" || true
+      - run: xcrun simctl boot "iPhone 16" || true
       - run: npx nativeproof --platform ios
 ```
 
@@ -812,7 +819,7 @@ The framework's own unit suite (`npm test`) needs **no device** and runs anywher
 | `projects` | `DeviceProject[]` | — | device targets; each `{ name, platform, capabilities }` |
 | `testDir` | `string` | `"tests"` | directory holding the specs |
 | `testMatch` | `string` | `"**/*.spec.ts"` | glob within `testDir` |
-| `appium` | `{ host?, port?, path? }` | `127.0.0.1` : `4723` `/wd/hub` | Appium connection |
+| `appium` | `{ host?, port?, path?, autoInstallDrivers?, autoSelectBootedSimulator? }` | local Appium, auto install/select on | Appium connection + setup control |
 | `artifacts` | `{ dir? }` | `.e2e-artifacts` | screenshot/source output |
 | `mochaTimeout` | `number` | `240000` | per-test timeout (ms) |
 
@@ -850,6 +857,7 @@ The framework's own unit suite (`npm test`) needs **no device** and runs anywher
 | Symptom | Likely cause / fix |
 |---|---|
 | `Appium is not reachable …` | No device, or `--no-appium` set without a server. Boot the emulator/simulator; drop `--no-appium` to let NativeProof start Appium. |
+| Appium driver install fails | NativeProof tried to install `uiautomator2`/`xcuitest` and the host toolchain is missing or offline. Fix the Android SDK/Xcode issue, or run `npx appium driver install <driver>` yourself and retry. |
 | `no nativeproof.config.ts found` | Run from the project root, or run `nativeproof init --ios` / `nativeproof init --android`. |
 | "No specs found" | Specs must match `testDir`/`testMatch` (default `tests/**/*.spec.ts`), or pass `--spec`. |
 | App can't reach the mock | Emulator → use `10.0.2.2`; real device → your machine's LAN IP. Bind the mock with `host: "0.0.0.0"`. |

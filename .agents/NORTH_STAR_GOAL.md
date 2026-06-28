@@ -5,8 +5,15 @@ NativeProof should be Playwright-feeling native E2E, not a new test framework.
 The core promise is:
 
 ```sh
-npx nativeproof init --ios
+npx nativeproof-init --ios
 # or
+npx nativeproof-init --android
+```
+
+The package command remains equivalent:
+
+```sh
+npx nativeproof init --ios
 npx nativeproof init --android
 ```
 
@@ -111,7 +118,7 @@ it("should be able to log in", async () => {
 
 ## Current Direction
 
-Make `nativeproof init --ios|--android` produce a minimal, readable, working project where all
+Make `nativeproof-init --ios|--android` produce a minimal, readable, working project where all
 device/app control is in `nativeproof.config.ts`, and the generated test shows direct
 `native.*` interactions plus plain `expect`.
 

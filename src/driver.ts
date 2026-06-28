@@ -46,16 +46,31 @@ export function wdioDriver(): Driver {
       }),
     pause: (ms: number) => browser.pause(ms),
     tapAt: (x: number, y: number) => tapAt(x, y),
-    typeText: (text: string) => browser.keys(text),
-    clearText: async () => {
-      const activeElement = await browser.getActiveElement();
-      const elementId = elementIdFromProtocolResponse(activeElement);
-      if (!elementId) {
-        throw new Error("Could not resolve the active text element to clear it");
+    typeText: async (text: string) => {
+      if (browser.isAndroid) {
+        await browser.keys(text);
+        return;
       }
-      await browser.elementClear(elementId);
+      await browser.elementSendKeys(
+        await activeElementId("Could not resolve the active text element to type into it"),
+        text,
+      );
+    },
+    clearText: async () => {
+      await browser.elementClear(
+        await activeElementId("Could not resolve the active text element to clear it"),
+      );
     },
   };
+}
+
+async function activeElementId(errorMessage: string): Promise<string> {
+  const activeElement = await browser.getActiveElement();
+  const elementId = elementIdFromProtocolResponse(activeElement);
+  if (!elementId) {
+    throw new Error(errorMessage);
+  }
+  return elementId;
 }
 
 function elementIdFromProtocolResponse(response: unknown): string | null {

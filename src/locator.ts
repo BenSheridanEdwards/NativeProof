@@ -97,6 +97,33 @@ export interface TapOptions extends WaitOptions {
 const DEFAULTS = { timeout: 10_000, interval: 250 };
 const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+function nodeAttribute(node: string, attribute: string): string | undefined {
+  const value = new RegExp(`${attribute}="([^"]*)"`).exec(node)?.[1];
+  return value === undefined ? undefined : decodeXmlEntities(value);
+}
+
+function nodeIsChecked(node: string): boolean {
+  const checked = nodeAttribute(node, "checked");
+  if (checked !== undefined) return /^(?:true|1)$/i.test(checked);
+
+  const value = nodeAttribute(node, "value");
+  if (value !== undefined) {
+    if (/^(?:true|1|checked|selected)$/i.test(value)) return true;
+    if (/^(?:false|0|unchecked|unselected)$/i.test(value)) return false;
+  }
+
+  const traits = nodeAttribute(node, "traits");
+  if (traits && /\b(?:selected|checked)\b/i.test(traits)) return true;
+
+  const label = nodeAttribute(node, "label");
+  if (label) {
+    if (/\bunchecked\b/i.test(label)) return false;
+    if (/\bchecked\b/i.test(label)) return true;
+  }
+
+  return false;
+}
+
 /**
  * Poll `produce` until `done(value)` holds or the timeout elapses, returning the
  * last value either way (callers decide what an unmet condition means). The interval
@@ -286,10 +313,10 @@ export class Locator {
     await this.driver.typeText(text);
   }
 
-  /** True if the matched node is a checked checkbox/switch (`checked="true"`). */
+  /** True if the matched checkbox/switch/custom control is checked. */
   async isChecked(): Promise<boolean> {
     const node = this.pick(await this.matchedNodes());
-    return node !== null && /\bchecked="true"/.test(node);
+    return node !== null && nodeIsChecked(node);
   }
 
   /** True if the matched node is present and not `enabled="false"` (matches Playwright's default-enabled). */

@@ -4,6 +4,19 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.7
+
+iOS checkbox semantics for custom controls.
+
+**Fixed**
+
+- `getByRole("checkbox")` now recognises iOS checkbox-like buttons whose accessible name identifies
+  them as checkboxes. This covers SwiftUI/custom controls that XCUITest exposes as
+  `XCUIElementTypeButton` rather than `XCUIElementTypeSwitch`.
+- `Locator.isChecked()` / `expect(locator).toBeChecked()` now understand iOS checked state exposed
+  through `value="1"`, selected traits, or checked/unchecked accessibility labels, in addition to
+  Android `checked="true"`.
+
 ## 0.10.6
 
 Semantic role locators for readable native specs.

@@ -1,6 +1,6 @@
 {
   "name": "nativeproof",
-  "version": "0.10.6",
+  "version": "0.10.7",
   "license": "MIT",
   "type": "module",
   "description": "Playwright-feeling native mobile E2E for Appium/WebdriverIO with runner-native tests, locators, expect, fixtures, and evidence.",

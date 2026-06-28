@@ -492,6 +492,11 @@ anchor's element — so a control beside a label is addressed by the label, not 
 `page(driver).getByRole("checkbox").near(page(driver).getByText("Wi-Fi"))`. Compose with `.check()` /
 `expect(locator).toBeChecked()`.
 
+Some iOS apps expose custom checkbox controls as `XCUIElementTypeButton` nodes rather than native
+switches. If the accessible name identifies the node as a checkbox, `getByRole("checkbox")` still
+matches it, and `toBeChecked()` understands iOS checked state from `value`, selected traits, and
+checked/unchecked labels.
+
 `tap()` resolves the element's bounds from the page source and taps the centre — a coordinate
 tap that works even on Compose / SwiftUI nodes Appium reports as non-clickable.
 

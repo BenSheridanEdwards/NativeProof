@@ -4,6 +4,20 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.10.10
+
+Named role locators for Compose-labelled controls.
+
+**Fixed**
+
+- `getByRole(role, { name })` now matches common Android Compose control shapes where the visible
+  label is exposed on a child/sibling `text` or `content-desc` node inside the role node's bounds.
+  This lets readable specs use direct locators such as `getByRole("button", { name: "Search" })`
+  and `getByRole("textfield", { name: /email/i })` instead of falling back to text taps or
+  `.near(...)` for those controls.
+- Named role matching still rejects same-named text outside the control bounds, so an unrelated label
+  cannot satisfy a role locator.
+
 ## 0.10.9
 
 Playwright-style text replacement for native fields.

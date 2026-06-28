@@ -153,6 +153,28 @@ function nodeAccessibleNameMatches(
   return accessibleNameAttributes(platform).some((attribute) => attributeValueMatches(node, attribute, name));
 }
 
+function nodeBoundsContain(outer: Bounds, inner: Bounds): boolean {
+  return outer.x1 <= inner.x1 && outer.x2 >= inner.x2 && outer.y1 <= inner.y1 && outer.y2 >= inner.y2;
+}
+
+function namedNodesInSource(source: string, platform: "android" | "ios", name: string | RegExp): string[] {
+  return [...source.matchAll(/<[^>]*>/g)]
+    .map((m) => m[0])
+    .filter((node) => nodeAccessibleNameMatches(node, platform, name));
+}
+
+// Compose/SwiftUI often expose a control's visible label on a child/sibling node while the native
+// role lives on a separate node with the same bounds. Treat an in-bounds label as the control name.
+function nodeContainsNamedDescendantOrSibling(node: string, namedNodes: readonly string[]): boolean {
+  const nodeBounds = parseNodeBounds(node);
+  if (!nodeBounds) return false;
+
+  return namedNodes.some((namedNode) => {
+    const namedBounds = parseNodeBounds(namedNode);
+    return namedBounds !== null && nodeBoundsContain(nodeBounds, namedBounds);
+  });
+}
+
 /**
  * Element classes/types that back a semantic role, per platform — Android exposes a widget
  * `class`, iOS an XCUITest `type`. Matched as a substring, so framework variants
@@ -203,7 +225,14 @@ export function nodesForRole(
         nodeAccessibleNameMatches(node, platform, /checkbox/i)
       );
     });
-  return name === undefined ? nodes : nodes.filter((node) => nodeAccessibleNameMatches(node, platform, name));
+  if (name === undefined) return nodes;
+
+  const namedNodes = namedNodesInSource(source, platform, name);
+  return nodes.filter(
+    (node) =>
+      nodeAccessibleNameMatches(node, platform, name) ||
+      nodeContainsNamedDescendantOrSibling(node, namedNodes),
+  );
 }
 
 /** True if any element exposes `attribute` with a value matching `value` (string exact or RegExp). */

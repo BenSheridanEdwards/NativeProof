@@ -182,6 +182,38 @@ test("by.role with name matches the role and accessible name together", async ()
   await expect(AcceptAgreementCheckbox).toBeChecked();
 });
 
+test("by.role with name matches Android Compose controls labelled by child nodes", async () => {
+  const driver = new FakeDriver(
+    '<node class="android.view.View" clickable="true" enabled="false" bounds="[0,0][300,80]">' +
+      '<node class="android.widget.TextView" text="Search" clickable="false" enabled="true" bounds="[120,20][180,60]" />' +
+      '<node class="android.widget.Button" text="" clickable="false" enabled="true" bounds="[0,0][300,80]" />' +
+      "</node>" +
+      '<node class="android.widget.EditText" text="" bounds="[0,120][300,200]">' +
+      '<node class="android.view.View" content-desc="Email address" bounds="[0,120][300,200]" />' +
+      "</node>",
+  );
+
+  const SearchButton = new Locator(driver, by.role("button", { name: "Search" }));
+  const EmailAddressField = new Locator(driver, by.role("textfield", { name: /email address/i }));
+
+  assert.equal(await SearchButton.isVisible(), true);
+  await expect(SearchButton).toBeDisabled();
+  assert.equal((await SearchButton.bounds())?.centerY, 40);
+
+  assert.equal(await EmailAddressField.isVisible(), true);
+  assert.equal((await EmailAddressField.bounds())?.centerY, 160);
+});
+
+test("by.role with name does not borrow unrelated visible text outside the control bounds", async () => {
+  const driver = new FakeDriver(
+    '<node class="android.widget.TextView" text="Search" bounds="[400,0][520,80]" />' +
+      '<node class="android.widget.Button" text="" bounds="[0,0][300,80]" />',
+  );
+
+  const SearchButton = new Locator(driver, by.role("button", { name: "Search" }));
+  assert.equal(await SearchButton.isVisible(), false);
+});
+
 test("iOS checkbox-like buttons can be checked through semantic checkbox locators", async () => {
   let checked = false;
   const driver: Driver = {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -12,6 +12,7 @@ import {
   helpText,
   loadNativeProofConfig,
   main,
+  type NativeBuildCommandRunner,
   onboard,
   parseArgs,
   resolveRunner,
@@ -376,6 +377,87 @@ test("detectOnboardTarget explains native app repos that have no built artifact"
 
     assert.throws(() => detectOnboardTarget(androidRepo), /Android project detected.*no built \.apk/);
     assert.throws(() => detectOnboardTarget(iosRepo), /iOS project detected.*no built \.app/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("onboard builds and stages an iOS project when no built app exists", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-ios-build-"));
+  try {
+    const iosRepo = path.join(dir, "ios", "wordly-mobile-ios");
+    mkdirSync(path.join(iosRepo, "Wordly.xcodeproj"), { recursive: true });
+    const calls: Array<{ command: string; args: readonly string[]; cwd: string | undefined }> = [];
+    const runCommand: NativeBuildCommandRunner = (command, args, options = {}) => {
+      calls.push({ command, args, cwd: options.cwd });
+      if (args.includes("-list")) {
+        return {
+          code: 0,
+          stdout: JSON.stringify({
+            project: {
+              name: "Wordly",
+              schemes: ["DotLottie", "Wordly", "Wordly Dev", "WordlyTests"],
+            },
+          }),
+          stderr: "",
+        };
+      }
+
+      const derivedDataPath = args[args.indexOf("-derivedDataPath") + 1];
+      if (typeof derivedDataPath !== "string") {
+        throw new Error("expected -derivedDataPath in xcodebuild args");
+      }
+      mkdirSync(path.join(derivedDataPath, "Build", "Products", "Debug-iphonesimulator", "Wordly.app"), {
+        recursive: true,
+      });
+      return { code: 65, stdout: "", stderr: "script phase failed after app build" };
+    };
+
+    const result = onboard(dir, "./ios/wordly-mobile-ios", { runCommand });
+    const buildCall = calls.find((call) => !call.args.includes("-list"));
+    assert.ok(buildCall, "runs xcodebuild build");
+    assert.equal(buildCall.command, "xcodebuild");
+    assert.ok(buildCall.args.includes("-project"));
+    assert.ok(buildCall.args.includes(path.join(iosRepo, "Wordly.xcodeproj")));
+    assert.ok(buildCall.args.includes("-quiet"));
+    assert.ok(buildCall.args.includes("-scheme"));
+    assert.equal(buildCall.args[buildCall.args.indexOf("-scheme") + 1], "Wordly Dev");
+    assert.ok(buildCall.args.includes("-sdk"));
+    assert.equal(buildCall.args[buildCall.args.indexOf("-sdk") + 1], "iphonesimulator");
+    assert.ok(buildCall.args.includes("-packageCachePath"));
+    assert.ok(buildCall.args.includes("CODE_SIGNING_ALLOWED=NO"));
+    assert.equal(result.target.platform, "ios");
+    assert.equal(result.target.appPath, "./build/ios/Wordly.app");
+    assert.ok(existsSync(path.join(dir, "build", "ios", "Wordly.app")));
+    assert.match(
+      readFileSync(path.join(dir, "nativeproof.config.ts"), "utf8"),
+      /"appium:app": "\.\/build\/ios\/Wordly\.app"/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("onboard reports an iOS project build that produces no simulator app", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-ios-build-fail-"));
+  try {
+    const iosRepo = path.join(dir, "ios", "wordly-mobile-ios");
+    mkdirSync(path.join(iosRepo, "Wordly.xcodeproj"), { recursive: true });
+    const runCommand: NativeBuildCommandRunner = (_command, args) => {
+      if (args.includes("-list")) {
+        return {
+          code: 0,
+          stdout: JSON.stringify({ project: { name: "Wordly", schemes: ["Wordly Dev"] } }),
+          stderr: "",
+        };
+      }
+      return { code: 65, stdout: "", stderr: "build failed before product" };
+    };
+
+    assert.throws(
+      () => onboard(dir, "./ios/wordly-mobile-ios", { runCommand }),
+      /iOS project build did not produce a simulator \.app.*xcodebuild exited 65/s,
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

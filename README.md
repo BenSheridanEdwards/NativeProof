@@ -83,7 +83,7 @@ npm run test:e2e
 - **Node.js ≥ 20**
 - **Android:** Android SDK (platform-tools + emulator) and JDK 17
 - **iOS:** macOS with Xcode + Command Line Tools
-- A **debug / E2E build** of the app under test (`.apk` for Android, `.app`/`.ipa` for iOS)
+- Your native app project or a debug / E2E app artifact (`.apk` for Android, `.app` for iOS)
 
 ## Install
 
@@ -93,7 +93,7 @@ npm i -D nativeproof
 
 ## Quick start
 
-Scaffold the starting files with one command, then onboard a built app artifact:
+Scaffold the starting files with one command, then onboard your app:
 
 ```bash
 npx nativeproof init --android
@@ -104,15 +104,17 @@ npx nativeproof init --ios
 npx nativeproof-init --android
 npx nativeproof-init --ios
 
-# point nativeproof.config.ts at your real built app
+# point nativeproof.config.ts at your real app
+npx nativeproof-onboard /path/to/ios-app-repo
 npx nativeproof-onboard /path/to/app-debug.apk
 npx nativeproof-onboard /path/to/MyApp.app
 ```
 
 `nativeproof-onboard <path>` accepts an Android `.apk`, an iOS simulator `.app`, or a native app repo
-directory that already contains a built `.apk`/`.app`. It updates `nativeproof.config.ts` so app
-control stays in config. If a repo has no built artifact, it fails clearly and asks you to build the
-app or pass the artifact path.
+directory. For iOS repos, NativeProof detects a top-level `.xcodeproj` / `.xcworkspace`, builds a
+Debug simulator app, stages it under `./build/ios`, and updates `nativeproof.config.ts` so app
+control stays in config. Android repo paths currently need a built `.apk` in the repo or a direct
+`.apk` path.
 
 On the first run, NativeProof installs the missing Appium driver for the selected platform before
 starting Appium. For iOS generated projects, NativeProof uses the booted simulator when no
@@ -746,7 +748,7 @@ One command, in the spirit of `playwright test`:
 ```bash
 nativeproof init --android          # scaffold config, package script and sample spec
 nativeproof init --ios              # same, for an iOS project
-nativeproof onboard /path/to/app.apk # update/scaffold config with a built app artifact
+nativeproof onboard /path/to/ios-app # build/stage iOS or update/scaffold config with an app artifact
 nativeproof-init --android          # init-specific bin alias
 nativeproof-init --ios              # init-specific bin alias
 nativeproof-onboard /path/to/app.apk # onboard-specific bin alias

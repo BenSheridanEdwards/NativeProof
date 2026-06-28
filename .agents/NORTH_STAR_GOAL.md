@@ -10,9 +10,10 @@ npx nativeproof-init --ios
 npx nativeproof-init --android
 ```
 
-For an existing project with a built app, the onboarding promise is:
+For an existing project, the onboarding promise is:
 
 ```sh
+npx nativeproof-onboard /path/to/ios-app-repo
 npx nativeproof-onboard /path/to/MyApp.app
 # or
 npx nativeproof-onboard /path/to/app-debug.apk
@@ -23,6 +24,7 @@ The package command remains equivalent:
 ```sh
 npx nativeproof init --ios
 npx nativeproof init --android
+npx nativeproof onboard /path/to/ios-app-repo
 npx nativeproof onboard /path/to/MyApp.app
 npx nativeproof onboard /path/to/app-debug.apk
 ```
@@ -37,10 +39,13 @@ After that, the user should have a minimal runnable native E2E project:
 - booted iOS simulator selection when no explicit simulator/device is pinned
 - no runner archaeology
 
-`nativeproof-onboard <path>` should point `nativeproof.config.ts` at the supplied built app artifact.
-It may detect a built `.app` or `.apk` inside a native app repo, but it must not pretend to know
-app-owned build commands. If no built artifact exists, it should fail clearly and tell the user to
-build the app or pass the artifact path.
+`nativeproof-onboard <path>` should point `nativeproof.config.ts` at a runnable local app artifact.
+For iOS repos, NativeProof should own the standard simulator onboarding path: detect a top-level
+`.xcodeproj` / `.xcworkspace`, choose a shared app scheme, run a Debug `iphonesimulator` build,
+stage the produced `.app`, and put that staged path in config. If the app needs custom setup,
+NativeProof should fail with concrete build evidence instead of pretending the project is ready.
+Android repo onboarding may still require a built `.apk` until NativeProof owns the equivalent
+Gradle path.
 
 Tests should look like tests, not framework plumbing:
 

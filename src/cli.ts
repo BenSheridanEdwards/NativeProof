@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -142,7 +144,7 @@ export function helpText(): string {
     "  nativeproof [test] [options]   run the suite (default)",
     "  nativeproof init --ios         scaffold nativeproof.config.ts + a sample spec for iOS",
     "  nativeproof init --android     scaffold nativeproof.config.ts + a sample spec for Android",
-    "  nativeproof onboard <path>     point nativeproof.config.ts at a built .app or .apk",
+    "  nativeproof onboard <path>     point nativeproof.config.ts at an app artifact or iOS project",
     "  nativeproof-init --ios         same init shortcut, useful from package-manager bins",
     "  nativeproof-init --android     same init shortcut for Android",
     "  nativeproof-onboard <path>     onboard shortcut, useful from package-manager bins",
@@ -456,6 +458,252 @@ function hasIosProjectMarker(root: string): boolean {
   );
 }
 
+export interface NativeBuildCommandResult {
+  code: number;
+  stdout: string;
+  stderr: string;
+}
+
+export interface NativeBuildCommandOptions {
+  cwd?: string | undefined;
+  stdio?: "pipe" | "inherit" | undefined;
+}
+
+export type NativeBuildCommandRunner = (
+  command: string,
+  args: readonly string[],
+  options?: NativeBuildCommandOptions,
+) => NativeBuildCommandResult;
+
+function outputToString(output: string | Buffer | null | undefined): string {
+  if (typeof output === "string") return output;
+  return output ? output.toString("utf8") : "";
+}
+
+const runNativeBuildCommand: NativeBuildCommandRunner = (command, args, options = {}) => {
+  const result = spawnSync(command, args, {
+    cwd: options.cwd,
+    encoding: "utf8",
+    stdio: options.stdio === "inherit" ? "inherit" : ["ignore", "pipe", "pipe"],
+  });
+  return {
+    code: result.status ?? (result.error ? 1 : 0),
+    stdout: outputToString(result.stdout),
+    stderr: [outputToString(result.stderr), result.error?.message ?? ""].filter(Boolean).join("\n"),
+  };
+};
+
+interface IosProjectDescriptor {
+  kind: "project" | "workspace";
+  path: string;
+  name: string;
+}
+
+interface IosBuildPlan {
+  descriptor: IosProjectDescriptor;
+  scheme: string;
+}
+
+function stripXcodeExtension(name: string): string {
+  return name.replace(/\.(?:xcodeproj|xcworkspace)$/i, "");
+}
+
+function findIosProjectDescriptors(root: string): IosProjectDescriptor[] {
+  const workspaces: IosProjectDescriptor[] = [];
+  const projects: IosProjectDescriptor[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name.endsWith(".xcworkspace") && entry.name !== "Pods.xcworkspace") {
+      workspaces.push({
+        kind: "workspace",
+        path: path.join(root, entry.name),
+        name: stripXcodeExtension(entry.name),
+      });
+    }
+    if (entry.name.endsWith(".xcodeproj")) {
+      projects.push({
+        kind: "project",
+        path: path.join(root, entry.name),
+        name: stripXcodeExtension(entry.name),
+      });
+    }
+  }
+  return [...workspaces, ...projects];
+}
+
+function xcodebuildContainerArgs(descriptor: IosProjectDescriptor): string[] {
+  return descriptor.kind === "workspace" ? ["-workspace", descriptor.path] : ["-project", descriptor.path];
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function schemesFromXcodebuildList(raw: string): string[] {
+  const parsed = JSON.parse(raw) as unknown;
+  if (!isRecord(parsed)) return [];
+  const container = isRecord(parsed.project)
+    ? parsed.project
+    : isRecord(parsed.workspace)
+      ? parsed.workspace
+      : {};
+  return stringArray(container.schemes);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isTestScheme(scheme: string): boolean {
+  return /(?:tests?|uitests)$/i.test(scheme.replace(/\s+/g, ""));
+}
+
+export function selectIosScheme(schemes: readonly string[], projectName: string): string {
+  const appSchemes = schemes.filter((scheme) => !isTestScheme(scheme));
+  const candidates = appSchemes.length > 0 ? appSchemes : schemes;
+  const projectPattern = new RegExp(escapeRegExp(projectName), "i");
+  const devPattern = /\bdev(?:elopment)?\b/i;
+  const devScheme = candidates.find((scheme) => projectPattern.test(scheme) && devPattern.test(scheme));
+  if (devScheme) return devScheme;
+
+  const exactProjectScheme = candidates.find((scheme) => scheme.toLowerCase() === projectName.toLowerCase());
+  if (exactProjectScheme) return exactProjectScheme;
+
+  const namedProjectScheme = candidates.find((scheme) => projectPattern.test(scheme));
+  if (namedProjectScheme) return namedProjectScheme;
+
+  const first = candidates[0];
+  if (!first) {
+    throw new Error("nativeproof onboard: iOS project has no shared Xcode schemes");
+  }
+  return first;
+}
+
+function resolveIosBuildPlan(sourcePath: string, runCommand: NativeBuildCommandRunner): IosBuildPlan {
+  const descriptors = findIosProjectDescriptors(sourcePath);
+  const failures: string[] = [];
+  for (const descriptor of descriptors) {
+    const result = runCommand("xcodebuild", [...xcodebuildContainerArgs(descriptor), "-list", "-json"], {
+      cwd: sourcePath,
+    });
+    if (result.code !== 0) {
+      failures.push(`${path.basename(descriptor.path)}: xcodebuild -list exited ${result.code}`);
+      continue;
+    }
+    let schemes: string[] = [];
+    try {
+      schemes = schemesFromXcodebuildList(result.stdout);
+    } catch {
+      failures.push(`${path.basename(descriptor.path)}: xcodebuild -list did not return JSON`);
+      continue;
+    }
+    if (schemes.length === 0) {
+      failures.push(`${path.basename(descriptor.path)}: no shared Xcode schemes`);
+      continue;
+    }
+    return { descriptor, scheme: selectIosScheme(schemes, descriptor.name) };
+  }
+
+  const detail = failures.length > 0 ? `\n${failures.map((failure) => `- ${failure}`).join("\n")}` : "";
+  throw new Error(`nativeproof onboard: could not find a buildable iOS scheme in ${sourcePath}.${detail}`);
+}
+
+function shellArg(value: string): string {
+  return /^[A-Za-z0-9_./:=+-]+$/.test(value) ? value : JSON.stringify(value);
+}
+
+function stageIosAppForOnboarding(appPath: string, cwd: string): string {
+  const stagedPath = path.join(cwd, "build", "ios", path.basename(appPath));
+  if (path.resolve(stagedPath) === path.resolve(appPath)) return appPath;
+  rmSync(stagedPath, { recursive: true, force: true });
+  mkdirSync(path.dirname(stagedPath), { recursive: true });
+  cpSync(appPath, stagedPath, { recursive: true });
+  return stagedPath;
+}
+
+export function buildIosProjectForOnboarding(
+  sourcePath: string,
+  cwd: string,
+  runCommand: NativeBuildCommandRunner = runNativeBuildCommand,
+): OnboardTarget {
+  const plan = resolveIosBuildPlan(sourcePath, runCommand);
+  const derivedDataPath = path.join(cwd, ".nativeproof", "ios", "DerivedData");
+  const sourcePackagesPath = path.join(cwd, ".nativeproof", "ios", "SourcePackages");
+  const packageCachePath = path.join(cwd, ".nativeproof", "ios", "PackageCache");
+  mkdirSync(derivedDataPath, { recursive: true });
+  mkdirSync(sourcePackagesPath, { recursive: true });
+  mkdirSync(packageCachePath, { recursive: true });
+
+  const args = [
+    ...xcodebuildContainerArgs(plan.descriptor),
+    "-quiet",
+    "-scheme",
+    plan.scheme,
+    "-configuration",
+    "Debug",
+    "-sdk",
+    "iphonesimulator",
+    "-destination",
+    "generic/platform=iOS Simulator",
+    "-derivedDataPath",
+    derivedDataPath,
+    "-clonedSourcePackagesDirPath",
+    sourcePackagesPath,
+    "-packageCachePath",
+    packageCachePath,
+    "-disablePackageRepositoryCache",
+    "-skipPackagePluginValidation",
+    "-skipMacroValidation",
+    "CODE_SIGNING_ALLOWED=NO",
+    "CODE_SIGNING_REQUIRED=NO",
+    "build",
+  ];
+  console.log(`nativeproof: building iOS simulator app with scheme "${plan.scheme}" …`);
+  const result = runCommand("xcodebuild", args, { cwd: sourcePath, stdio: "inherit" });
+  const builtApp = discoverBuiltArtifacts(derivedDataPath, "ios")[0];
+  if (!builtApp) {
+    const command = `xcodebuild ${args.map(shellArg).join(" ")}`;
+    throw new Error(
+      `nativeproof onboard: iOS project build did not produce a simulator .app (xcodebuild exited ${result.code}).\nCommand: ${command}`,
+    );
+  }
+
+  const stagedAppPath = stageIosAppForOnboarding(builtApp.path, cwd);
+  if (result.code !== 0) {
+    console.warn(
+      `nativeproof: xcodebuild exited ${result.code}, but produced ${pathForConfig(stagedAppPath, cwd)}; continuing with that app.`,
+    );
+  }
+  return { platform: "ios", appPath: stagedAppPath, sourcePath };
+}
+
+export interface OnboardOptions {
+  platform?: InitPlatform | undefined;
+  runCommand?: NativeBuildCommandRunner | undefined;
+}
+
+export function resolveOnboardTarget(
+  inputPath: string,
+  options: OnboardOptions = {},
+  cwd: string = process.cwd(),
+): OnboardTarget {
+  try {
+    return detectOnboardTarget(inputPath, options, cwd);
+  } catch (error) {
+    const sourcePath = path.resolve(cwd, inputPath);
+    const requested = options.platform;
+    const shouldBuildIos =
+      existsSync(sourcePath) &&
+      isDirectory(sourcePath) &&
+      hasIosProjectMarker(sourcePath) &&
+      (requested === "ios" || (!requested && !hasAndroidProjectMarker(sourcePath)));
+    if (shouldBuildIos) {
+      return buildIosProjectForOnboarding(sourcePath, cwd, options.runCommand ?? runNativeBuildCommand);
+    }
+    throw error;
+  }
+}
+
 export function detectOnboardTarget(
   inputPath: string,
   options: { platform?: InitPlatform | undefined } = {},
@@ -601,10 +849,10 @@ function ensurePackage(
 export function onboard(
   cwd: string = process.cwd(),
   inputPath: string,
-  options: { platform?: InitPlatform | undefined } = {},
+  options: OnboardOptions = {},
   io: ScaffoldIo = diskIo,
 ): OnboardResult {
-  const target = detectOnboardTarget(inputPath, options, cwd);
+  const target = resolveOnboardTarget(inputPath, options, cwd);
   const appPath = pathForConfig(target.appPath, cwd);
   const configPath = findConfigFile(cwd);
   let created: string[] = [];
@@ -631,7 +879,7 @@ export function onboard(
 export function onboardCommand(
   cwd: string = process.cwd(),
   inputPath: string,
-  options: { platform?: InitPlatform | undefined } = {},
+  options: OnboardOptions = {},
 ): number {
   const { target, created, skipped, updated } = onboard(cwd, inputPath, options);
   for (const file of created) console.log(`nativeproof: created ${file}`);
@@ -883,7 +1131,7 @@ export async function main(
   if (args.command === "onboard") {
     if (!args.onboardPath) {
       throw new Error(
-        "nativeproof onboard requires a path to an iOS .app, Android .apk, or built app project",
+        "nativeproof onboard requires a path to an iOS .app, iOS project, Android .apk, or built app project",
       );
     }
     return onboardCommand(process.cwd(), args.onboardPath, { platform: args.platform ?? undefined });

@@ -26,7 +26,7 @@ export type Selector =
   | { readonly by: "id"; readonly value: string | RegExp }
   | { readonly by: "testId"; readonly value: string | RegExp }
   | { readonly by: "label"; readonly value: string | RegExp }
-  | { readonly by: "role"; readonly value: string };
+  | { readonly by: "role"; readonly value: string; readonly name?: string | RegExp };
 
 /**
  * Build selectors Playwright-style. The cross-platform attribute each maps to is resolved
@@ -44,11 +44,16 @@ export const by = {
   /** The accessibility label (Android `content-desc`, iOS `label`). */
   label: (value: string | RegExp): Selector => ({ by: "label", value }),
   /** A semantic role, matched by element class/type — `checkbox`, `switch`, `button`, `textfield`, `image`. */
-  role: (value: string): Selector => ({ by: "role", value }),
+  role: (value: string, options: { name?: string | RegExp } = {}): Selector =>
+    options.name === undefined ? { by: "role", value } : { by: "role", value, name: options.name },
 } as const;
 
 export function describeSelector(selector: Selector): string {
   const value = selector.value instanceof RegExp ? String(selector.value) : JSON.stringify(selector.value);
+  if (selector.by === "role" && selector.name !== undefined) {
+    const name = selector.name instanceof RegExp ? String(selector.name) : JSON.stringify(selector.name);
+    return `by.role(${value}, { name: ${name} })`;
+  }
   return `by.${selector.by}(${value})`;
 }
 
@@ -133,7 +138,7 @@ export class Locator {
   /** Node tags this selector matches in `source`, in document order (role- or attribute-based). */
   private nodesIn(source: string): string[] {
     return this.selector.by === "role"
-      ? nodesForRole(source, this.selector.value, this.driver.platform)
+      ? nodesForRole(source, this.selector.value, this.driver.platform, this.selector.name)
       : nodesForAttribute(source, this.attribute(), this.selector.value);
   }
 

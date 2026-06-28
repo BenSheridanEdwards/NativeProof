@@ -132,6 +132,27 @@ export function nodesForAttribute(source: string, attribute: string, value: stri
   return nodes;
 }
 
+function attributeValueMatches(node: string, attribute: string, value: string | RegExp): boolean {
+  const values = [...node.matchAll(new RegExp(`${attribute}="([^"]*)"`, "g"))].map((match) =>
+    decodeXmlEntities(match[1] ?? ""),
+  );
+  if (typeof value === "string") return values.some((candidate) => candidate === value);
+  const test = value.global ? new RegExp(value.source, value.flags.replace("g", "")) : value;
+  return values.some((candidate) => test.test(candidate));
+}
+
+function accessibleNameAttributes(platform: "android" | "ios"): readonly string[] {
+  return platform === "ios" ? ["label", "value"] : ["content-desc", "text"];
+}
+
+function nodeAccessibleNameMatches(
+  node: string,
+  platform: "android" | "ios",
+  name: string | RegExp,
+): boolean {
+  return accessibleNameAttributes(platform).some((attribute) => attributeValueMatches(node, attribute, name));
+}
+
 /**
  * Element classes/types that back a semantic role, per platform — Android exposes a widget
  * `class`, iOS an XCUITest `type`. Matched as a substring, so framework variants
@@ -152,7 +173,12 @@ export const KNOWN_ROLES = Object.keys(ROLE_PATTERNS);
  * Every element whose class (Android) / type (iOS) backs `role`, in document order.
  * Throws on an unknown role, listing the supported set.
  */
-export function nodesForRole(source: string, role: string, platform: "android" | "ios"): string[] {
+export function nodesForRole(
+  source: string,
+  role: string,
+  platform: "android" | "ios",
+  name?: string | RegExp,
+): string[] {
   const patterns = ROLE_PATTERNS[role.toLowerCase()];
   if (!patterns) {
     throw new Error(
@@ -161,9 +187,10 @@ export function nodesForRole(source: string, role: string, platform: "android" |
   }
   const attribute = platform === "ios" ? "type" : "class";
   const pattern = escapeRegExp(platform === "ios" ? patterns.ios : patterns.android);
-  return [...source.matchAll(new RegExp(`<[^>]*${attribute}="[^"]*${pattern}[^"]*"[^>]*>`, "g"))].map(
+  const nodes = [...source.matchAll(new RegExp(`<[^>]*${attribute}="[^"]*${pattern}[^"]*"[^>]*>`, "g"))].map(
     (m) => m[0],
   );
+  return name === undefined ? nodes : nodes.filter((node) => nodeAccessibleNameMatches(node, platform, name));
 }
 
 /** True if any element exposes `attribute` with a value matching `value` (string exact or RegExp). */

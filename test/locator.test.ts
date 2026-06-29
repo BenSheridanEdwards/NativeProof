@@ -274,6 +274,40 @@ test("iOS checkbox-like buttons can be checked through semantic checkbox locator
   await expect(AcceptAgreementCheckbox).toBeChecked();
 });
 
+test("iOS unlabeled square agreement buttons resolve as checkboxes near visible copy", async () => {
+  let checked = false;
+  const taps: Array<{ x: number; y: number }> = [];
+  const driver: Driver = {
+    platform: "ios",
+    async source() {
+      const checkbox = checked
+        ? '<XCUIElementTypeButton type="XCUIElementTypeButton" value="1" label="Selected" enabled="true" visible="true" x="43" y="704" width="24" height="25" traits="Selected, Button" />'
+        : '<XCUIElementTypeButton type="XCUIElementTypeButton" enabled="true" visible="true" x="43" y="704" width="24" height="25" />';
+      return (
+        checkbox +
+        '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" label="I have read and agreed to the" x="78" y="705" width="156" height="15" />' +
+        '<XCUIElementTypeButton type="XCUIElementTypeButton" label="Terms of Service" x="237" y="705" width="92" height="15" />' +
+        '<XCUIElementTypeButton type="XCUIElementTypeButton" label="Privacy Policy" x="102" y="723" width="76" height="15" />' +
+        '<XCUIElementTypeButton type="XCUIElementTypeButton" label="Accept" enabled="false" x="44" y="754" width="305" height="40" />'
+      );
+    },
+    async pause() {},
+    async tapAt(x, y) {
+      taps.push({ x, y });
+      checked = true;
+    },
+  };
+
+  const AcceptAgreementCheckbox = new Locator(driver, by.role("checkbox")).near(
+    new Locator(driver, by.text(/I have read and agreed/)),
+  );
+
+  assert.equal(await new Locator(driver, by.role("checkbox")).count(), 1);
+  await AcceptAgreementCheckbox.check();
+  await expect(AcceptAgreementCheckbox).toBeChecked();
+  assert.deepEqual(taps, [{ x: 55, y: 717 }]);
+});
+
 test("toBeEnabled / toBeDisabled read the enabled attribute", async () => {
   const driver = new FakeDriver(
     '<node content-desc="Submit" enabled="false" bounds="[0,0][100,40]" />' +

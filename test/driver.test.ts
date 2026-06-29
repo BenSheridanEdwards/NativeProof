@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { _setGlobal } from "@wdio/globals";
-import { wdioDriver } from "../src/driver.js";
+import { iosExactNodeXPath, iosNodeCanUseNativeClick, wdioDriver } from "../src/driver.js";
 
 const ELEMENT_ID = "element-6066-11e4-a52e-4f735466cecf";
 
@@ -53,6 +53,37 @@ function fakeBrowser(options: { isAndroid?: boolean; activeElementResponse?: unk
 
 afterEach(() => {
   globalThis._wdioGlobals?.delete("browser");
+});
+
+test("iosNodeCanUseNativeClick rejects XCUITest-hidden controls so tap can fall back", () => {
+  assert.equal(
+    iosNodeCanUseNativeClick(
+      '<XCUIElementTypeButton type="XCUIElementTypeButton" name="Turn on audio" label="Turn on audio" visible="false" x="16" y="720" width="361" height="41"/>',
+    ),
+    false,
+  );
+});
+
+test("iosExactNodeXPath keeps the matched button distinct from same-named text", () => {
+  const selector = iosExactNodeXPath(
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" name="Turn on audio" label="Turn on audio" enabled="true" visible="true" accessible="true" x="16" y="720" width="361" height="41" index="4" traits="Button"/>',
+  );
+
+  assert.equal(
+    selector,
+    "//*[@type='XCUIElementTypeButton' and @name='Turn on audio' and @label='Turn on audio' and @x='16' and @y='720' and @width='361' and @height='41']",
+  );
+});
+
+test("iosExactNodeXPath escapes apostrophes in accessible names", () => {
+  const selector = iosExactNodeXPath(
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" name="Speaker&apos;s audio" label="Speaker&apos;s audio" x="1" y="2" width="3" height="4"/>',
+  );
+
+  assert.equal(
+    selector,
+    `//*[@type='XCUIElementTypeButton' and @name=concat('Speaker', "'", 's audio') and @label=concat('Speaker', "'", 's audio') and @x='1' and @y='2' and @width='3' and @height='4']`,
+  );
 });
 
 test("wdioDriver types into the focused iOS element with Appium element send keys", async () => {

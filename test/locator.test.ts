@@ -244,6 +244,19 @@ test("by.role with name does not borrow unrelated visible text outside the contr
   assert.equal(await SearchButton.isVisible(), false);
 });
 
+test("by.role with name does not borrow an overlapping label when the control already has a name", async () => {
+  const driver = new FakeDriver(
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" name="home_speaker_option" label="I&apos;ll speak" x="48" y="438" width="297" height="159" />' +
+      '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Turn on audio" name="Turn on audio" label="Turn on audio" x="128" y="569" width="137" height="27" />' +
+      '<XCUIElementTypeButton type="XCUIElementTypeButton" name="Turn on audio" label="Turn on audio" x="16" y="720" width="361" height="41" />',
+  );
+  driver.platform = "ios";
+
+  const TurnOnAudioButton = new Locator(driver, by.role("button", { name: "Turn on audio" }));
+
+  assert.equal((await TurnOnAudioButton.bounds())?.centerY, 741);
+});
+
 test("iOS checkbox-like buttons can be checked through semantic checkbox locators", async () => {
   let checked = false;
   const driver: Driver = {

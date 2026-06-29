@@ -263,7 +263,7 @@ export function nodesForRole(
   return nodes.filter(
     (node) =>
       nodeAccessibleNameMatches(node, platform, name) ||
-      nodeContainsNamedDescendantOrSibling(node, namedNodes),
+      (!nodeHasAccessibleName(node, platform) && nodeContainsNamedDescendantOrSibling(node, namedNodes)),
   );
 }
 

@@ -1,0 +1,80 @@
+[0-0]                               <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="The laws of California, United States, excluding its conflicts of law rules, shall govern this Agreement and your use of the Application. Your use of the Application may also be subject to other local, state, national, or international laws." name="The laws of California, United States, excluding its conflicts of law rules, shall govern this Agreement and your use of the Application. Your use of the Application may also be subject to other local, state, national, or international laws." label="The laws of California, United States, excluding its conflicts of law rules, shall govern this Agreement and your use of the Application. Your use of the Application may also be subject to other local, state, national, or international laws." enabled="true" visible="false" accessible="true" x="44" y="7876" width="301" height="116" index="0" traits="StaticText"/>
+[0-0]                             </XCUIElementTypeOther>
+[0-0]                             <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="44" y="8006" width="305" height="78" index="63" traits="">
+[0-0]                               <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="This Agreement shall not be governed by the United Nations Convention on Contracts for the International Sale of Good." name="This Agreement shall not be governed by the United Nations Convention on Contracts for the International Sale of Good." label="This Agreement shall not be governed by the United Nations Convention on Contracts for the International Sale of Good." enabled="true" visible="false" accessible="true" x="44" y="8006" width="290" height="78" index="0" traits="StaticText"/>
+[0-0]                             </XCUIElementTypeOther>
+[0-0]                             <XCUIElementTypeOther type="XCUIElementTypeOther" value="3" name="19. Contact Information" label="19. Contact Information" enabled="true" visible="false" accessible="false" x="44" y="8098" width="305" height="21" index="64" traits="Header">
+[0-0]                               <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="19. Contact Information" name="19. Contact Information" label="19. Contact Information" enabled="true" visible="false" accessible="true" x="44" y="8098" width="172" height="21" index="0" traits="Header, StaticText"/>
+[0-0]                             </XCUIElementTypeOther>
+[0-0]                             <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="44" y="8133" width="305" height="59" index="65" traits="">
+[0-0]                               <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="If you have any questions about this Agreement, please contact us via email at contact@wordly.ai." name="If you have any questions about this Agreement, please contact us via email at contact@wordly.ai." label="If you have any questions about this Agreement, please contact us via email at contact@wordly.ai." enabled="true" visible="false" accessible="true" x="44" y="8133" width="297" height="59" index="0" traits="StaticText"/>
+[0-0]                             </XCUIElementTypeOther>
+[0-0]                             <XCUIElementTypeOther type="XCUIElementTypeOther" value="3" name="20. Entire Agreement" label="20. Entire Agreement" enabled="true" visible="false" accessible="false" x="44" y="8206" width="305" height="21" index="66" traits="Header">
+[0-0]                               <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="20. Entire Agreement" name="20. Entire Agreement" label="20. Entire Agreement" enabled="true" visible="false" accessible="true" x="44" y="8206" width="153" height="21" index="0" traits="Header, StaticText"/>
+[0-0]                             </XCUIElementTypeOther>
+[0-0]                             <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="44" y="8241" width="305" height="116" index="67" traits="">
+[0-0]                               <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="The Agreement constitutes the entire agreement between you and Wordly regarding your use of the Application and supersedes all prior and contemporaneous written or oral agreements between you and Wordly." name="The Agreement constitutes the entire agreement between you and Wordly regarding your use of the Application and supersedes all prior and contemporaneous written or oral agreements between you and Wordly." label="The Agreement constitutes the entire agreement between you and Wordly regarding your use of the Application and supersedes all prior and contemporaneous written or oral agreements between you and Wordly." enabled="true" visible="false" accessible="true" x="44" y="8241" width="304" height="116" index="0" traits="StaticText"/>
+[0-0]                             </XCUIElementTypeOther>
+[0-0]                             <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="44" y="8371" width="305" height="97" index="68" traits="">
+[0-0]                               <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="You may be subject to additional terms and conditions that apply when you use or purchase other Wordly's services, which Wordly will provide to you at the time of such use or purchase." name="You may be subject to additional terms and conditions that apply when you use or purchase other Wordly's services, which Wordly will provide to you at the time of such use or purchase." label="You may be subject to additional terms and conditions that apply when you use or purchase other Wordly's services, which Wordly will provide to you at the time of such use or purchase." enabled="true" visible="false" accessible="true" x="44" y="8371" width="299" height="97" index="0" traits="StaticText"/>
+[0-0]                             </XCUIElementTypeOther>
+[0-0]                           </XCUIElementTypeOther>
+[0-0]                         </XCUIElementTypeOther>
+[0-0]                       </XCUIElementTypeOther>
+[0-0]                     </XCUIElementTypeOther>
+[0-0]                   </XCUIElementTypeWebView>
+[0-0]                   <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Vertical scroll bar, 13 pages" label="Vertical scroll bar, 13 pages" enabled="true" visible="false" accessible="false" x="340" y="918" width="30" height="600" index="1" traits="Adjustable">
+[0-0]                     <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="367" y="1507" width="3" height="8" index="0" traits=""/>
+[0-0]                   </XCUIElementTypeOther>
+[0-0]                   <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Horizontal scroll bar, 1 page" label="Horizontal scroll bar, 1 page" enabled="true" visible="false" accessible="false" x="20" y="1484" width="353" height="31" index="2" traits="Adjustable">
+[0-0]                     <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="363" y="1511" width="7" height="4" index="0" traits=""/>
+[0-0]                   </XCUIElementTypeOther>
+[0-0]                   <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Vertical scroll bar, 13 pages" label="Vertical scroll bar, 13 pages" enabled="true" visible="false" accessible="false" x="340" y="918" width="30" height="600" index="3" traits="Adjustable">
+[0-0]                     <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="367" y="1507" width="3" height="8" index="0" traits=""/>
+[0-0]                   </XCUIElementTypeOther>
+[0-0]                   <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Horizontal scroll bar, 1 page" label="Horizontal scroll bar, 1 page" enabled="true" visible="false" accessible="false" x="20" y="1484" width="353" height="31" index="4" traits="Adjustable">
+[0-0]                     <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="363" y="1511" width="7" height="4" index="0" traits=""/>
+[0-0]                   </XCUIElementTypeOther>
+[0-0]                 </XCUIElementTypeWebView>
+[0-0]               </XCUIElementTypeWebView>
+[0-0]               <XCUIElementTypeButton type="XCUIElementTypeButton" value="1" name="checkmark" label="Selected" enabled="true" visible="false" accessible="false" x="44" y="1549" width="22" height="23" index="2" traits="Selected, Button"/>
+[0-0]               <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="I have read and agreed to the" name="I have read and agreed to the" label="I have read and agreed to the" enabled="true" visible="false" accessible="false" x="78" y="1557" width="156" height="15" index="3" traits="StaticText"/>
+[0-0]               <XCUIElementTypeButton type="XCUIElementTypeButton" name="Terms of Service" label="Terms of Service" enabled="true" visible="false" accessible="false" x="237" y="1549" width="92" height="15" index="4" traits="Button"/>
+[0-0]               <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="and" name="and" label="and" enabled="true" visible="false" accessible="false" x="78" y="1575" width="20" height="15" index="5" traits="StaticText"/>
+[0-0]               <XCUIElementTypeButton type="XCUIElementTypeButton" name="Privacy Policy" label="Privacy Policy" enabled="true" visible="false" accessible="false" x="102" y="1567" width="76" height="15" index="6" traits="Button"/>
+[0-0]               <XCUIElementTypeButton type="XCUIElementTypeButton" name="Accept" label="Accept" enabled="true" visible="false" accessible="false" x="44" y="1597" width="305" height="41" index="7" traits="Button"/>
+[0-0]             </XCUIElementTypeOther>
+[0-0]           </XCUIElementTypeOther>
+[0-0]         </XCUIElementTypeOther>
+[0-0]       </XCUIElementTypeOther>
+[0-0]     </XCUIElementTypeWindow>
+[0-0]   </XCUIElementTypeApplication>
+[0-0] </AppiumAUT>
+[0-0]
+[0-0] 2026-06-29T01:25:25.783Z INFO webdriver: COMMAND takeScreenshot()
+[0-0] 2026-06-29T01:25:25.783Z INFO webdriver: [GET] http://127.0.0.1:4723/wd/hub/session/40c386ec-d712-4c03-8487-d783d8002e0d/screenshot
+[0-0] 2026-06-29T01:25:25.865Z INFO webdriver: RESULT iVBORw0KGgoAAAANSUhEUgAABJoAAAn8CAIAAAAlcRxWAAAAAXNSR0IArs4c6...
+[0-0] 2026-06-29T01:25:25.868Z INFO webdriver: COMMAND deleteSession()
+[0-0] 2026-06-29T01:25:25.868Z INFO webdriver: [DELETE] http://127.0.0.1:4723/wd/hub/session/40c386ec-d712-4c03-8487-d783d8002e0d
+[0-0] 2026-06-29T01:25:26.961Z INFO webdriver: RESULT null
+[0-0] PASSED in iOS on iOS - file:///tests/example.spec.ts
+2026-06-29T01:25:27.077Z INFO @wdio/cli:launcher: Run onWorkerEnd hook
+
+ "spec" Reporter:
+------------------------------------------------------------------
+[Wordly.app iOS #0-0] Running: Wordly.app on iOS
+[Wordly.app iOS #0-0] Session ID: 40c386ec-d712-4c03-8487-d783d8002e0d
+[Wordly.app iOS #0-0]
+[Wordly.app iOS #0-0] » tests/example.spec.ts
+[Wordly.app iOS #0-0] Wordly first-run agreement
+[Wordly.app iOS #0-0]    ✓ should accept the agreement and reach role selection
+[Wordly.app iOS #0-0]
+[Wordly.app iOS #0-0] 1 passing (6.1s)
+
+
+Spec Files:	 1 passed, 1 total (100% completed) in 00:00:11
+
+2026-06-29T01:25:27.077Z INFO @wdio/local-runner: Shutting down spawned worker
+2026-06-29T01:25:27.330Z INFO @wdio/local-runner: Waiting for 0 to shut down gracefully
+2026-06-29T01:25:27.331Z INFO @wdio/local-runner: shutting down
+2026-06-29T01:25:27.332Z INFO @wdio/cli:launcher: Run onComplete hook

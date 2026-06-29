@@ -322,6 +322,50 @@ test("near() resolves the match nearest an anchor — the checkbox in a label's 
   assert.equal(await none.isVisible(), false);
 });
 
+test("directional relative locators resolve controls on the requested side of an anchor", async () => {
+  const driver = new FakeDriver(
+    '<node text="Volume" bounds="[100,100][220,140]" />' +
+      '<node class="android.widget.Button" content-desc="minus" bounds="[40,100][80,140]" />' +
+      '<node class="android.widget.Button" content-desc="plus" bounds="[240,100][280,140]" />' +
+      '<node class="android.widget.Button" content-desc="up" bounds="[140,40][180,80]" />' +
+      '<node class="android.widget.Button" content-desc="down" bounds="[140,160][180,200]" />',
+  );
+  const buttons = new Locator(driver, by.role("button"));
+  const label = new Locator(driver, by.text("Volume"));
+
+  await buttons.leftOf(label).tap();
+  await buttons.rightOf(label).tap();
+  await buttons.above(label).tap();
+  await buttons.below(label).tap();
+
+  assert.deepEqual(driver.taps, [
+    { x: 60, y: 120 },
+    { x: 260, y: 120 },
+    { x: 160, y: 60 },
+    { x: 160, y: 180 },
+  ]);
+});
+
+test("leftOf() can target an unnamed iOS agreement control instead of closer policy links", async () => {
+  const driver = new FakeDriver(
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" enabled="true" visible="true" x="43" y="704" width="24" height="25" />' +
+      '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" label="I have read and agreed to the" x="78" y="705" width="156" height="15" />' +
+      '<XCUIElementTypeButton type="XCUIElementTypeButton" name="Terms of Service" label="Terms of Service" x="237" y="705" width="92" height="15" />' +
+      '<XCUIElementTypeButton type="XCUIElementTypeButton" name="Privacy Policy" label="Privacy Policy" x="102" y="723" width="76" height="15" />' +
+      '<XCUIElementTypeButton type="XCUIElementTypeButton" name="Accept" label="Accept" enabled="false" x="44" y="754" width="305" height="40" />',
+  );
+  driver.platform = "ios";
+
+  const AgreementCheckbox = new Locator(driver, by.role("button")).leftOf(
+    new Locator(driver, by.text(/I have read and agreed/i)),
+    { maxDistance: 120 },
+  );
+
+  await AgreementCheckbox.tap();
+
+  assert.deepEqual(driver.taps, [{ x: 55, y: 717 }]);
+});
+
 test("textContent prefers a non-empty label over an empty value on iOS (and decodes entities)", async () => {
   const driver = new FakeDriver('<node label="Save &amp; Close" value="" bounds="[0,0][120,60]" />');
   driver.platform = "ios";

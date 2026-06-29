@@ -1,0 +1,7 @@
+861:[0-0] 2026-06-29T01:16:34.434Z INFO webdriver: COMMAND findElement("accessibility id", "Privacy Policy")
+863:[0-0] 2026-06-29T01:16:34.434Z INFO webdriver: DATA {"using":"accessibility id","value":"Privacy Policy"}
+868:[0-0] 2026-06-29T01:16:34.577Z INFO webdriver: COMMAND elementClick("0E000000-0000-0000-85FD-000000000000")
+3122:Error: expect(by.role("button", { name: "Accept" })).to be enabled — assertion not met
+3140:[Wordly.app iOS #0-0] 1 failing (17s)
+3144:[Wordly.app iOS #0-0] Error: expect(by.role("button", { name: "Accept" })).to be enabled — assertion not met
+3149:Spec Files:	 0 passed, 1 failed, 1 total (100% completed) in 00:00:30

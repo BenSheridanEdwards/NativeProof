@@ -15,6 +15,9 @@ iOS project onboarding that builds and stages a simulator app.
   the newest produced `.app` at `./build/ios/<AppName>.app`.
 - iOS onboarding uses NativeProof-owned build cache paths under `.nativeproof/ios` so fresh E2E
   projects do not need hand-written Xcode output paths before they can write a spec.
+- Locators now support directional relative filters with `.leftOf()`, `.rightOf()`, `.above()`, and
+  `.below()` for native layouts where nearby semantic text is not enough to identify an unnamed
+  control.
 
 **Changed**
 

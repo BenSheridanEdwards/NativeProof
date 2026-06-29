@@ -1,0 +1,24 @@
+import { expect, native } from "../nativeproof.config";
+import { captureState } from "nativeproof";
+
+describe("Wordly first-run agreement", () => {
+  it("should accept the agreement and reach role selection", async () => {
+    await native.navigate("/login");
+
+    await expect(native.getByText(/Wordly End-User License Agreement/)).toBeVisible();
+
+    // Wordly currently exposes the agreement checkbox as an unnamed iOS button.
+    const AgreementCheckbox = native
+      .getByRole("button")
+      .leftOf(native.getByText(/I have read and agreed/i), { maxDistance: 120 });
+    const AcceptButton = native.getByRole("button", { name: "Accept" });
+
+    await expect(AcceptButton).toBeDisabled();
+    await AgreementCheckbox.tap();
+    await expect(AcceptButton).toBeEnabled();
+    await AcceptButton.tap();
+
+    await expect(native.getByText("How would you like to use Wordly?")).toBeVisible();
+    await captureState("wordly-ios-eula-accepted-role-selection");
+  });
+});

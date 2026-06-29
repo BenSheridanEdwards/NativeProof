@@ -1,0 +1,68 @@
+
+> nativeproof@0.10.14 prepare
+> npm run build
+
+
+> nativeproof@0.10.14 build
+> tsc -p tsconfig.build.json
+
+npm notice
+npm notice 📦  nativeproof@0.10.14
+npm notice Tarball Contents
+npm notice 22.2kB CHANGELOG.md
+npm notice 1.1kB LICENSE
+npm notice 7.4kB README.md
+npm notice 1.5kB dist/adb.d.ts
+npm notice 3.5kB dist/adb.js
+npm notice 5.5kB dist/app.d.ts
+npm notice 1.8kB dist/app.js
+npm notice 5.0kB dist/cli.d.ts
+npm notice 35.5kB dist/cli.js
+npm notice 5.6kB dist/config.d.ts
+npm notice 6.7kB dist/config.js
+npm notice 1.6kB dist/driver.d.ts
+npm notice 2.9kB dist/driver.js
+npm notice 995B dist/evidence.d.ts
+npm notice 2.6kB dist/evidence.js
+npm notice 2.7kB dist/expect.d.ts
+npm notice 5.4kB dist/expect.js
+npm notice 4.8kB dist/fixtures.d.ts
+npm notice 5.0kB dist/fixtures.js
+npm notice 622B dist/gestures.d.ts
+npm notice 1.7kB dist/gestures.js
+npm notice 2.2kB dist/harness.d.ts
+npm notice 1.4kB dist/harness.js
+npm notice 974B dist/index.d.ts
+npm notice 974B dist/index.js
+npm notice 2.5kB dist/ios.d.ts
+npm notice 2.9kB dist/ios.js
+npm notice 8.0kB dist/locator.d.ts
+npm notice 15.7kB dist/locator.js
+npm notice 792B dist/log.d.ts
+npm notice 970B dist/log.js
+npm notice 806B dist/mock-server.d.ts
+npm notice 4.3kB dist/mock-server.js
+npm notice 3.1kB dist/mock.d.ts
+npm notice 1.5kB dist/mock.js
+npm notice 2.1kB dist/native.d.ts
+npm notice 2.0kB dist/native.js
+npm notice 1.4kB dist/page.d.ts
+npm notice 904B dist/page.js
+npm notice 54B dist/runner-config.d.ts
+npm notice 1.1kB dist/runner-config.js
+npm notice 988B dist/runner.d.ts
+npm notice 1.2kB dist/runner.js
+npm notice 4.5kB dist/source.d.ts
+npm notice 11.3kB dist/source.js
+npm notice 2.1kB package.json
+npm notice Tarball Details
+npm notice name: nativeproof
+npm notice version: 0.10.14
+npm notice filename: nativeproof-0.10.14.tgz
+npm notice package size: 58.6 kB
+npm notice unpacked size: 197.8 kB
+npm notice shasum: 442c4174253b7dcd0c3313258abd111e6f02ba7c
+npm notice integrity: sha512-lv7RSQrCfPckE[...]dka2fH9j/WdvA==
+npm notice total files: 46
+npm notice
+nativeproof-0.10.14.tgz

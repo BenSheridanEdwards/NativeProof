@@ -1,0 +1,5 @@
+nativeproof: updated nativeproof.config.ts
+nativeproof: package.json already exists — skipped
+nativeproof: onboarded ios app at /Users/agents/Projects/nativeproof-wordly-ios-repo-onboard-proof/build/ios/Wordly.app
+
+Next: run `npm run test:e2e` or `nativeproof --ios`.

@@ -165,6 +165,7 @@ native.getByRole("checkbox", { name: /Accept Agreement/ });
 native.getByLabel("Email");
 native.getByTestId("login-button");
 native.getById("message-list");
+native.getByRole("button").leftOf(native.getByText(/I have read/i), { maxDistance: 120 });
 ```
 
 Useful assertions:

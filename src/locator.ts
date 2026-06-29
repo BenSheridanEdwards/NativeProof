@@ -97,6 +97,9 @@ export interface TapOptions extends WaitOptions {
 
 const DEFAULTS = { timeout: 10_000, interval: 250 };
 const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+type RelativeDirection = "leftOf" | "rightOf" | "above" | "below";
+type RelativeOptions = { maxDistance?: number };
+type Proximity = { anchor: Locator; maxDistance?: number; direction?: RelativeDirection };
 
 function nodeAttribute(node: string, attribute: string): string | undefined {
   const value = new RegExp(`${attribute}="([^"]*)"`).exec(node)?.[1];
@@ -123,6 +126,25 @@ function nodeIsChecked(node: string): boolean {
   }
 
   return false;
+}
+
+function boundsMatchDirection(
+  bounds: Bounds,
+  anchor: Bounds,
+  direction: RelativeDirection | undefined,
+): boolean {
+  switch (direction) {
+    case undefined:
+      return true;
+    case "leftOf":
+      return bounds.x2 <= anchor.x1;
+    case "rightOf":
+      return bounds.x1 >= anchor.x2;
+    case "above":
+      return bounds.y2 <= anchor.y1;
+    case "below":
+      return bounds.y1 >= anchor.y2;
+  }
 }
 
 /**
@@ -155,8 +177,8 @@ export class Locator {
     private readonly options: WaitOptions = {},
     /** When set, the locator resolves to the nth match (negative counts from the end). */
     private readonly index?: number,
-    /** When set, matches are ordered by proximity to the anchor (and filtered by maxDistance). */
-    private readonly proximity?: { anchor: Locator; maxDistance?: number },
+    /** When set, matches are ordered by proximity to the anchor and optionally direction-filtered. */
+    private readonly proximity?: Proximity,
   ) {}
 
   private attribute(): string {
@@ -172,17 +194,19 @@ export class Locator {
 
   /**
    * All node tags this selector matches in the current source — document order, or, when a
-   * `near` anchor is set, ordered nearest-first by bounds-centre distance (filtered by maxDistance).
+   * relative anchor is set, ordered nearest-first by bounds-centre distance (filtered by
+   * maxDistance and direction).
    */
   private async matchedNodes(): Promise<string[]> {
     const nodes = this.nodesIn(await this.driver.source());
     if (!this.proximity) return nodes;
     const anchor = await this.proximity.anchor.bounds();
     if (!anchor) return [];
-    const { maxDistance } = this.proximity;
+    const { direction, maxDistance } = this.proximity;
     return nodes
       .map((node) => ({ node, bounds: parseNodeBounds(node) }))
       .filter((entry): entry is { node: string; bounds: Bounds } => entry.bounds !== null)
+      .filter((entry) => boundsMatchDirection(entry.bounds, anchor, direction))
       .map((entry) => ({
         node: entry.node,
         distance: Math.hypot(entry.bounds.centerX - anchor.centerX, entry.bounds.centerY - anchor.centerY),
@@ -209,9 +233,39 @@ export class Locator {
    * native: `getByRole("checkbox").near(getByText("Wi-Fi"))` is the checkbox in the Wi-Fi row.
    * `maxDistance` (px) drops matches farther than that, so an absent control resolves to nothing.
    */
-  near(anchor: Locator, options: { maxDistance?: number } = {}): Locator {
-    const proximity =
-      options.maxDistance === undefined ? { anchor } : { anchor, maxDistance: options.maxDistance };
+  near(anchor: Locator, options: RelativeOptions = {}): Locator {
+    return this.relativeTo(anchor, options);
+  }
+
+  /** Scope to the match nearest, and entirely left of, `anchor`. */
+  leftOf(anchor: Locator, options: RelativeOptions = {}): Locator {
+    return this.relativeTo(anchor, options, "leftOf");
+  }
+
+  /** Scope to the match nearest, and entirely right of, `anchor`. */
+  rightOf(anchor: Locator, options: RelativeOptions = {}): Locator {
+    return this.relativeTo(anchor, options, "rightOf");
+  }
+
+  /** Scope to the match nearest, and entirely above, `anchor`. */
+  above(anchor: Locator, options: RelativeOptions = {}): Locator {
+    return this.relativeTo(anchor, options, "above");
+  }
+
+  /** Scope to the match nearest, and entirely below, `anchor`. */
+  below(anchor: Locator, options: RelativeOptions = {}): Locator {
+    return this.relativeTo(anchor, options, "below");
+  }
+
+  private relativeTo(anchor: Locator, options: RelativeOptions, direction?: RelativeDirection): Locator {
+    const proximity: Proximity =
+      options.maxDistance === undefined
+        ? direction === undefined
+          ? { anchor }
+          : { anchor, direction }
+        : direction === undefined
+          ? { anchor, maxDistance: options.maxDistance }
+          : { anchor, maxDistance: options.maxDistance, direction };
     return new Locator(this.driver, this.selector, this.options, this.index, proximity);
   }
 

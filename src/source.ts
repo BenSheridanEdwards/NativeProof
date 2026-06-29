@@ -153,6 +153,14 @@ function nodeAccessibleNameMatches(
   return accessibleNameAttributes(platform).some((attribute) => attributeValueMatches(node, attribute, name));
 }
 
+function nodeHasAccessibleName(node: string, platform: "android" | "ios"): boolean {
+  return accessibleNameAttributes(platform).some((attribute) =>
+    [...node.matchAll(new RegExp(`${attribute}="([^"]*)"`, "g"))].some(
+      (match) => decodeXmlEntities(match[1] ?? "").trim().length > 0,
+    ),
+  );
+}
+
 const ROLE_LABEL_BOUNDS_TOLERANCE_PX = 2;
 
 function nodeBoundsContain(outer: Bounds, inner: Bounds, tolerancePx = 0): boolean {
@@ -238,7 +246,7 @@ export function nodesForRole(
   return nodes.filter(
     (node) =>
       nodeAccessibleNameMatches(node, platform, name) ||
-      nodeContainsNamedDescendantOrSibling(node, namedNodes),
+      (!nodeHasAccessibleName(node, platform) && nodeContainsNamedDescendantOrSibling(node, namedNodes)),
   );
 }
 

@@ -1,6 +1,6 @@
 # NativeProof Agent Instructions
 
-Read `.agents/NORTH_STAR_GOAL.md` before changing this repository.
+Read `.agents/NORTH_STAR_GOAL.md` and `.agents/DEFINITION_OF_DONE.md` before changing this repository.
 
 The short version: NativeProof should be Playwright-feeling native E2E, not a new test framework.
 Prefer one-command setup, runner-native `describe`/`it`, direct `native.*` interactions, plain

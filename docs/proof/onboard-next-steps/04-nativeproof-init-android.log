@@ -1,0 +1,5 @@
+nativeproof: created nativeproof.config.ts
+nativeproof: created tests/example.spec.ts
+nativeproof: updated package.json
+
+Next: set the app path + native.navigate(...) in nativeproof.config.ts, then run `npm run test:e2e`.

@@ -1,0 +1,35 @@
+import { createNative, defineConfig, expect, wdioDriver } from "nativeproof";
+
+const driver = () => wdioDriver();
+
+export const native = createNative({
+  driver,
+  async navigate(route) {
+    // Keep app-specific routing here: deep links, reset flows, mock-backend state, etc.
+    if (route !== "/login") {
+      throw new Error(`Configure native.navigate(${JSON.stringify(route)}) in nativeproof.config.ts`);
+    }
+  },
+});
+
+export { expect };
+
+export default defineConfig({
+  testDir: "tests",
+  artifacts: { dir: ".e2e-artifacts" },
+  appium: {
+    autoInstallDrivers: true,
+    autoSelectBootedSimulator: true,
+  },
+  mochaTimeout: 240_000,
+  projects: [
+    {
+      name: "android",
+      platform: "android",
+      capabilities: {
+        "appium:app": "./app-debug.apk",
+        "appium:deviceName": "Android Emulator",
+      },
+    },
+  ],
+});

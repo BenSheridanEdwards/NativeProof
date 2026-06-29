@@ -43,7 +43,7 @@ From an iOS source checkout with a top-level `.xcodeproj` or `.xcworkspace`:
 ```bash
 npx nativeproof init --ios
 npx nativeproof onboard /path/to/ios-app-repo
-# edit tests/example.spec.ts
+# wire native.navigate(...) in nativeproof.config.ts and edit tests/example.spec.ts
 npx nativeproof --ios
 ```
 
@@ -60,7 +60,7 @@ From a simulator `.app` your app pipeline already built:
 ```bash
 npx nativeproof init --ios
 npx nativeproof onboard /path/to/MyApp.app
-# edit tests/example.spec.ts
+# wire native.navigate(...) in nativeproof.config.ts and edit tests/example.spec.ts
 npx nativeproof --ios
 ```
 
@@ -71,7 +71,7 @@ From a debug or E2E `.apk`:
 ```bash
 npx nativeproof init --android
 npx nativeproof onboard /path/to/app-debug.apk
-# edit tests/example.spec.ts
+# wire native.navigate(...) in nativeproof.config.ts and edit tests/example.spec.ts
 npx nativeproof --android
 ```
 

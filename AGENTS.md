@@ -7,6 +7,12 @@ Prefer one-command setup, runner-native `describe`/`it`, direct `native.*` inter
 `expect`, and one `nativeproof.config.ts` that owns all device/app control. Do not add or promote
 public `test.*` facades.
 
+## Simplicity Mode
+
+Use Ponytail for coding, review, refactor, and design tasks unless the user says
+otherwise. Default level: `full`: delete code, reuse existing patterns, and use
+stdlib or native platform features before adding abstractions or dependencies.
+
 ## PR Proof Law
 
 Before opening, updating, or marking a PR ready, read

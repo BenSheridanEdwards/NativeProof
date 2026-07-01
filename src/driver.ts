@@ -69,7 +69,16 @@ export function wdioDriver(): Driver {
       await browser.releaseActions();
     },
     clickNode: async (node: string) => {
-      if (browser.isAndroid || !iOSNodeLooksClickable(node)) return false;
+      if (browser.isAndroid || !iosNodeCanUseNativeClick(node)) return false;
+      const exactSelector = iosExactNodeXPath(node);
+      if (exactSelector) {
+        try {
+          await browser.$(exactSelector).click();
+          return true;
+        } catch {
+          /* Fall back to accessibility id below. */
+        }
+      }
       const name =
         nodeAttribute(node, "name") ?? nodeAttribute(node, "label") ?? nodeAttribute(node, "value");
       if (!name) return false;
@@ -98,9 +107,33 @@ export function wdioDriver(): Driver {
   };
 }
 
+export function iosNodeCanUseNativeClick(node: string): boolean {
+  return iOSNodeLooksClickable(node) && nodeAttribute(node, "visible") !== "false";
+}
+
+export function iosExactNodeXPath(node: string): string | null {
+  const type = nodeAttribute(node, "type");
+  if (!type || !iOSNodeLooksClickable(node)) return null;
+
+  const predicates = [`@type=${xpathLiteral(type)}`];
+  for (const attribute of ["name", "label", "value", "x", "y", "width", "height"] as const) {
+    const value = nodeAttribute(node, attribute);
+    if (value !== null) predicates.push(`@${attribute}=${xpathLiteral(value)}`);
+  }
+  return `//*[${predicates.join(" and ")}]`;
+}
+
 function nodeAttribute(node: string, name: string): string | null {
   const value = new RegExp(`\\b${name}="([^"]*)"`).exec(node)?.[1];
   return value ? decodeXmlEntities(value) : null;
+}
+
+function xpathLiteral(value: string): string {
+  if (!value.includes("'")) return `'${value}'`;
+  return `concat(${value
+    .split("'")
+    .flatMap((part, index) => (index === 0 ? [`'${part}'`] : [`"'"`, `'${part}'`]))
+    .join(", ")})`;
 }
 
 function iOSNodeLooksClickable(node: string): boolean {

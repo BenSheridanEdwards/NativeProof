@@ -153,6 +153,31 @@ function nodeAccessibleNameMatches(
   return accessibleNameAttributes(platform).some((attribute) => attributeValueMatches(node, attribute, name));
 }
 
+function nodeHasAccessibleName(node: string, platform: "android" | "ios"): boolean {
+  return accessibleNameAttributes(platform).some((attribute) =>
+    [...node.matchAll(new RegExp(`${attribute}="([^"]*)"`, "g"))].some(
+      (match) => decodeXmlEntities(match[1] ?? "").trim().length > 0,
+    ),
+  );
+}
+
+function isIosCheckboxButton(node: string): boolean {
+  if (!attributeValueMatches(node, "type", /XCUIElementTypeButton/)) return false;
+
+  const bounds = parseNodeBounds(node);
+  if (!bounds) return false;
+  const isSmallSquare =
+    bounds.width >= 16 &&
+    bounds.height >= 16 &&
+    bounds.width <= 56 &&
+    bounds.height <= 56 &&
+    Math.abs(bounds.width - bounds.height) <= 12;
+  if (!isSmallSquare) return false;
+
+  if (!nodeHasAccessibleName(node, "ios")) return true;
+  return nodeAccessibleNameMatches(node, "ios", /^(?:0|1|selected|unselected|checked|unchecked)$/i);
+}
+
 const ROLE_LABEL_BOUNDS_TOLERANCE_PX = 2;
 
 function nodeBoundsContain(outer: Bounds, inner: Bounds, tolerancePx = 0): boolean {
@@ -229,7 +254,7 @@ export function nodesForRole(
         platform === "ios" &&
         normalizedRole === "checkbox" &&
         attributeValueMatches(node, "type", /XCUIElementTypeButton/) &&
-        nodeAccessibleNameMatches(node, platform, /checkbox/i)
+        (nodeAccessibleNameMatches(node, platform, /checkbox/i) || isIosCheckboxButton(node))
       );
     });
   if (name === undefined) return nodes;
@@ -238,7 +263,7 @@ export function nodesForRole(
   return nodes.filter(
     (node) =>
       nodeAccessibleNameMatches(node, platform, name) ||
-      nodeContainsNamedDescendantOrSibling(node, namedNodes),
+      (!nodeHasAccessibleName(node, platform) && nodeContainsNamedDescendantOrSibling(node, namedNodes)),
   );
 }
 

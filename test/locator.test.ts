@@ -258,6 +258,19 @@ test("by.role with name does not borrow unrelated visible text outside the contr
   assert.equal(await SearchButton.isVisible(), false);
 });
 
+test("by.role with name does not borrow an overlapping label when the control already has a name", async () => {
+  const driver = new FakeDriver(
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" name="home_speaker_option" label="I&apos;ll speak" x="48" y="438" width="297" height="159" />' +
+      '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Turn on audio" name="Turn on audio" label="Turn on audio" x="128" y="569" width="137" height="27" />' +
+      '<XCUIElementTypeButton type="XCUIElementTypeButton" name="Turn on audio" label="Turn on audio" x="16" y="720" width="361" height="41" />',
+  );
+  driver.platform = "ios";
+
+  const TurnOnAudioButton = new Locator(driver, by.role("button", { name: "Turn on audio" }));
+
+  assert.equal((await TurnOnAudioButton.bounds())?.centerY, 741);
+});
+
 test("iOS checkbox-like buttons can be checked through semantic checkbox locators", async () => {
   let checked = false;
   const driver: Driver = {
@@ -286,6 +299,40 @@ test("iOS checkbox-like buttons can be checked through semantic checkbox locator
 
   await AcceptAgreementCheckbox.check();
   await expect(AcceptAgreementCheckbox).toBeChecked();
+});
+
+test("iOS unlabeled square agreement buttons resolve as checkboxes near visible copy", async () => {
+  let checked = false;
+  const taps: Array<{ x: number; y: number }> = [];
+  const driver: Driver = {
+    platform: "ios",
+    async source() {
+      const checkbox = checked
+        ? '<XCUIElementTypeButton type="XCUIElementTypeButton" value="1" label="Selected" enabled="true" visible="true" x="43" y="704" width="24" height="25" traits="Selected, Button" />'
+        : '<XCUIElementTypeButton type="XCUIElementTypeButton" enabled="true" visible="true" x="43" y="704" width="24" height="25" />';
+      return (
+        checkbox +
+        '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" label="I have read and agreed to the" x="78" y="705" width="156" height="15" />' +
+        '<XCUIElementTypeButton type="XCUIElementTypeButton" label="Terms of Service" x="237" y="705" width="92" height="15" />' +
+        '<XCUIElementTypeButton type="XCUIElementTypeButton" label="Privacy Policy" x="102" y="723" width="76" height="15" />' +
+        '<XCUIElementTypeButton type="XCUIElementTypeButton" label="Accept" enabled="false" x="44" y="754" width="305" height="40" />'
+      );
+    },
+    async pause() {},
+    async tapAt(x, y) {
+      taps.push({ x, y });
+      checked = true;
+    },
+  };
+
+  const AcceptAgreementCheckbox = new Locator(driver, by.role("checkbox")).near(
+    new Locator(driver, by.text(/I have read and agreed/)),
+  );
+
+  assert.equal(await new Locator(driver, by.role("checkbox")).count(), 1);
+  await AcceptAgreementCheckbox.check();
+  await expect(AcceptAgreementCheckbox).toBeChecked();
+  assert.deepEqual(taps, [{ x: 55, y: 717 }]);
 });
 
 test("toBeEnabled / toBeDisabled read the enabled attribute", async () => {

@@ -11,6 +11,12 @@ import { by, Locator } from "../src/locator.js";
 class FakeDriver implements Driver {
   platform: Platform = "android";
   readonly taps: Array<{ x: number; y: number }> = [];
+  readonly presses: Array<{
+    x: number;
+    y: number;
+    duration: number | undefined;
+    pointerId: string | undefined;
+  }> = [];
   readonly cleared: string[] = [];
   readonly typed: string[] = [];
   private readonly sources: string[];
@@ -29,6 +35,14 @@ class FakeDriver implements Driver {
 
   async tapAt(x: number, y: number): Promise<void> {
     this.taps.push({ x, y });
+  }
+
+  async pressAt(
+    x: number,
+    y: number,
+    options: { duration?: number; pointerId?: string } = {},
+  ): Promise<void> {
+    this.presses.push({ x, y, duration: options.duration, pointerId: options.pointerId });
   }
 
   async typeText(text: string): Promise<void> {
@@ -346,6 +360,27 @@ test("tap({ clickableAncestor: true }) taps the clickable parent of a non-clicka
     { x: 100, y: 100 },
     { x: 150, y: 200 },
   ]);
+});
+
+test("Locator.press presses and releases the locator centre through the driver", async () => {
+  const driver = new FakeDriver('<node text="Hold mic" bounds="[10,20][110,120]" />');
+  const loc = new Locator(driver, by.text("Hold mic"));
+
+  await loc.press({ duration: 1500, pointerId: "push-to-talk-finger" });
+
+  assert.deepEqual(driver.presses, [{ x: 60, y: 70, duration: 1500, pointerId: "push-to-talk-finger" }]);
+  assert.deepEqual(driver.taps, []);
+});
+
+test("Locator.press({ clickableAncestor: true }) presses the clickable parent", async () => {
+  const source =
+    '<node clickable="true" bounds="[0,0][300,400]">' +
+    '<node text="Hold me" clickable="false" bounds="[50,90][150,110]" /></node>';
+  const driver = new FakeDriver(source);
+
+  await new Locator(driver, by.text("Hold me")).press({ clickableAncestor: true });
+
+  assert.deepEqual(driver.presses, [{ x: 150, y: 200, duration: undefined, pointerId: undefined }]);
 });
 
 test("Locator.fill focuses, clears, then types replacement text via the driver", async () => {

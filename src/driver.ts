@@ -20,6 +20,8 @@ export interface Driver {
   pause(ms: number): Promise<void>;
   /** Tap an absolute screen coordinate. */
   tapAt(x: number, y: number): Promise<void>;
+  /** Press an absolute screen coordinate, hold briefly, then release. */
+  pressAt?(x: number, y: number, options?: { duration?: number; pointerId?: string }): Promise<void>;
   /** Click a matched native source node directly when the live driver can resolve it. */
   clickNode?(node: string): Promise<boolean>;
   /**
@@ -49,6 +51,23 @@ export function wdioDriver(): Driver {
       }),
     pause: (ms: number) => browser.pause(ms),
     tapAt: (x: number, y: number) => tapAt(x, y),
+    pressAt: async (x: number, y: number, options = {}) => {
+      const duration = options.duration ?? 500;
+      await browser.performActions([
+        {
+          type: "pointer",
+          id: options.pointerId ?? "nativeproof-finger",
+          parameters: { pointerType: "touch" },
+          actions: [
+            { type: "pointerMove", duration: 0, x, y },
+            { type: "pointerDown", button: 0 },
+            { type: "pause", duration },
+            { type: "pointerUp", button: 0 },
+          ],
+        },
+      ]);
+      await browser.releaseActions();
+    },
     clickNode: async (node: string) => {
       if (browser.isAndroid || !iOSNodeLooksClickable(node)) return false;
       const name =

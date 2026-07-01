@@ -10,6 +10,8 @@ iOS project onboarding that builds and stages a simulator app.
 
 **Added**
 
+- `Locator.press({ duration })` can press-and-release a matched native control without spelling out
+  WebDriver pointer actions in consumer specs.
 - `nativeproof onboard <path-to-ios-project>` can now detect a top-level `.xcodeproj` or
   `.xcworkspace`, choose an app-like shared scheme, run a Debug `iphonesimulator` build, and stage
   the newest produced `.app` at `./build/ios/<AppName>.app`.

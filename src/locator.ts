@@ -95,6 +95,13 @@ export interface TapOptions extends WaitOptions {
   clickableAncestor?: boolean;
 }
 
+export interface PressOptions extends TapOptions {
+  /** How long to hold the press before releasing, in milliseconds. */
+  duration?: number;
+  /** Stable pointer id for Appium/WebDriver action logs. */
+  pointerId?: string;
+}
+
 const DEFAULTS = { timeout: 10_000, interval: 250 };
 const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -282,6 +289,24 @@ export class Locator {
 
   /** Wait for the element, then tap its centre (a source-bounds coordinate tap). */
   async tap(options: TapOptions = {}): Promise<void> {
+    const target = await this.resolveTouchTarget(options);
+    if (this.driver.clickNode && (await this.driver.clickNode(target.node))) return;
+    await this.driver.tapAt(target.bounds.centerX, target.bounds.centerY);
+  }
+
+  /** Wait for the element, press its centre, hold briefly, then release. */
+  async press(options: PressOptions = {}): Promise<void> {
+    if (!this.driver.pressAt) {
+      throw new Error(`${describeSelector(this.selector)}.press(...) needs a driver that supports pressAt`);
+    }
+    const target = await this.resolveTouchTarget(options);
+    const pressOptions: { duration?: number; pointerId?: string } = {};
+    if (options.duration !== undefined) pressOptions.duration = options.duration;
+    if (options.pointerId !== undefined) pressOptions.pointerId = options.pointerId;
+    await this.driver.pressAt(target.bounds.centerX, target.bounds.centerY, pressOptions);
+  }
+
+  private async resolveTouchTarget(options: TapOptions = {}): Promise<{ node: string; bounds: Bounds }> {
     const opts: WaitOptions = { ...this.options, ...options, sleep: (ms) => this.driver.pause(ms) };
     const match = await waitUntil(
       async () => {
@@ -297,13 +322,13 @@ export class Locator {
         `${describeSelector(this.selector)} was not found to tap within ${opts.timeout ?? DEFAULTS.timeout}ms`,
       );
     }
-    if (this.driver.clickNode && (await this.driver.clickNode(match.node))) return;
-
     const bounds = match.bounds;
-    const target = options.clickableAncestor
-      ? smallestClickableAncestorBounds(await this.driver.source(), bounds)
-      : bounds;
-    await this.driver.tapAt(target.centerX, target.centerY);
+    return {
+      node: match.node,
+      bounds: options.clickableAncestor
+        ? smallestClickableAncestorBounds(await this.driver.source(), bounds)
+        : bounds,
+    };
   }
 
   /** Focus the field and clear its existing text. */

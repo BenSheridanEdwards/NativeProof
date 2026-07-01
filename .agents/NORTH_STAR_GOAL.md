@@ -1,0 +1,148 @@
+# NativeProof North Star
+
+NativeProof should be Playwright-feeling native E2E, not a new test framework.
+
+The core promise is:
+
+```sh
+npx nativeproof-init --ios
+# or
+npx nativeproof-init --android
+```
+
+For an existing project, the onboarding promise is:
+
+```sh
+npx nativeproof-onboard /path/to/ios-app-repo
+npx nativeproof-onboard /path/to/MyApp.app
+# or
+npx nativeproof-onboard /path/to/app-debug.apk
+```
+
+The package command remains equivalent:
+
+```sh
+npx nativeproof init --ios
+npx nativeproof init --android
+npx nativeproof onboard /path/to/ios-app-repo
+npx nativeproof onboard /path/to/MyApp.app
+npx nativeproof onboard /path/to/app-debug.apk
+```
+
+After that, the user should have a minimal runnable native E2E project:
+
+- `nativeproof.config.ts`
+- one readable example spec
+- npm scripts
+- sensible Appium/WebdriverIO/device/app/artifact defaults
+- automatic Appium platform-driver provisioning when NativeProof starts local Appium
+- booted iOS simulator selection when no explicit simulator/device is pinned
+- no runner archaeology
+
+`nativeproof-onboard <path>` should point `nativeproof.config.ts` at a runnable local app artifact.
+For iOS repos, NativeProof should own the standard simulator onboarding path: detect a top-level
+`.xcodeproj` / `.xcworkspace`, choose a shared app scheme, run a Debug `iphonesimulator` build,
+stage the produced `.app`, and put that staged path in config. If the app needs custom setup,
+NativeProof should fail with concrete build evidence instead of pretending the project is ready.
+Android repo onboarding may still require a built `.apk` until NativeProof owns the equivalent
+Gradle path.
+
+Tests should look like tests, not framework plumbing:
+
+```ts
+it("should be able to log in", async () => {
+  await native.navigate("/login");
+  await native.tap("Log in");
+
+  await expect(native.getByText("Welcome back")).toBeVisible();
+});
+```
+
+## Product Rules
+
+1. All control lives in `nativeproof.config.ts`.
+
+   Device selection, app paths, platform, capabilities, backend URL, artifacts, retries, timeouts,
+   spec globs, Appium driver provisioning, booted-simulator selection, and WebdriverIO escape
+   hatches belong in the config.
+
+2. Specs keep meaningful setup visible.
+
+   NativeProof may remove boring bootstrapping, but it must not hide the story setup a reader needs
+   to understand the test's starting state.
+
+3. Never abstract interaction or assertion behind domain helpers.
+
+   Avoid:
+
+   ```ts
+   await loginAsTestUser();
+   expectLoggedIn();
+   ```
+
+   Prefer:
+
+   ```ts
+   await native.tap("Log in");
+   await expect(native.getByText("Welcome back")).toBeVisible();
+   ```
+
+4. Prefer semantic locators over selector plumbing.
+
+   NativeProof specs should look like Jest + React Testing Library or Playwright: query the UI by
+   role, text, label, and accessible name whenever the app exposes that meaning.
+
+   Good:
+
+   ```ts
+   const AcceptAgreementCheckbox = native.getByRole("checkbox", { name: /Accept Agreement/ });
+
+   await AcceptAgreementCheckbox.check();
+   await expect(AcceptAgreementCheckbox).toBeChecked();
+   ```
+
+   Bad:
+
+   ```ts
+   const TERMS_CHECKBOX_NAME = "acc_agreement_checkbox";
+
+   await native.getById(TERMS_CHECKBOX_NAME).tap();
+   ```
+
+   Long descriptive locator variables are fine when they make a repeated control read like the
+   product. Abbreviated selector constants are not readability; they make the reader translate
+   implementation details. If a behaviour cannot be expressed semantically, prefer improving
+   NativeProof or the app accessibility surface before adding more test-side indirection.
+
+5. Use runner-native language.
+
+   Keep `describe`, `describe.skip`, `it`, `it.skip`, and `expect`. NativeProof should not recreate
+   Jest, Mocha, or Playwright Test. It should make native app control feel first-class inside those
+   runner words.
+
+   Do not add or promote public `test.*` facades. If a fixture-heavy compatibility API remains, keep
+   it secondary and do not use it in generated projects or first-read documentation.
+
+6. Fixtures are allowed only when they expose intent.
+
+   Good:
+
+   ```ts
+   beforeEach(async () => {
+     await native.launch({ route: "/login", reset: true });
+   });
+   ```
+
+   Risky:
+
+   ```ts
+   useLoggedOutUserFixture();
+   ```
+
+## Current Direction
+
+Make `nativeproof-init --ios|--android` produce a minimal, readable, working project where all
+device/app control is in `nativeproof.config.ts`, and the generated test shows direct
+`native.*` interactions plus plain `expect`.
+
+The readability target is not more NativeProof DSL. It is less NativeProof visible in the test.

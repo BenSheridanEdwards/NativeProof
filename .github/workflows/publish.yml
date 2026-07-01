@@ -1,0 +1,29 @@
+name: publish
+
+# Publishes nativeproof to npm when you cut a GitHub Release (tag the version),
+# or on a manual run from the Actions tab. Auth is the NPM_TOKEN repo secret
+# (an npm Automation token — read+write, bypasses 2FA for unattended CI).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,83 @@
+{
+  "name": "nativeproof",
+  "version": "0.10.14",
+  "license": "MIT",
+  "type": "module",
+  "description": "Playwright-feeling native mobile E2E for Appium/WebdriverIO with runner-native tests, locators, expect, fixtures, and evidence.",
+  "keywords": [
+    "appium",
+    "webdriverio",
+    "e2e",
+    "end-to-end",
+    "mobile",
+    "android",
+    "ios",
+    "testing",
+    "test-framework",
+    "playwright",
+    "xcuitest",
+    "uiautomator2"
+  ],
+  "author": "Ben Sheridan-Edwards",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BenSheridanEdwards/NativeProof.git"
+  },
+  "homepage": "https://github.com/BenSheridanEdwards/NativeProof#readme",
+  "bugs": {
+    "url": "https://github.com/BenSheridanEdwards/NativeProof/issues"
+  },
+  "bin": {
+    "nativeproof": "dist/cli.js",
+    "nativeproof-init": "dist/cli.js",
+    "nativeproof-onboard": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check . && tsc --noEmit",
+    "test": "node --import tsx --test 'test/**/*.test.ts'",
+    "prepare": "npm run build && husky",
+    "prepublishOnly": "npm run check && npm test"
+  },
+  "dependencies": {
+    "@wdio/cli": "^9.29.1",
+    "@wdio/globals": "^9.17.0",
+    "@wdio/local-runner": "^9.29.1",
+    "@wdio/mocha-framework": "^9.29.1",
+    "@wdio/spec-reporter": "^9.29.1",
+    "appium": "^3.5.2",
+    "tsx": "^4.22.4",
+    "webdriverio": "^9.21.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.0",
+    "@types/node": "^24.10.1",
+    "@types/ws": "^8.18.1",
+    "expect-webdriverio": "^5.5.0",
+    "husky": "^9.1.7",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "overrides": {
+    "serialize-javascript": "^7.0.6"
+  }
+}

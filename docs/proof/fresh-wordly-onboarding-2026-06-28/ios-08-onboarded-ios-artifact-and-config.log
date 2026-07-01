@@ -1,7 +1,0 @@
-drwxr-xr-x@ 50 agents  staff  1600 Jun 28 23:17 build/ios/Wordly.app
- 91M	build/ios/Wordly.app
-18:  testDir: "tests",
-19:  artifacts: { dir: ".e2e-artifacts" },
-22:    autoSelectBootedSimulator: true,
-28:      platform: "ios",
-30:        "appium:app": "./build/ios/Wordly.app",

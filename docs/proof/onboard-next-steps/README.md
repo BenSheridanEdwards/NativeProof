@@ -2,7 +2,7 @@
 
 This proof covers the CLI/docs handoff change for `nativeproof onboard`.
 
-The previous onboard success message told a fresh-project user to run the suite immediately. That was too strong for real apps such as Wordly: onboarding can point NativeProof at the app artifact, but the generated `tests/example.spec.ts` and `native.navigate(...)` route are still app-specific.
+The previous onboard success message told a fresh-project user to run the suite immediately. That was too strong for real apps: onboarding can point NativeProof at the app artifact, but the generated `tests/example.spec.ts` and `native.navigate(...)` route are still app-specific.
 
 Screenshots are not meaningful for this PR because it changes CLI text and README command comments, not rendered app or device behaviour. The proof is the fresh generated-project transcript below.
 

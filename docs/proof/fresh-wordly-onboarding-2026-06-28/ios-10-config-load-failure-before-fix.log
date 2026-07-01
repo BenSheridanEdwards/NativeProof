@@ -1,1 +1,0 @@
-Cannot require() ES Module /Users/agents/Projects/nativeproof-wordly-loop-JbNA9R/nativeproof.config.ts in a cycle. A cycle involving require(esm) is not allowed to maintain invariants mandated by the ECMAScript specification. Try making at least part of the dependency in the graph lazily loaded.

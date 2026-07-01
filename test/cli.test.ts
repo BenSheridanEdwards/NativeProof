@@ -279,10 +279,10 @@ test("scaffoldFiles are a platform-specific config, package script and readable 
 });
 
 test("scaffoldFiles can pin the onboarded app path in config", () => {
-  const files = scaffoldFiles({ platform: "android", appPath: "/apps/Wordly.apk" });
+  const files = scaffoldFiles({ platform: "android", appPath: "/apps/Example.apk" });
   const config = files.find((f) => f.path === "nativeproof.config.ts");
   assert.ok(config, "writes nativeproof.config.ts");
-  assert.match(config.contents, /"appium:app": "\/apps\/Wordly\.apk"/);
+  assert.match(config.contents, /"appium:app": "\/apps\/Example\.apk"/);
 });
 
 test("scaffold writes missing files and never overwrites existing ones", () => {
@@ -330,8 +330,8 @@ test("scaffold updates an existing package.json without overwriting its scripts"
 test("detectOnboardTarget accepts direct Android APK and iOS app paths", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-target-"));
   try {
-    const apk = path.join(dir, "Wordly.apk");
-    const app = path.join(dir, "Wordly.app");
+    const apk = path.join(dir, "Example.apk");
+    const app = path.join(dir, "Example.app");
     writeFileSync(apk, "");
     mkdirSync(app);
 
@@ -348,7 +348,7 @@ test("detectOnboardTarget finds built artifacts inside native app repos", () => 
   const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-repo-"));
   try {
     const androidOutput = path.join(dir, "android", "app", "build", "outputs", "apk", "debug");
-    const iosOutput = path.join(dir, "ios", "build", "Debug-iphonesimulator", "Wordly.app");
+    const iosOutput = path.join(dir, "ios", "build", "Debug-iphonesimulator", "Example.app");
     mkdirSync(androidOutput, { recursive: true });
     mkdirSync(iosOutput, { recursive: true });
     const apk = path.join(androidOutput, "app-debug.apk");
@@ -377,7 +377,7 @@ test("detectOnboardTarget explains native app repos that have no built artifact"
     mkdirSync(androidRepo);
     mkdirSync(iosRepo);
     writeFileSync(path.join(androidRepo, "gradlew"), "");
-    mkdirSync(path.join(iosRepo, "Wordly.xcodeproj"));
+    mkdirSync(path.join(iosRepo, "Example.xcodeproj"));
 
     assert.throws(() => detectOnboardTarget(androidRepo), /Android project detected.*no built \.apk/);
     assert.throws(() => detectOnboardTarget(iosRepo), /iOS project detected.*no built \.app/);
@@ -389,8 +389,8 @@ test("detectOnboardTarget explains native app repos that have no built artifact"
 test("onboard builds and stages an iOS project when no built app exists", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-ios-build-"));
   try {
-    const iosRepo = path.join(dir, "ios", "wordly-mobile-ios");
-    mkdirSync(path.join(iosRepo, "Wordly.xcodeproj"), { recursive: true });
+    const iosRepo = path.join(dir, "ios", "sample-mobile-ios");
+    mkdirSync(path.join(iosRepo, "Example.xcodeproj"), { recursive: true });
     const calls: Array<{ command: string; args: readonly string[]; cwd: string | undefined }> = [];
     const runCommand: NativeBuildCommandRunner = (command, args, options = {}) => {
       calls.push({ command, args, cwd: options.cwd });
@@ -399,8 +399,8 @@ test("onboard builds and stages an iOS project when no built app exists", () => 
           code: 0,
           stdout: JSON.stringify({
             project: {
-              name: "Wordly",
-              schemes: ["DotLottie", "Wordly", "Wordly Dev", "WordlyTests"],
+              name: "Example",
+              schemes: ["DotLottie", "Example", "Example Dev", "ExampleTests"],
             },
           }),
           stderr: "",
@@ -411,31 +411,31 @@ test("onboard builds and stages an iOS project when no built app exists", () => 
       if (typeof derivedDataPath !== "string") {
         throw new Error("expected -derivedDataPath in xcodebuild args");
       }
-      mkdirSync(path.join(derivedDataPath, "Build", "Products", "Debug-iphonesimulator", "Wordly.app"), {
+      mkdirSync(path.join(derivedDataPath, "Build", "Products", "Debug-iphonesimulator", "Example.app"), {
         recursive: true,
       });
       return { code: 65, stdout: "", stderr: "script phase failed after app build" };
     };
 
-    const result = onboard(dir, "./ios/wordly-mobile-ios", { runCommand });
+    const result = onboard(dir, "./ios/sample-mobile-ios", { runCommand });
     const buildCall = calls.find((call) => !call.args.includes("-list"));
     assert.ok(buildCall, "runs xcodebuild build");
     assert.equal(buildCall.command, "xcodebuild");
     assert.ok(buildCall.args.includes("-project"));
-    assert.ok(buildCall.args.includes(path.join(iosRepo, "Wordly.xcodeproj")));
+    assert.ok(buildCall.args.includes(path.join(iosRepo, "Example.xcodeproj")));
     assert.ok(buildCall.args.includes("-quiet"));
     assert.ok(buildCall.args.includes("-scheme"));
-    assert.equal(buildCall.args[buildCall.args.indexOf("-scheme") + 1], "Wordly Dev");
+    assert.equal(buildCall.args[buildCall.args.indexOf("-scheme") + 1], "Example Dev");
     assert.ok(buildCall.args.includes("-sdk"));
     assert.equal(buildCall.args[buildCall.args.indexOf("-sdk") + 1], "iphonesimulator");
     assert.ok(buildCall.args.includes("-packageCachePath"));
     assert.ok(buildCall.args.includes("CODE_SIGNING_ALLOWED=NO"));
     assert.equal(result.target.platform, "ios");
-    assert.equal(result.target.appPath, "./build/ios/Wordly.app");
-    assert.ok(existsSync(path.join(dir, "build", "ios", "Wordly.app")));
+    assert.equal(result.target.appPath, "./build/ios/Example.app");
+    assert.ok(existsSync(path.join(dir, "build", "ios", "Example.app")));
     assert.match(
       readFileSync(path.join(dir, "nativeproof.config.ts"), "utf8"),
-      /"appium:app": "\.\/build\/ios\/Wordly\.app"/,
+      /"appium:app": "\.\/build\/ios\/Example\.app"/,
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -445,13 +445,13 @@ test("onboard builds and stages an iOS project when no built app exists", () => 
 test("onboard reports an iOS project build that produces no simulator app", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-ios-build-fail-"));
   try {
-    const iosRepo = path.join(dir, "ios", "wordly-mobile-ios");
-    mkdirSync(path.join(iosRepo, "Wordly.xcodeproj"), { recursive: true });
+    const iosRepo = path.join(dir, "ios", "sample-mobile-ios");
+    mkdirSync(path.join(iosRepo, "Example.xcodeproj"), { recursive: true });
     const runCommand: NativeBuildCommandRunner = (_command, args) => {
       if (args.includes("-list")) {
         return {
           code: 0,
-          stdout: JSON.stringify({ project: { name: "Wordly", schemes: ["Wordly Dev"] } }),
+          stdout: JSON.stringify({ project: { name: "Example", schemes: ["Example Dev"] } }),
           stderr: "",
         };
       }
@@ -459,7 +459,7 @@ test("onboard reports an iOS project build that produces no simulator app", () =
     };
 
     assert.throws(
-      () => onboard(dir, "./ios/wordly-mobile-ios", { runCommand }),
+      () => onboard(dir, "./ios/sample-mobile-ios", { runCommand }),
       /iOS project build did not produce a simulator \.app.*xcodebuild exited 65/s,
     );
   } finally {
@@ -489,7 +489,7 @@ test("onboard scaffolds a missing project with the detected app path", () => {
 test("onboard updates an existing nativeproof config and package.json", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-update-"));
   try {
-    const app = path.join(dir, "build", "ios", "Wordly.app");
+    const app = path.join(dir, "build", "ios", "Example.app");
     mkdirSync(app, { recursive: true });
     const config = scaffoldFiles({ platform: "ios" }).find((file) => file.path === "nativeproof.config.ts");
     assert.ok(config, "expected generated config");
@@ -505,7 +505,7 @@ test("onboard updates an existing nativeproof config and package.json", () => {
       scripts?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
-    assert.match(updatedConfig, /"appium:app": "\.\/build\/ios\/Wordly\.app"/);
+    assert.match(updatedConfig, /"appium:app": "\.\/build\/ios\/Example\.app"/);
     assert.doesNotMatch(updatedConfig, /"\.\/build\/ios\/MyApp\.app"/);
     assert.equal(updatedPackage.type, "module");
     assert.equal(updatedPackage.scripts?.test, "node test.js");
@@ -552,7 +552,7 @@ test("updateConfigAppPath inserts an app path when the project has capabilities 
   ],
 });
 `;
-  const updated = updateConfigAppPath(contents, { platform: "ios", appPath: "./Wordly.app" });
-  assert.match(updated, /"appium:app": "\.\/Wordly\.app"/);
+  const updated = updateConfigAppPath(contents, { platform: "ios", appPath: "./Example.app" });
+  assert.match(updated, /"appium:app": "\.\/Example\.app"/);
   assert.match(updated, /"appium:deviceName": "iPhone 15"/);
 });

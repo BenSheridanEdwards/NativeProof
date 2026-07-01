@@ -101,11 +101,11 @@ test("packed package exposes the onboarding CLI bins and ESM scaffold", () => {
 
     const onboardProject = path.join(tempDir, "fresh-onboard-project");
     mkdirSync(onboardProject);
-    writeFileSync(path.join(onboardProject, "Wordly.apk"), "");
-    run(process.execPath, [cliEntry, "onboard", "./Wordly.apk"], { cwd: onboardProject });
+    writeFileSync(path.join(onboardProject, "Example.apk"), "");
+    run(process.execPath, [cliEntry, "onboard", "./Example.apk"], { cwd: onboardProject });
     assert.match(
       readFileSync(path.join(onboardProject, "nativeproof.config.ts"), "utf8"),
-      /"appium:app": "\.\/Wordly\.apk"/,
+      /"appium:app": "\.\/Example\.apk"/,
     );
     assert.equal(JSON.parse(readFileSync(path.join(onboardProject, "package.json"), "utf8")).type, "module");
   } finally {

@@ -1,5 +1,0 @@
-/Users/agents/Projects/nativeproof-wordly-loop-JbNA9R/ios/wordly-mobile-ios
-## main...origin/main
-origin	https://github.com/wordly-inc/wordly-mobile-ios.git (fetch)
-origin	https://github.com/wordly-inc/wordly-mobile-ios.git (push)
-bf105c8 (grafted, HEAD -> main, tag: v4.3.1, origin/main, origin/HEAD) release: v4.3.1 — TTS ordering/cutoff fixes, crash fix, attendee placeholder fix (#13)

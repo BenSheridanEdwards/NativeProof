@@ -1,5 +1,0 @@
-
-> nativeproof@0.10.14 check
-> biome check . && tsc --noEmit
-
-Checked 41 files in 48ms. No fixes applied.

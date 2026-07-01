@@ -167,6 +167,13 @@ native.getByTestId("login-button");
 native.getById("message-list");
 ```
 
+Useful interactions:
+
+```ts
+await native.tap("Log in");
+await native.getByRole("button", { name: "Hold to talk" }).press({ duration: 1500 });
+```
+
 Useful assertions:
 
 ```ts

@@ -14,6 +14,7 @@ import {
   main,
   type NativeBuildCommandRunner,
   onboard,
+  onboardCommand,
   parseArgs,
   resolveRunner,
   type ScaffoldIo,
@@ -511,6 +512,29 @@ test("onboard updates an existing nativeproof config and package.json", () => {
     assert.equal(updatedPackage.scripts?.["test:e2e"], "nativeproof");
     assert.equal(updatedPackage.devDependencies?.nativeproof, "latest");
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("onboardCommand tells users to wire the app-specific spec before running", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-next-steps-"));
+  const logs: string[] = [];
+  const originalLog = console.log;
+  try {
+    const apk = path.join(dir, "app-debug.apk");
+    writeFileSync(apk, "");
+    console.log = (...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    };
+
+    onboardCommand(dir, apk);
+
+    const output = logs.join("\n");
+    assert.match(output, /nativeproof: onboarded android app at \.\/app-debug\.apk/);
+    assert.match(output, /make tests\/example\.spec\.ts and native\.navigate\(\.\.\.\) match your app/);
+    assert.match(output, /npm run test:e2e/);
+  } finally {
+    console.log = originalLog;
     rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -892,7 +892,9 @@ export function onboardCommand(
   for (const file of updated) console.log(`nativeproof: updated ${file}`);
   for (const file of skipped) console.log(`nativeproof: ${file} already exists — skipped`);
   console.log(`nativeproof: onboarded ${target.platform} app at ${target.appPath}`);
-  console.log(`\nNext: run \`npm run test:e2e\` or \`nativeproof --${target.platform}\`.`);
+  console.log(
+    `\nNext: make tests/example.spec.ts and native.navigate(...) match your app, then run \`npm run test:e2e\` or \`nativeproof --${target.platform}\`.`,
+  );
   return 0;
 }
 

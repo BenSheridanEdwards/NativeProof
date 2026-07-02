@@ -214,3 +214,11 @@ test("findConfigFile locates nativeproof.config.* via the injected exists check"
     null,
   );
 });
+
+test("resolveProject errors when an explicit platform has no matching project", () => {
+  // Falling back to projects[0] silently ran the wrong platform for `--ios`.
+  assert.throws(
+    () => resolveProject({ projects }, { platform: "ios2" }),
+    /no ios2 project in nativeproof\.config\.ts — available: .*android/,
+  );
+});

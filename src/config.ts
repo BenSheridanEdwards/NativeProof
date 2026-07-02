@@ -181,7 +181,7 @@ export interface RunnerEnv {
   spec?: string;
 }
 
-/** Pick the project by explicit name, else by platform, else the first one. */
+/** Pick the project by explicit name, else by platform (loudly failing on no match), else the first one. */
 export function resolveProject(config: RunnerConfig, env: RunnerEnv = {}): DeviceProject {
   if (env.project) {
     const named = config.projects.find((project) => project.name === env.project);
@@ -191,6 +191,12 @@ export function resolveProject(config: RunnerConfig, env: RunnerEnv = {}): Devic
   if (env.platform) {
     const byPlatform = config.projects.find((project) => project.platform === env.platform);
     if (byPlatform) return byPlatform;
+    // Falling back to projects[0] here silently ran the WRONG platform: `--ios` with an
+    // android-only config did an android run with android evidence and zero warning.
+    const available = config.projects.map((project) => `${project.name} (${project.platform})`).join(", ");
+    throw new Error(
+      `nativeproof: no ${env.platform} project in nativeproof.config.ts — available: ${available}`,
+    );
   }
   const first = config.projects[0];
   if (!first) throw new Error("nativeproof: config has no `projects`");

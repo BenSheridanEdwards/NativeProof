@@ -1129,13 +1129,25 @@ function nativeProofConfigFromModule(loaded: unknown): NativeProofConfig | undef
   return isNativeProofConfig(current) ? current : undefined;
 }
 
+/**
+ * The selection the preflight resolves the project with: CLI flags first, then the same
+ * env vars the runner itself reads (PLATFORM / NATIVEPROOF_PROJECT). Without the env
+ * fallback, `PLATFORM=ios nativeproof` preflighted the android project (wrong Appium
+ * driver ensured, macOS guard skipped) and then ran the ios one.
+ */
+export function runSelection(args: CliArgs, env: NodeJS.ProcessEnv = process.env): RunnerEnv {
+  const selection: RunnerEnv = {};
+  const platform = args.platform ?? env.PLATFORM;
+  const project = args.project ?? env.NATIVEPROOF_PROJECT;
+  if (platform) selection.platform = platform;
+  if (project) selection.project = project;
+  return selection;
+}
+
 async function runTests(args: CliArgs): Promise<number> {
   const { wdioConfig, configPath, extraEnv } = resolveRunner(args);
   const userConfig = await loadNativeProofConfig(configPath);
-  const selection: RunnerEnv = {};
-  if (args.platform) selection.platform = args.platform;
-  if (args.project) selection.project = args.project;
-  const project = resolveProject(userConfig, selection);
+  const project = resolveProject(userConfig, runSelection(args));
   const appium = await ensureAppium(userConfig.appium, args.startAppium, project.platform);
   try {
     return await new Promise<number>((resolve, reject) => {

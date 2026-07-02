@@ -10,6 +10,7 @@ import {
   parseNodeBounds,
   smallestClickableAncestorBounds,
   smallestClickableAncestorNode,
+  sourceExtent,
 } from "./source.js";
 
 /**
@@ -96,6 +97,15 @@ export interface TapOptions extends WaitOptions {
   clickableAncestor?: boolean;
 }
 
+export type ScrollDirection = "down" | "up" | "left" | "right";
+
+export interface ScrollOptions extends WaitOptions {
+  /** Which way the VIEW moves — "down" reveals content below (the finger swipes up). */
+  direction?: ScrollDirection;
+  /** How many swipes to attempt before giving up. */
+  maxSwipes?: number;
+}
+
 export interface PressOptions extends TapOptions {
   /** How long to hold the press before releasing, in milliseconds. */
   duration?: number;
@@ -134,6 +144,29 @@ function selectorTarget(selector: Selector): string {
 function formatSuggestions(values: readonly string[]): string {
   if (values.length === 0) return "";
   return ` — did you mean ${values.map((value) => JSON.stringify(value)).join(", ")}?`;
+}
+
+/**
+ * A swipe across the middle 40% of the viewport that moves the view toward `direction` —
+ * scrolling "down" drags the finger from 70% to 30% height, so content below scrolls in.
+ * Short of the edges to avoid triggering system edge gestures.
+ */
+function swipeVector(
+  direction: ScrollDirection,
+  extent: Bounds,
+): { fromX: number; fromY: number; toX: number; toY: number } {
+  const x = (ratio: number) => Math.round(extent.x1 + extent.width * ratio);
+  const y = (ratio: number) => Math.round(extent.y1 + extent.height * ratio);
+  switch (direction) {
+    case "down":
+      return { fromX: extent.centerX, fromY: y(0.7), toX: extent.centerX, toY: y(0.3) };
+    case "up":
+      return { fromX: extent.centerX, fromY: y(0.3), toX: extent.centerX, toY: y(0.7) };
+    case "right":
+      return { fromX: x(0.7), fromY: extent.centerY, toX: x(0.3), toY: extent.centerY };
+    case "left":
+      return { fromX: x(0.3), fromY: extent.centerY, toX: x(0.7), toY: extent.centerY };
+  }
 }
 
 function nodeAttribute(node: string, attribute: string): string | undefined {
@@ -366,6 +399,35 @@ export class Locator {
         `${describeSelector(this.selector)} did not become visible within ${opts.timeout ?? DEFAULTS.timeout}ms${await this.suggestionsHint()}`,
       );
     }
+  }
+
+  /**
+   * Swipe until the element appears in the page source, Playwright's scrollIntoViewIfNeeded
+   * for native: already-visible elements return immediately, otherwise the view scrolls
+   * toward `direction` ("down" by default) up to `maxSwipes` times. Throws with the
+   * did-you-mean candidates when the element never appears.
+   */
+  async scrollIntoView(options: ScrollOptions = {}): Promise<void> {
+    if (!this.driver.swipe) {
+      throw new Error(
+        `${describeSelector(this.selector)}.scrollIntoView() needs a driver that supports swiping (Driver.swipe)`,
+      );
+    }
+    const direction = options.direction ?? "down";
+    const maxSwipes = options.maxSwipes ?? 10;
+    for (let attempt = 0; attempt <= maxSwipes; attempt += 1) {
+      const source = await this.driver.source();
+      if (this.pick(this.matchedNodesIn(source)) !== null) return;
+      if (attempt === maxSwipes) break;
+      const extent = sourceExtent(source);
+      if (!extent) break;
+      const { fromX, fromY, toX, toY } = swipeVector(direction, extent);
+      await this.driver.swipe(fromX, fromY, toX, toY);
+      await this.driver.pause(options.interval ?? DEFAULTS.interval);
+    }
+    throw new Error(
+      `${describeSelector(this.selector)} was not found after ${maxSwipes} ${direction} swipes${await this.suggestionsHint()}`,
+    );
   }
 
   /** Wait for the element, then tap its centre (a source-bounds coordinate tap). */

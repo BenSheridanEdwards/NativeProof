@@ -88,6 +88,33 @@ export function attrPattern(name: string): string {
   return `(?<![\\w-])${name}="`;
 }
 
+/**
+ * The union of every node's bounds — the visible viewport as the page source reports it.
+ * Lets the locator compute a swipe vector without a screen-size protocol call. Null when
+ * no node exposes usable geometry.
+ */
+export function sourceExtent(source: string): Bounds | null {
+  let extent: Bounds | null = null;
+  for (const tag of source.matchAll(/<[^>]*>/g)) {
+    const bounds = parseNodeBounds(tag[0]);
+    if (!bounds) continue;
+    if (!extent) {
+      extent = { ...bounds };
+      continue;
+    }
+    extent.x1 = Math.min(extent.x1, bounds.x1);
+    extent.y1 = Math.min(extent.y1, bounds.y1);
+    extent.x2 = Math.max(extent.x2, bounds.x2);
+    extent.y2 = Math.max(extent.y2, bounds.y2);
+  }
+  if (!extent) return null;
+  extent.width = extent.x2 - extent.x1;
+  extent.height = extent.y2 - extent.y1;
+  extent.centerX = Math.round((extent.x1 + extent.x2) / 2);
+  extent.centerY = Math.round((extent.y1 + extent.y2) / 2);
+  return extent;
+}
+
 export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

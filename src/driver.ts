@@ -1,6 +1,6 @@
 import { browser } from "@wdio/globals";
 import { tapAt } from "./gestures.js";
-import { decodeXmlEntities } from "./source.js";
+import { attrPattern, decodeXmlEntities } from "./source.js";
 
 /**
  * The minimal device contract the locator and expect layers drive.
@@ -153,7 +153,7 @@ export function exactNodeXPath(node: string, platform: Platform): string | null 
 }
 
 function nodeAttribute(node: string, name: string): string | null {
-  const value = new RegExp(`\\b${name}="([^"]*)"`).exec(node)?.[1];
+  const value = new RegExp(`${attrPattern(name)}([^"]*)"`).exec(node)?.[1];
   return value ? decodeXmlEntities(value) : null;
 }
 

@@ -657,3 +657,37 @@ test("Locator.fill works without keyboard input when the driver sets values nati
 
   assert.deepEqual(setValues, ["123456"]);
 });
+
+test("clickableAncestor ignores long-clickable containers (only true clickable ancestors count)", async () => {
+  // UiAutomator emits long-clickable on nearly every node; matching it as clickable
+  // made tap() hit a huge non-clickable container's centre instead of the label.
+  const driver = new FakeDriver(
+    '<node text="Save" clickable="false" bounds="[0,1900][100,2000]" />' +
+      '<node class="c" clickable="false" long-clickable="true" bounds="[0,0][1080,2000]" />',
+  );
+  await new Locator(driver, by.text("Save")).tap({ clickableAncestor: true });
+  assert.deepEqual(driver.taps, [{ x: 50, y: 1950 }]); // the label centre, not [540,1000]
+});
+
+test("isDisabled walks past a long-clickable label to the real disabled control", async () => {
+  const driver = new FakeDriver(
+    '<node text="Buy" long-clickable="true" enabled="true" clickable="false" bounds="[10,10][90,50]" />' +
+      '<node class="android.widget.Button" clickable="true" enabled="false" bounds="[0,0][100,60]" />',
+  );
+  const label = new Locator(driver, by.text("Buy"));
+  assert.equal(await label.isDisabled(), true);
+  assert.equal(await label.isEnabled(), false);
+});
+
+test("iOS text selectors and textContent ignore placeholderValue", async () => {
+  // `value=` must not match inside `placeholderValue=` — a search field showing a
+  // "Search" placeholder is not showing the text "Search".
+  const driver = new FakeDriver(
+    '<XCUIElementTypeSearchField type="XCUIElementTypeSearchField" name="field" label="" placeholderValue="Search" value="typed text" x="0" y="0" width="100" height="40" />',
+  );
+  driver.platform = "ios";
+  assert.equal(await new Locator(driver, by.text("Search")).isVisible(), false);
+  const field = new Locator(driver, by.text("typed text"));
+  assert.equal(await field.isVisible(), true);
+  assert.equal(await field.textContent(), "typed text");
+});

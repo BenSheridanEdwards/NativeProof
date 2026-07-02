@@ -773,7 +773,7 @@ test("a full near() + clickableAncestor tap reads the source exactly once", asyn
 
 test("scrollIntoView swipes toward the element and stops when it appears", async () => {
   const offscreen = '<node text="Header" bounds="[0,0][1080,2000]" />';
-  const revealed = offscreen + '<node text="About device" bounds="[0,1500][1080,1600]" />';
+  const revealed = `${offscreen}<node text="About device" bounds="[0,1500][1080,1600]" />`;
   const driver = new FakeDriver(offscreen, offscreen, revealed);
   const swipes: Array<[number, number, number, number]> = [];
   (driver as unknown as Driver & { swipe: NonNullable<Driver["swipe"]> }).swipe = async (
@@ -819,4 +819,55 @@ test("scrollIntoView without a swiping driver throws a clear error", async () =>
     () => new Locator(driver, by.text("x")).scrollIntoView(),
     /needs a driver that supports swiping \(Driver\.swipe\)/,
   );
+});
+
+test("fill warns when the matched node is not a text input", async () => {
+  const driver = new FakeDriver(
+    '<node class="android.widget.TextView" text="Session ID" bounds="[0,0][200,60]" />',
+  );
+  (driver as unknown as Driver & { setValueOnNode: NonNullable<Driver["setValueOnNode"]> }).setValueOnNode =
+    async () => true;
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args.map(String).join(" "));
+  };
+  try {
+    await new Locator(driver, by.text("Session ID")).fill("abc");
+    assert.match(
+      warnings.join("\n"),
+      /matched android\.widget\.TextView, which does not look like a text input/,
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test("fill stays silent for real text inputs on both platforms", async () => {
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args.map(String).join(" "));
+  };
+  try {
+    const android = new FakeDriver(
+      '<node class="android.widget.EditText" text="Email" bounds="[0,0][200,60]" />',
+    );
+    (
+      android as unknown as Driver & { setValueOnNode: NonNullable<Driver["setValueOnNode"]> }
+    ).setValueOnNode = async () => true;
+    await new Locator(android, by.text("Email")).fill("x");
+
+    const ios = new FakeDriver(
+      '<XCUIElementTypeSearchField type="XCUIElementTypeSearchField" name="Search" label="Search" x="0" y="0" width="100" height="40" />',
+    );
+    ios.platform = "ios";
+    (ios as unknown as Driver & { setValueOnNode: NonNullable<Driver["setValueOnNode"]> }).setValueOnNode =
+      async () => true;
+    await new Locator(ios, by.label("Search")).clear();
+
+    assert.deepEqual(warnings, []);
+  } finally {
+    console.warn = originalWarn;
+  }
 });

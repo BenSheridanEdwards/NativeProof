@@ -49,7 +49,7 @@ export function parseNodeBounds(node: string): Bounds | null {
   const android = parseBounds(/bounds="([^"]+)"/.exec(node)?.[1]);
   if (android) return android;
   const attr = (name: string): number | null => {
-    const m = new RegExp(`\\b${name}="(-?\\d+(?:\\.\\d+)?)"`).exec(node);
+    const m = new RegExp(`${attrPattern(name)}(-?\\d+(?:\\.\\d+)?)"`).exec(node);
     return m ? Number(m[1]) : null;
   };
   const x = attr("x");
@@ -67,6 +67,16 @@ export function parseNodeBounds(node: string): Bounds | null {
     centerX: Math.round(x + w / 2),
     centerY: Math.round(y + h / 2),
   };
+}
+
+/**
+ * Regex fragment matching `name="` only as a WHOLE attribute name. Without the
+ * lookbehind, `clickable=` also matches inside `long-clickable=` (UiAutomator emits it
+ * on nearly every node) and `value=` inside iOS `placeholderValue=` — silently reading
+ * the wrong attribute. `name` may be an alternation like `(?:text|content-desc)`.
+ */
+export function attrPattern(name: string): string {
+  return `(?<![\\w-])${name}="`;
 }
 
 export function escapeRegExp(value: string): string {
@@ -110,7 +120,9 @@ export function nodeForAttribute(source: string, attribute: string, value: strin
 export function nodesForAttribute(source: string, attribute: string, value: string | RegExp): string[] {
   if (typeof value === "string") {
     const escaped = escapeRegExp(encodeXmlEntities(value));
-    return [...source.matchAll(new RegExp(`<[^>]*${attribute}="${escaped}"[^>]*>`, "g"))].map((m) => m[0]);
+    return [...source.matchAll(new RegExp(`<[^>]*${attrPattern(attribute)}${escaped}"[^>]*>`, "g"))].map(
+      (m) => m[0],
+    );
   }
   // A `g`-flagged RegExp is stateful across `.test()` calls; use a non-global copy so the
   // per-candidate test is order-independent.
@@ -119,7 +131,7 @@ export function nodesForAttribute(source: string, attribute: string, value: stri
   // more than one of them — Android often exposes both `text=""` and `content-desc="…"`. Test
   // the pattern against EVERY matching attribute's value, not just the first: otherwise a label
   // that lives in `content-desc` is missed whenever an empty `text=""` precedes it in the tag.
-  const candidates = new RegExp(`${attribute}="([^"]*)"`, "g");
+  const candidates = new RegExp(`${attrPattern(attribute)}([^"]*)"`, "g");
   const nodes: string[] = [];
   for (const tag of source.matchAll(/<[^>]*>/g)) {
     for (const attr of tag[0].matchAll(candidates)) {
@@ -133,7 +145,7 @@ export function nodesForAttribute(source: string, attribute: string, value: stri
 }
 
 function attributeValueMatches(node: string, attribute: string, value: string | RegExp): boolean {
-  const values = [...node.matchAll(new RegExp(`${attribute}="([^"]*)"`, "g"))].map((match) =>
+  const values = [...node.matchAll(new RegExp(`${attrPattern(attribute)}([^"]*)"`, "g"))].map((match) =>
     decodeXmlEntities(match[1] ?? ""),
   );
   if (typeof value === "string") return values.some((candidate) => candidate === value);
@@ -155,7 +167,7 @@ function nodeAccessibleNameMatches(
 
 function nodeHasAccessibleName(node: string, platform: "android" | "ios"): boolean {
   return accessibleNameAttributes(platform).some((attribute) =>
-    [...node.matchAll(new RegExp(`${attribute}="([^"]*)"`, "g"))].some(
+    [...node.matchAll(new RegExp(`${attrPattern(attribute)}([^"]*)"`, "g"))].some(
       (match) => decodeXmlEntities(match[1] ?? "").trim().length > 0,
     ),
   );
@@ -298,7 +310,7 @@ export function boundsForText(source: string, text: string): Bounds | null {
  * into a reliable tap target (e.g. the "Members (3)" list rows).
  */
 export function smallestClickableAncestorNode(source: string, nodeBounds: Bounds): string | null {
-  const clickable = [...source.matchAll(/<[^>]*clickable="true"[^>]*>/g)]
+  const clickable = [...source.matchAll(new RegExp(`<[^>]*${attrPattern("clickable")}true"[^>]*>`, "g"))]
     .map((m) => ({ node: m[0], bounds: parseNodeBounds(m[0]) }))
     .filter((entry): entry is { node: string; bounds: Bounds } => entry.bounds !== null)
     .filter(

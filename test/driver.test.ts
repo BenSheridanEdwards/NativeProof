@@ -195,3 +195,12 @@ test("wdioDriver setValueOnNode reports false when the node cannot become an ele
     false,
   );
 });
+
+test("exactNodeXPath must not read placeholderValue as the value predicate", () => {
+  const selector = iosExactNodeXPath(
+    '<XCUIElementTypeTextField type="XCUIElementTypeTextField" name="session" label="Session" placeholderValue="Enter ID" value="abc" x="0" y="0" width="100" height="40"/>',
+  );
+  assert.ok(selector);
+  assert.match(selector, /@value='abc'/);
+  assert.doesNotMatch(selector, /Enter ID/);
+});

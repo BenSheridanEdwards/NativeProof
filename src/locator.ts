@@ -1,5 +1,6 @@
 import type { Driver, Platform } from "./driver.js";
 import {
+  attrPattern,
   type Bounds,
   decodeXmlEntities,
   encodeXmlEntities,
@@ -136,7 +137,7 @@ function formatSuggestions(values: readonly string[]): string {
 }
 
 function nodeAttribute(node: string, attribute: string): string | undefined {
-  const value = new RegExp(`${attribute}="([^"]*)"`).exec(node)?.[1];
+  const value = new RegExp(`${attrPattern(attribute)}([^"]*)"`).exec(node)?.[1];
   return value === undefined ? undefined : decodeXmlEntities(value);
 }
 
@@ -288,7 +289,7 @@ export class Locator {
     // falling back to the first present (possibly empty) attribute.
     const attrs = this.driver.platform === "ios" ? ["label", "value"] : ["text", "content-desc"];
     const present = attrs
-      .map((attr) => new RegExp(`${attr}="([^"]*)"`).exec(node)?.[1])
+      .map((attr) => new RegExp(`${attrPattern(attr)}([^"]*)"`).exec(node)?.[1])
       .filter((v): v is string => v !== undefined);
     const raw = present.find((v) => v !== "") ?? present[0];
     return raw === undefined ? null : decodeXmlEntities(raw);
@@ -320,7 +321,7 @@ export class Locator {
       const source = await this.driver.source();
       const values = [
         ...new Set(
-          [...source.matchAll(new RegExp(`\\b${attribute}="([^"]*)"`, "g"))]
+          [...source.matchAll(new RegExp(`${attrPattern(attribute)}([^"]*)"`, "g"))]
             .map((match) => decodeXmlEntities(match[1] ?? ""))
             .filter((value) => value !== ""),
         ),
@@ -463,7 +464,7 @@ export class Locator {
 
   private async controlStateNode(): Promise<string | null> {
     const node = this.pick(await this.matchedNodes());
-    if (!node || /\bclickable="true"/.test(node)) return node;
+    if (!node || new RegExp(`${attrPattern("clickable")}true"`).test(node)) return node;
     const bounds = parseNodeBounds(node);
     if (!bounds) return node;
     return smallestClickableAncestorNode(await this.driver.source(), bounds) ?? node;

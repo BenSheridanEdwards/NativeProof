@@ -20,7 +20,10 @@ export interface Page {
    * Without a name, matches by element class/type
    * (`checkbox`, `switch`, `button`, `textfield`, `image`) — e.g. `getByRole("checkbox")`.
    */
-  getByRole(role: string, options?: { name?: string | RegExp } & WaitOptions): Locator;
+  getByRole(
+    role: string,
+    options?: { name?: string | RegExp; checked?: boolean; disabled?: boolean } & WaitOptions,
+  ): Locator;
 }
 
 export function page(driver: Driver): Page {
@@ -31,13 +34,17 @@ export function page(driver: Driver): Page {
     getByLabel: (label, options = {}) => locator(driver, by.label(label), options),
     getById: (id, options = {}) => locator(driver, by.id(id), options),
     getByRole: (role, options = {}) => {
-      const { name, ...wait } = options;
+      const { name, checked, disabled, ...wait } = options;
       if (name === "") {
         throw new Error(
           `getByRole(${JSON.stringify(role)}, { name: "" }) — name must be non-empty; omit it to match by role`,
         );
       }
-      return locator(driver, by.role(role, name === undefined ? undefined : { name }), wait);
+      const roleOptions: { name?: string | RegExp; checked?: boolean; disabled?: boolean } = {};
+      if (name !== undefined) roleOptions.name = name;
+      if (checked !== undefined) roleOptions.checked = checked;
+      if (disabled !== undefined) roleOptions.disabled = disabled;
+      return locator(driver, by.role(role, roleOptions), wait);
     },
   };
 }

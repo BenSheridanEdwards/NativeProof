@@ -871,3 +871,53 @@ test("fill stays silent for real text inputs on both platforms", async () => {
     console.warn = originalWarn;
   }
 });
+
+test("inputValue reads the field's own content, not its label or placeholder", async () => {
+  const ios = new FakeDriver(
+    '<XCUIElementTypeTextField type="XCUIElementTypeTextField" name="session" label="Session" placeholderValue="Enter ID" value="abc123" x="0" y="0" width="100" height="40" />',
+  );
+  ios.platform = "ios";
+  assert.equal(await new Locator(ios, by.id("session")).inputValue(), "abc123");
+
+  const android = new FakeDriver(
+    '<node class="android.widget.EditText" resource-id="com.app:id/email" text="me@x.io" bounds="[0,0][10,10]" />',
+  );
+  assert.equal(await new Locator(android, by.testId("com.app:id/email")).inputValue(), "me@x.io");
+  assert.equal(await new Locator(android, by.testId("missing")).inputValue(), null);
+});
+
+test("expect(locator).toHaveValue matches exactly for strings and by pattern for regexes", async () => {
+  const driver = new FakeDriver(
+    '<node class="android.widget.EditText" resource-id="f" text="hello world" bounds="[0,0][10,10]" />',
+  );
+  const field = new Locator(driver, by.testId("f"));
+  await expect(field).toHaveValue("hello world");
+  await expect(field).toHaveValue(/hello/);
+  await expect(field).not.toHaveValue("hello", { timeout: 20, interval: 5 }); // exact, not substring
+  await assert.rejects(
+    () => expect(field).toHaveValue("nope", { timeout: 20, interval: 5 }),
+    /to have value "nope"/,
+  );
+});
+
+test("getByRole state filters pick by checked and disabled", async () => {
+  const driver = new FakeDriver(
+    '<node class="android.widget.CheckBox" content-desc="Wi-Fi" checked="true" clickable="true" bounds="[0,0][40,40]" />' +
+      '<node class="android.widget.CheckBox" content-desc="Bluetooth" checked="false" clickable="true" bounds="[0,50][40,90]" />' +
+      '<node class="android.widget.Button" text="Submit" enabled="false" clickable="true" bounds="[0,100][80,140]" />' +
+      '<node class="android.widget.Button" text="Cancel" enabled="true" clickable="true" bounds="[0,150][80,190]" />',
+  );
+  assert.equal(await new Locator(driver, by.role("checkbox", { checked: true })).textContent(), "Wi-Fi");
+  assert.equal(await new Locator(driver, by.role("checkbox", { checked: false })).textContent(), "Bluetooth");
+  assert.equal(await new Locator(driver, by.role("button", { disabled: true })).textContent(), "Submit");
+  assert.equal(await new Locator(driver, by.role("button", { disabled: false })).textContent(), "Cancel");
+  // State options appear in failure messages.
+  await assert.rejects(
+    () =>
+      new Locator(driver, by.role("checkbox", { name: "Wi-Fi", checked: false })).waitFor({
+        timeout: 20,
+        interval: 5,
+      }),
+    /by\.role\("checkbox", \{ name: "Wi-Fi", checked: false \}\) did not become visible/,
+  );
+});

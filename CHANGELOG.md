@@ -4,6 +4,49 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.12.0
+
+Scrolling, selector discovery, and a hardened locator core.
+
+**Added**
+
+- `Locator.scrollIntoView({ direction?, maxSwipes? })` swipes until the element appears —
+  Playwright's scrollIntoViewIfNeeded for native, computing the swipe vector from the page
+  source's own bounds. Backed by an optional `Driver.swipe` seam. Device-proven on Android 15
+  and iOS 26.5 (`docs/proof/scroll-into-view/`).
+- `nativeproof inspect` prints the candidate `native.*` locators for the configured app's
+  current screen — semantic roles with names first, then visible text, then test ids — ending
+  the read-the-XML-and-guess authoring loop (`docs/proof/inspect/`).
+- `expect(locator).toHaveValue(value)` and `Locator.inputValue()` assert an input's own content
+  (no label/placeholder fallback).
+- `getByRole(role, { checked?, disabled? })` selects controls by state.
+- `fill()`/`clear()` warn when the matched node is not a text input — the silent-no-op
+  observed on real devices when a locator matches a label instead of the field.
+
+**Fixed**
+
+- Attribute matching is anchored to whole names: `long-clickable` no longer passes as
+  `clickable` (wrong `clickableAncestor` tap targets, lying `toBeEnabled`/`toBeDisabled`) and
+  iOS `placeholderValue` is no longer read as `value` (placeholders matched as visible text).
+- Exact-string selectors match labels however the source escaped them (`&apos;`, `&#39;`, or a
+  literal apostrophe) — `getByText("I'll speak")` previously could never match.
+- Caller-supplied `g`-flagged RegExps no longer carry state across wait polls, which made
+  negated `toShow`/`toHaveText` assertions falsely pass.
+- `near()` anchors, clickable ancestors, and control-state lookups resolve from a single
+  source snapshot — no more cross-frame mispairing under animation (and one source read per
+  poll instead of three).
+- `startMockServer` rejects with an actionable error on a busy port instead of crashing the
+  worker process.
+- Onboarding config rewrites survive comments containing apostrophes or braces.
+- `--ios` with no iOS project errors listing the available projects instead of silently
+  running the first project; the CLI preflight honors the same `PLATFORM` /
+  `NATIVEPROOF_PROJECT` env vars the runner reads.
+
+**Changed**
+
+- The README now documents the full locator, interaction, assertion, and mocking surface,
+  including `mock.route()` + traffic assertions and the did-you-mean failure hints.
+
 ## 0.11.0
 
 Atomic text entry and self-explaining failures.

@@ -770,3 +770,53 @@ test("a full near() + clickableAncestor tap reads the source exactly once", asyn
   await box.tap({ clickableAncestor: true });
   assert.equal(fetches, 1); // was 3: nodes, anchor, ancestor — each from a different frame
 });
+
+test("scrollIntoView swipes toward the element and stops when it appears", async () => {
+  const offscreen = '<node text="Header" bounds="[0,0][1080,2000]" />';
+  const revealed = offscreen + '<node text="About device" bounds="[0,1500][1080,1600]" />';
+  const driver = new FakeDriver(offscreen, offscreen, revealed);
+  const swipes: Array<[number, number, number, number]> = [];
+  (driver as unknown as Driver & { swipe: NonNullable<Driver["swipe"]> }).swipe = async (
+    fromX,
+    fromY,
+    toX,
+    toY,
+  ) => {
+    swipes.push([fromX, fromY, toX, toY]);
+  };
+
+  await new Locator(driver, by.text("About device")).scrollIntoView();
+
+  // Two "down" swipes across the middle of the 1080x2000 extent: 70% -> 30% height.
+  assert.deepEqual(swipes, [
+    [540, 1400, 540, 600],
+    [540, 1400, 540, 600],
+  ]);
+});
+
+test("scrollIntoView returns immediately when the element is already visible", async () => {
+  const driver = new FakeDriver('<node text="Visible" bounds="[0,0][100,50]" />');
+  let swiped = false;
+  (driver as unknown as Driver & { swipe: NonNullable<Driver["swipe"]> }).swipe = async () => {
+    swiped = true;
+  };
+  await new Locator(driver, by.text("Visible")).scrollIntoView();
+  assert.equal(swiped, false);
+});
+
+test("scrollIntoView gives up after maxSwipes with the did-you-mean hint", async () => {
+  const driver = new FakeDriver('<node text="Settings list" bounds="[0,0][1080,2000]" />');
+  (driver as unknown as Driver & { swipe: NonNullable<Driver["swipe"]> }).swipe = async () => {};
+  await assert.rejects(
+    () => new Locator(driver, by.text("Settings lost")).scrollIntoView({ maxSwipes: 2 }),
+    /was not found after 2 down swipes — did you mean "Settings list"/,
+  );
+});
+
+test("scrollIntoView without a swiping driver throws a clear error", async () => {
+  const driver = new FakeDriver("");
+  await assert.rejects(
+    () => new Locator(driver, by.text("x")).scrollIntoView(),
+    /needs a driver that supports swiping \(Driver\.swipe\)/,
+  );
+});

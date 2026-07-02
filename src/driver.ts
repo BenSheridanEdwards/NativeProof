@@ -1,5 +1,5 @@
 import { browser } from "@wdio/globals";
-import { tapAt } from "./gestures.js";
+import { swipe, tapAt } from "./gestures.js";
 import { attrPattern, decodeXmlEntities } from "./source.js";
 
 /**
@@ -41,6 +41,12 @@ export interface Driver {
    * {@link Locator.fill} / {@link Locator.clear} fall back to focus-tap + keyboard input.
    */
   setValueOnNode?(node: string, text: string): Promise<boolean>;
+  /**
+   * Drag a touch pointer between two absolute coordinates (a scroll gesture). Optional:
+   * drivers that cannot swipe leave it undefined, and {@link Locator.scrollIntoView}
+   * throws a clear error.
+   */
+  swipe?(fromX: number, fromY: number, toX: number, toY: number): Promise<void>;
 }
 
 /** A {@link Driver} backed by the live WebdriverIO/Appium session. */
@@ -111,6 +117,7 @@ export function wdioDriver(): Driver {
         await activeElementId("Could not resolve the active text element to clear it"),
       );
     },
+    swipe: (fromX: number, fromY: number, toX: number, toY: number) => swipe(fromX, fromY, toX, toY),
     setValueOnNode: async (node: string, text: string) => {
       const selector = exactNodeXPath(node, browser.isAndroid ? "android" : "ios");
       if (!selector) return false;

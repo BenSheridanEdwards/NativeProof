@@ -126,8 +126,30 @@ export async function startMockServer(options: MockServerOptions = {}): Promise<
     }
   });
 
-  await new Promise<void>((resolve) => {
-    http.listen(options.port ?? 0, host, () => resolve());
+  await new Promise<void>((resolve, reject) => {
+    // Without an error listener a busy port emits an unhandled 'error' event and
+    // hard-crashes the process (no teardown, nothing catchable) — and the ws server
+    // RE-emits http errors on itself, so both emitters need a handler. Reject instead,
+    // with the fix a fixture author needs.
+    wss.on("error", () => {
+      /* surfaced via the http 'error' handler below */
+    });
+    const onError = (error: NodeJS.ErrnoException) => {
+      http.close();
+      reject(
+        error.code === "EADDRINUSE"
+          ? new Error(
+              `startMockServer: port ${options.port} on ${host} is already in use — stop the other process or pass a different port (omit it to pick a free one)`,
+              { cause: error },
+            )
+          : error,
+      );
+    };
+    http.once("error", onError);
+    http.listen(options.port ?? 0, host, () => {
+      http.removeListener("error", onError);
+      resolve();
+    });
   });
   const address = http.address();
   const port = typeof address === "object" && address !== null ? address.port : (options.port ?? 0);

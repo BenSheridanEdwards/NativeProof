@@ -110,3 +110,19 @@ test("HTTP route().fulfill answers a REST call; both directions are recorded", a
     await server.stop();
   }
 });
+
+test("startMockServer rejects (not crashes) when the port is already in use", async () => {
+  const first = await startMockServer({ port: 0 });
+  try {
+    await assert.rejects(
+      () => startMockServer({ port: first.port }),
+      (error: Error) => {
+        assert.match(error.message, /already in use/);
+        assert.match(error.message, new RegExp(String(first.port)));
+        return true;
+      },
+    );
+  } finally {
+    await first.stop();
+  }
+});

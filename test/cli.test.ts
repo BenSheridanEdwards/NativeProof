@@ -17,6 +17,7 @@ import {
   onboardCommand,
   parseArgs,
   resolveRunner,
+  runSelection,
   type ScaffoldIo,
   scaffold,
   scaffoldFiles,
@@ -648,4 +649,13 @@ test("updateConfigAppPath survives comments containing apostrophes and braces", 
   assert.match(updated.slice(0, androidAt), /"appium:app": "\.\/New\.app"/); // ios block updated
   assert.match(updated.slice(androidAt), /"appium:app": "\.\/old\.apk"/); // android untouched
   assert.doesNotMatch(updated.slice(androidAt), /New\.app/);
+});
+
+test("runSelection falls back to the env vars the runner itself reads", () => {
+  const args = parseArgs([]);
+  // Flags win; without them, PLATFORM/NATIVEPROOF_PROJECT steer the preflight exactly
+  // like they steer the runner — previously the CLI preflighted projects[0] instead.
+  assert.deepEqual(runSelection(args, { PLATFORM: "ios" }), { platform: "ios" });
+  assert.deepEqual(runSelection(args, { NATIVEPROOF_PROJECT: "beta" }), { project: "beta" });
+  assert.deepEqual(runSelection(parseArgs(["--android"]), { PLATFORM: "ios" }), { platform: "android" });
 });

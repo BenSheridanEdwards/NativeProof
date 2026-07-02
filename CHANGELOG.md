@@ -4,6 +4,33 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.11.0
+
+Atomic text entry and self-explaining failures.
+
+**Added**
+
+- `Locator.fill(text)` and `Locator.clear()` now prefer an atomic element path via the new optional
+  `Driver.setValueOnNode(node, text)`: the wdio driver resolves the matched source node to an
+  exact-XPath element and calls `setValue`, which clears and types in one native call on both
+  UiAutomator2 and XCUITest. Falls back to the focus-tap + clear + type path when the node cannot
+  be resolved or a custom driver does not implement the hook. Device-proven on Android 15 and
+  iOS 26.5 (`docs/proof/atomic-fill/`).
+- Locator not-found errors (waits, taps, and positive `expect` failures) now end with a
+  "did you mean" list of the closest on-screen candidate values, ranked by edit distance, read
+  from the attributes the selector targets — so an exact-string mismatch is visible in the failure
+  itself instead of requiring a page-source grep.
+- `exactNodeXPath(node, platform)` builds an exact element XPath for a matched source node on both
+  platforms (previously iOS-only via `iosExactNodeXPath`).
+
+**Changed**
+
+- Onboarding failures are actionable: re-onboarding refuses to shadow an `"appium:app"` it cannot
+  rewrite (previously it silently inserted a losing duplicate key and claimed success), ambiguous
+  Xcode scheme selection warns which scheme was picked and which were skipped, a missing Android
+  `.apk` explains how to build one, and iOS build / Appium driver-install failures point at the
+  concrete evidence and escape hatches.
+
 ## 0.10.14
 
 iOS project onboarding that builds and stages a simulator app.

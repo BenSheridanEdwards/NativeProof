@@ -105,6 +105,36 @@ export interface PressOptions extends TapOptions {
 const DEFAULTS = { timeout: 10_000, interval: 250 };
 const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+const MAX_SUGGESTIONS = 3;
+
+/** Levenshtein distance — error-path only, candidate strings are short screen labels. */
+function editDistance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      current[j] = Math.min(
+        (previous[j] ?? 0) + 1,
+        (current[j - 1] ?? 0) + 1,
+        (previous[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    previous = current;
+  }
+  return previous[b.length] ?? 0;
+}
+
+/** The string a selector is hunting for, used to rank did-you-mean candidates. */
+function selectorTarget(selector: Selector): string {
+  const value = selector.by === "role" ? (selector.name ?? selector.value) : selector.value;
+  return value instanceof RegExp ? value.source : value;
+}
+
+function formatSuggestions(values: readonly string[]): string {
+  if (values.length === 0) return "";
+  return ` — did you mean ${values.map((value) => JSON.stringify(value)).join(", ")}?`;
+}
+
 function nodeAttribute(node: string, attribute: string): string | undefined {
   const value = new RegExp(`${attribute}="([^"]*)"`).exec(node)?.[1];
   return value === undefined ? undefined : decodeXmlEntities(value);
@@ -272,6 +302,43 @@ export class Locator {
     return pattern.test(source);
   }
 
+  /**
+   * The closest on-screen candidate values for this selector, nearest first — the
+   * "did you mean" list appended to not-found errors so an exact-string mismatch
+   * (capitalisation, trailing space, the real label) is visible without grepping
+   * page-source XML. Reads the attributes the selector targets (labels for
+   * text/label/desc/role, ids for id/testId). Never throws; empty on any failure.
+   */
+  async suggestions(): Promise<string[]> {
+    try {
+      const attribute =
+        this.selector.by === "role"
+          ? this.driver.platform === "ios"
+            ? "(?:label|value)"
+            : "(?:text|content-desc)"
+          : this.attribute();
+      const source = await this.driver.source();
+      const values = [
+        ...new Set(
+          [...source.matchAll(new RegExp(`\\b${attribute}="([^"]*)"`, "g"))]
+            .map((match) => decodeXmlEntities(match[1] ?? ""))
+            .filter((value) => value !== ""),
+        ),
+      ];
+      const target = selectorTarget(this.selector).toLowerCase();
+      return values
+        .sort((a, b) => editDistance(a.toLowerCase(), target) - editDistance(b.toLowerCase(), target))
+        .slice(0, MAX_SUGGESTIONS);
+    } catch {
+      return [];
+    }
+  }
+
+  /** The did-you-mean suffix for a not-found error; empty when nothing is on screen. */
+  async suggestionsHint(): Promise<string> {
+    return formatSuggestions(await this.suggestions());
+  }
+
   /** Wait until the selector is visible; throws on timeout. */
   async waitFor(options: WaitOptions = {}): Promise<void> {
     const opts: WaitOptions = { ...this.options, ...options, sleep: (ms) => this.driver.pause(ms) };
@@ -282,7 +349,7 @@ export class Locator {
     );
     if (!visible) {
       throw new Error(
-        `${describeSelector(this.selector)} did not become visible within ${opts.timeout ?? DEFAULTS.timeout}ms`,
+        `${describeSelector(this.selector)} did not become visible within ${opts.timeout ?? DEFAULTS.timeout}ms${await this.suggestionsHint()}`,
       );
     }
   }
@@ -319,7 +386,7 @@ export class Locator {
     );
     if (!match) {
       throw new Error(
-        `${describeSelector(this.selector)} was not found to tap within ${opts.timeout ?? DEFAULTS.timeout}ms`,
+        `${describeSelector(this.selector)} was not found to tap within ${opts.timeout ?? DEFAULTS.timeout}ms${await this.suggestionsHint()}`,
       );
     }
     const bounds = match.bounds;

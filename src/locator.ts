@@ -213,9 +213,20 @@ export class Locator {
    * `near` anchor is set, ordered nearest-first by bounds-centre distance (filtered by maxDistance).
    */
   private async matchedNodes(): Promise<string[]> {
-    const nodes = this.nodesIn(await this.driver.source());
+    return this.matchedNodesIn(await this.driver.source());
+  }
+
+  /**
+   * Matches in one `source` snapshot — the anchor of a `near()` locator is located in the
+   * SAME snapshot as the candidates. Resolving them from two fetches paired elements across
+   * frames: under animation the anchor moved between reads and the wrong row's control won.
+   */
+  private matchedNodesIn(source: string): string[] {
+    const nodes = this.nodesIn(source);
     if (!this.proximity) return nodes;
-    const anchor = await this.proximity.anchor.bounds();
+    const anchorLocator = this.proximity.anchor;
+    const anchorNode = anchorLocator.pick(anchorLocator.matchedNodesIn(source));
+    const anchor = anchorNode ? parseNodeBounds(anchorNode) : null;
     if (!anchor) return [];
     const { maxDistance } = this.proximity;
     return nodes
@@ -298,7 +309,7 @@ export class Locator {
   /** True if the selector is present AND `text` appears in the source. */
   async shows(text: string | RegExp): Promise<boolean> {
     const source = await this.driver.source();
-    if (this.pick(this.nodesIn(source)) === null) return false;
+    if (this.pick(this.matchedNodesIn(source)) === null) return false;
     // Test against the DECODED source so the entity form the toolkit chose
     // (&apos; vs &#39; vs a literal apostrophe) never matters to the caller.
     const pattern = typeof text === "string" ? new RegExp(escapeRegExp(text)) : deGlobal(text);
@@ -380,9 +391,12 @@ export class Locator {
     const opts: WaitOptions = { ...this.options, ...options, sleep: (ms) => this.driver.pause(ms) };
     const match = await waitUntil(
       async () => {
-        const node = this.pick(await this.matchedNodes());
+        // Carry the snapshot the node was matched in, so the clickable ancestor is
+        // resolved from the SAME tree — a second fetch paired stale bounds with a new frame.
+        const source = await this.driver.source();
+        const node = this.pick(this.matchedNodesIn(source));
         const bounds = node ? parseNodeBounds(node) : null;
-        return node && bounds ? { node, bounds } : null;
+        return node && bounds ? { node, bounds, source } : null;
       },
       (value) => value !== null,
       opts,
@@ -395,9 +409,7 @@ export class Locator {
     const bounds = match.bounds;
     return {
       node: match.node,
-      bounds: options.clickableAncestor
-        ? smallestClickableAncestorBounds(await this.driver.source(), bounds)
-        : bounds,
+      bounds: options.clickableAncestor ? smallestClickableAncestorBounds(match.source, bounds) : bounds,
     };
   }
 
@@ -465,11 +477,12 @@ export class Locator {
   }
 
   private async controlStateNode(): Promise<string | null> {
-    const node = this.pick(await this.matchedNodes());
+    const source = await this.driver.source();
+    const node = this.pick(this.matchedNodesIn(source));
     if (!node || new RegExp(`${attrPattern("clickable")}true"`).test(node)) return node;
     const bounds = parseNodeBounds(node);
     if (!bounds) return node;
-    return smallestClickableAncestorNode(await this.driver.source(), bounds) ?? node;
+    return smallestClickableAncestorNode(source, bounds) ?? node;
   }
 
   /** Tap to bring a checkbox/switch to checked; a no-op if it already is. */

@@ -34,6 +34,13 @@ export interface Driver {
    * input leave it undefined, and {@link Locator.fill} / {@link Locator.clear} throw clearly.
    */
   clearText?(): Promise<void>;
+  /**
+   * Replace a matched node's text with `text` in one native element call (clear + type,
+   * atomic on both UiAutomator2 and XCUITest — no coordinate tap, no focus race). Optional:
+   * return false when the node cannot be resolved to a live element, and
+   * {@link Locator.fill} / {@link Locator.clear} fall back to focus-tap + keyboard input.
+   */
+  setValueOnNode?(node: string, text: string): Promise<boolean>;
 }
 
 /** A {@link Driver} backed by the live WebdriverIO/Appium session. */
@@ -104,6 +111,16 @@ export function wdioDriver(): Driver {
         await activeElementId("Could not resolve the active text element to clear it"),
       );
     },
+    setValueOnNode: async (node: string, text: string) => {
+      const selector = exactNodeXPath(node, browser.isAndroid ? "android" : "ios");
+      if (!selector) return false;
+      try {
+        await browser.$(selector).setValue(text);
+        return true;
+      } catch {
+        return false;
+      }
+    },
   };
 }
 
@@ -112,11 +129,23 @@ export function iosNodeCanUseNativeClick(node: string): boolean {
 }
 
 export function iosExactNodeXPath(node: string): string | null {
-  const type = nodeAttribute(node, "type");
-  if (!type || !iOSNodeLooksClickable(node)) return null;
+  return iOSNodeLooksClickable(node) ? exactNodeXPath(node, "ios") : null;
+}
 
-  const predicates = [`@type=${xpathLiteral(type)}`];
-  for (const attribute of ["name", "label", "value", "x", "y", "width", "height"] as const) {
+/**
+ * An exact XPath for a matched page-source node — anchored on the element type (iOS) or
+ * class (Android) and narrowed by every identifying attribute the node exposes, so the
+ * live driver can resolve the very element the locator matched (native click, atomic
+ * setValue). Null when the node lacks its anchor attribute.
+ */
+export function exactNodeXPath(node: string, platform: Platform): string | null {
+  const attributes =
+    platform === "ios"
+      ? (["type", "name", "label", "value", "x", "y", "width", "height"] as const)
+      : (["class", "resource-id", "text", "content-desc", "bounds"] as const);
+  if (nodeAttribute(node, attributes[0]) === null) return null;
+  const predicates: string[] = [];
+  for (const attribute of attributes) {
     const value = nodeAttribute(node, attribute);
     if (value !== null) predicates.push(`@${attribute}=${xpathLiteral(value)}`);
   }

@@ -398,8 +398,20 @@ export class Locator {
     };
   }
 
-  /** Focus the field and clear its existing text. */
+  /**
+   * Set the matched node's value in one native element call when the driver can resolve
+   * it ({@link Driver.setValueOnNode}); false means the caller must use the focused-input
+   * fallback. Waits for the element either way.
+   */
+  private async trySetValueOnNode(text: string, options: WaitOptions): Promise<boolean> {
+    if (!this.driver.setValueOnNode) return false;
+    const target = await this.resolveTouchTarget(options);
+    return this.driver.setValueOnNode(target.node, text);
+  }
+
+  /** Clear the field's text — atomically on the element when the driver can, else focus-tap + clear. */
   async clear(options: WaitOptions = {}): Promise<void> {
+    if (await this.trySetValueOnNode("", options)) return;
     if (!this.driver.clearText) {
       throw new Error(
         `${describeSelector(this.selector)}.clear() needs a driver that supports focused text clearing (Driver.clearText)`,
@@ -410,14 +422,21 @@ export class Locator {
   }
 
   /**
-   * Replace the field's current value with `text`, Playwright-style. Requires a driver with
-   * focused text clearing and keyboard input ({@link Driver.clearText}, {@link Driver.typeText});
-   * throws a clear error otherwise.
+   * Replace the field's current value with `text`, Playwright-style. Prefers the driver's
+   * atomic element path ({@link Driver.setValueOnNode} — clear + type in one native call),
+   * falling back to focus-tap + {@link Driver.clearText} + {@link Driver.typeText};
+   * throws a clear error when the driver supports neither.
    */
   async fill(text: string, options: WaitOptions = {}): Promise<void> {
+    if (!this.driver.typeText && !this.driver.setValueOnNode) {
+      throw new Error(
+        `${describeSelector(this.selector)}.fill(...) needs a driver that supports text input (Driver.setValueOnNode or Driver.typeText)`,
+      );
+    }
+    if (await this.trySetValueOnNode(text, options)) return;
     if (!this.driver.typeText) {
       throw new Error(
-        `${describeSelector(this.selector)}.fill(...) needs a driver that supports text input (Driver.typeText)`,
+        `${describeSelector(this.selector)}.fill(...) could not set the value natively and the driver has no keyboard fallback (Driver.typeText)`,
       );
     }
     await this.clear(options);

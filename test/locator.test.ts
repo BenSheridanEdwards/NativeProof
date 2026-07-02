@@ -584,3 +584,76 @@ test("negated expect failures never carry a did-you-mean hint", async () => {
     },
   );
 });
+
+test("Locator.fill routes through the driver's atomic element setValue when available", async () => {
+  const driver = new FakeDriver(
+    '<node class="android.widget.EditText" resource-id="com.app:id/session" text="old" bounds="[0,0][200,60]" />',
+  );
+  const setValues: Array<{ node: string; text: string }> = [];
+  (driver as unknown as Driver & { setValueOnNode: NonNullable<Driver["setValueOnNode"]> }).setValueOnNode =
+    async (node, text) => {
+      setValues.push({ node, text });
+      return true;
+    };
+
+  await new Locator(driver, by.role("textfield")).fill("new value");
+
+  assert.equal(setValues.length, 1);
+  assert.match(setValues[0]?.node ?? "", /com\.app:id\/session/);
+  assert.equal(setValues[0]?.text, "new value");
+  // Atomic path replaces the whole focus-tap + clear + type dance.
+  assert.deepEqual(driver.taps, []);
+  assert.deepEqual(driver.cleared, []);
+  assert.deepEqual(driver.typed, []);
+});
+
+test("Locator.fill falls back to focus-tap + clear + type when native setValue cannot resolve", async () => {
+  const driver = new FakeDriver('<node text="Email" bounds="[0,0][200,60]" />');
+  (driver as unknown as Driver & { setValueOnNode: NonNullable<Driver["setValueOnNode"]> }).setValueOnNode =
+    async () => false;
+
+  await new Locator(driver, by.text("Email")).fill("me@example.com");
+
+  assert.deepEqual(driver.taps, [{ x: 100, y: 30 }]);
+  assert.deepEqual(driver.cleared, ["focused"]);
+  assert.deepEqual(driver.typed, ["me@example.com"]);
+});
+
+test("Locator.clear uses the atomic element path with an empty value", async () => {
+  const driver = new FakeDriver('<node text="Session ID" bounds="[0,0][200,60]" />');
+  const setValues: Array<{ node: string; text: string }> = [];
+  (driver as unknown as Driver & { setValueOnNode: NonNullable<Driver["setValueOnNode"]> }).setValueOnNode =
+    async (node, text) => {
+      setValues.push({ node, text });
+      return true;
+    };
+
+  await new Locator(driver, by.text("Session ID")).clear();
+
+  assert.deepEqual(
+    setValues.map((call) => call.text),
+    [""],
+  );
+  assert.deepEqual(driver.taps, []);
+  assert.deepEqual(driver.cleared, []);
+});
+
+test("Locator.fill works without keyboard input when the driver sets values natively", async () => {
+  const setValues: string[] = [];
+  const driver: Driver = {
+    platform: "android",
+    async source() {
+      return '<node text="Passcode" bounds="[0,0][200,60]" />';
+    },
+    async pause() {},
+    async tapAt() {},
+    async setValueOnNode(_node, text) {
+      setValues.push(text);
+      return true;
+    },
+  };
+
+  await new Locator(driver, by.text("Passcode")).fill("123456");
+
+  assert.deepEqual(setValues, ["123456"]);
+});

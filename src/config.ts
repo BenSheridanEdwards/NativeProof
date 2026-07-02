@@ -218,6 +218,15 @@ function resolveSpecs(config: RunnerConfig, project: DeviceProject, env: RunnerE
   return [abs(`${testDir}/${testMatch}`)];
 }
 
+/** The full session capabilities for a project: platform defaults, host device, then the project's own. */
+export function projectCapabilities(config: RunnerConfig, project: DeviceProject): Record<string, unknown> {
+  return {
+    ...defaultCapabilities(project.platform),
+    ...hostDeviceDefaults(config, project),
+    ...project.capabilities,
+  };
+}
+
 /**
  * Translate an NativeProof config into a WebdriverIO `config` object.
  */
@@ -235,13 +244,7 @@ export function buildWdioConfig(
     path: config.appium?.path ?? "/wd/hub",
     specs: resolveSpecs(config, project, env, cwd),
     maxInstances: 1,
-    capabilities: [
-      {
-        ...defaultCapabilities(project.platform),
-        ...hostDeviceDefaults(config, project),
-        ...project.capabilities,
-      },
-    ],
+    capabilities: [projectCapabilities(config, project)],
     framework: "mocha",
     reporters: ["spec"],
     mochaOpts: { ui: "bdd", timeout: config.mochaTimeout ?? 240_000 },

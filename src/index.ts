@@ -15,6 +15,7 @@ export * from "./expect.js";
 export * from "./fixtures.js";
 export * from "./gestures.js";
 export * from "./harness.js";
+export * from "./inspect.js";
 export * from "./ios.js";
 export * from "./locator.js";
 export * from "./log.js";

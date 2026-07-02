@@ -619,3 +619,33 @@ test("ensureAppiumDriver install failure on iOS points at the full-Xcode require
     /full Xcode installed .*xcode-select -p/,
   );
 });
+
+test("updateConfigAppPath survives comments containing apostrophes and braces", () => {
+  const contents = `export default defineConfig({
+  projects: [
+    {
+      name: "ios",
+      platform: "ios",
+      // don't pin a simulator model, it's auto-selected
+      /* legacy shape: { "appium:app": "./x.app" } */
+      capabilities: {
+        "appium:app": "./old.app",
+      },
+    },
+    {
+      name: "android",
+      platform: "android",
+      // Gradle's debug output lands here
+      capabilities: {
+        "appium:app": "./old.apk",
+      },
+    },
+  ],
+});
+`;
+  const updated = updateConfigAppPath(contents, { platform: "ios", appPath: "./New.app" });
+  const androidAt = updated.indexOf('"android"');
+  assert.match(updated.slice(0, androidAt), /"appium:app": "\.\/New\.app"/); // ios block updated
+  assert.match(updated.slice(androidAt), /"appium:app": "\.\/old\.apk"/); // android untouched
+  assert.doesNotMatch(updated.slice(androidAt), /New\.app/);
+});

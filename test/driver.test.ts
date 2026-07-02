@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { _setGlobal } from "@wdio/globals";
+import * as driverModule from "../src/driver.js";
 import { iosExactNodeXPath, iosNodeCanUseNativeClick, wdioDriver } from "../src/driver.js";
 
 const ELEMENT_ID = "element-6066-11e4-a52e-4f735466cecf";
@@ -19,6 +20,7 @@ type FakeBrowser = {
   getActiveElement(): Promise<unknown>;
   elementClear(elementId: string): Promise<void>;
   elementSendKeys(elementId: string, text: string): Promise<void>;
+  $?: (selector: string) => { setValue(text: string): Promise<void>; click(): Promise<void> };
 };
 
 function fakeBrowser(options: { isAndroid?: boolean; activeElementResponse?: unknown } = {}): FakeBrowser {
@@ -135,4 +137,61 @@ test("wdioDriver throws clearly when iOS focused text input cannot be resolved",
   await assert.rejects(() => typeText("hello"), /Could not resolve the active text element to type into it/);
   assert.deepEqual(browser.sentText, []);
   assert.deepEqual(browser.keyInputs, []);
+});
+
+test("exactNodeXPath anchors Android nodes on class and their identifying attributes", () => {
+  const { exactNodeXPath } = driverModule;
+  assert.equal(
+    exactNodeXPath(
+      '<android.widget.EditText class="android.widget.EditText" resource-id="com.app:id/session" text="old" bounds="[0,0][100,50]" />',
+      "android",
+    ),
+    "//*[@class='android.widget.EditText' and @resource-id='com.app:id/session' and @text='old' and @bounds='[0,0][100,50]']",
+  );
+  assert.equal(exactNodeXPath('<node text="No class" />', "android"), null);
+});
+
+test("wdioDriver setValueOnNode resolves the exact element and sets the value atomically", async () => {
+  const browser = fakeBrowser({ isAndroid: true });
+  const calls: Array<{ selector: string; text: string }> = [];
+  browser.$ = (selector: string) => ({
+    async setValue(text: string) {
+      calls.push({ selector, text });
+    },
+    async click() {},
+  });
+  _setGlobal("browser", browser, false);
+  const driver = wdioDriver();
+
+  assert.ok(driver.setValueOnNode);
+  const handled = await driver.setValueOnNode(
+    '<android.widget.EditText class="android.widget.EditText" resource-id="com.app:id/session" bounds="[0,0][100,50]" />',
+    "new text",
+  );
+
+  assert.equal(handled, true);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0]?.selector ?? "", /@resource-id='com\.app:id\/session'/);
+  assert.equal(calls[0]?.text, "new text");
+});
+
+test("wdioDriver setValueOnNode reports false when the node cannot become an element", async () => {
+  const browser = fakeBrowser({ isAndroid: true });
+  _setGlobal("browser", browser, false);
+  const driver = wdioDriver();
+
+  assert.ok(driver.setValueOnNode);
+  // No class attribute: no exact selector, so the locator layer must fall back.
+  assert.equal(await driver.setValueOnNode('<node text="Email" />', "x"), false);
+
+  browser.$ = () => ({
+    async setValue() {
+      throw new Error("stale element");
+    },
+    async click() {},
+  });
+  assert.equal(
+    await driver.setValueOnNode('<node class="android.widget.EditText" text="Email" />', "x"),
+    false,
+  );
 });

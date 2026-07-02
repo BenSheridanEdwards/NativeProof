@@ -3,7 +3,6 @@ import {
   attrPattern,
   type Bounds,
   decodeXmlEntities,
-  encodeXmlEntities,
   escapeRegExp,
   nodesForAttribute,
   nodesForRole,
@@ -299,8 +298,10 @@ export class Locator {
   async shows(text: string | RegExp): Promise<boolean> {
     const source = await this.driver.source();
     if (this.pick(this.nodesIn(source)) === null) return false;
-    const pattern = typeof text === "string" ? new RegExp(escapeRegExp(encodeXmlEntities(text))) : text;
-    return pattern.test(source);
+    // Test against the DECODED source so the entity form the toolkit chose
+    // (&apos; vs &#39; vs a literal apostrophe) never matters to the caller.
+    const pattern = typeof text === "string" ? new RegExp(escapeRegExp(text)) : text;
+    return pattern.test(decodeXmlEntities(source));
   }
 
   /**

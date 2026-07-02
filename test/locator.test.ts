@@ -691,3 +691,28 @@ test("iOS text selectors and textContent ignore placeholderValue", async () => {
   assert.equal(await field.isVisible(), true);
   assert.equal(await field.textContent(), "typed text");
 });
+
+test("string selectors match labels however the source escaped the apostrophe", async () => {
+  // XCUITest writes &apos;, UiAutomator may write &#39; or a literal apostrophe.
+  // Exact-string selectors compare DECODED values, so all three shapes match.
+  for (const escaped of ["I&apos;ll speak", "I&#39;ll speak", "I'll speak"]) {
+    const driver = new FakeDriver(`<node label="${escaped}" bounds="[0,0][100,50]" />`);
+    driver.platform = "ios";
+    const loc = new Locator(driver, by.label("I'll speak"));
+    assert.equal(await loc.isVisible(), true, `label="${escaped}" should match`);
+    assert.equal(await loc.textContent(), "I'll speak");
+  }
+});
+
+test("string selectors stay exact-match after decoding", async () => {
+  const driver = new FakeDriver('<node text="Saved" bounds="[0,0][100,50]" />');
+  assert.equal(await new Locator(driver, by.text("Save")).isVisible(), false);
+});
+
+test("shows() matches text the source entity-escaped", async () => {
+  const driver = new FakeDriver(
+    '<node text="Don&apos;t show again" bounds="[0,0][200,50]" /><node text="Terms &amp; Conditions" bounds="[0,60][200,110]" />',
+  );
+  assert.equal(await new Locator(driver, by.text(/Don't/)).shows("Don't show again"), true);
+  await expect(new Locator(driver, by.text("Terms & Conditions"))).toShow("Terms & Conditions");
+});

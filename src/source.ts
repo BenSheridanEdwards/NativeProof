@@ -108,9 +108,10 @@ export function encodeXmlEntities(value: string): string {
 
 /**
  * The first element tag exposing `attribute` with a value matching `value`. `attribute`
- * may be a regex alternation (e.g. `"(?:text|content-desc)"`). A string matches the
- * entity-escaped source exactly; a RegExp is tested against each candidate's DECODED
- * value, so `by.text(/Save( draft)?/)` matches whether the source XML-escaped it or not.
+ * may be a regex alternation (e.g. `"(?:text|content-desc)"`). Both string and RegExp
+ * values are tested against each candidate's DECODED value — so `by.text("I'll speak")`
+ * matches whether the source wrote `I&apos;ll`, `I&#39;ll`, or a literal apostrophe,
+ * and `by.text(/Save( draft)?/)` matches whether the source XML-escaped it or not.
  */
 export function nodeForAttribute(source: string, attribute: string, value: string | RegExp): string | null {
   return nodesForAttribute(source, attribute, value)[0] ?? null;
@@ -118,15 +119,15 @@ export function nodeForAttribute(source: string, attribute: string, value: strin
 
 /** Every element tag exposing `attribute` with a value matching `value`, in document order. */
 export function nodesForAttribute(source: string, attribute: string, value: string | RegExp): string[] {
-  if (typeof value === "string") {
-    const escaped = escapeRegExp(encodeXmlEntities(value));
-    return [...source.matchAll(new RegExp(`<[^>]*${attrPattern(attribute)}${escaped}"[^>]*>`, "g"))].map(
-      (m) => m[0],
-    );
-  }
+  // A string is exact equality on the decoded value — encoding the needle instead would
+  // miss escapings the encoder doesn't produce (&apos; vs &#39; vs a literal apostrophe).
   // A `g`-flagged RegExp is stateful across `.test()` calls; use a non-global copy so the
   // per-candidate test is order-independent.
-  const test = value.global ? new RegExp(value.source, value.flags.replace("g", "")) : value;
+  const test =
+    typeof value === "string"
+      ? (candidate: string) => candidate === value
+      : (candidate: string) =>
+          (value.global ? new RegExp(value.source, value.flags.replace("g", "")) : value).test(candidate);
   // `attribute` may be an alternation (e.g. `(?:text|content-desc)`), and a node can carry
   // more than one of them — Android often exposes both `text=""` and `content-desc="…"`. Test
   // the pattern against EVERY matching attribute's value, not just the first: otherwise a label
@@ -135,7 +136,7 @@ export function nodesForAttribute(source: string, attribute: string, value: stri
   const nodes: string[] = [];
   for (const tag of source.matchAll(/<[^>]*>/g)) {
     for (const attr of tag[0].matchAll(candidates)) {
-      if (test.test(decodeXmlEntities(attr[1] ?? ""))) {
+      if (test(decodeXmlEntities(attr[1] ?? ""))) {
         nodes.push(tag[0]);
         break;
       }

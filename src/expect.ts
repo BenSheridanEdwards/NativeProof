@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { describeSelector, Locator, type WaitOptions, waitUntil } from "./locator.js";
 import { describeMatch, type FrameLog, type FrameMatch, frameExists, type MockBackend } from "./mock.js";
+import { deGlobal } from "./source.js";
 
 /**
  * Playwright-style assertions with built-in auto-waiting — the "easy visibility"
@@ -76,7 +77,7 @@ class LocatorExpectation implements LocatorAssertions {
       async () => {
         const content = await this.locator.textContent();
         if (content === null) return false;
-        return typeof text === "string" ? content.includes(text) : text.test(content);
+        return typeof text === "string" ? content.includes(text) : deGlobal(text).test(content);
       },
       `have text ${JSON.stringify(String(text))}`,
       options,

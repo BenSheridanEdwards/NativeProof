@@ -716,3 +716,21 @@ test("shows() matches text the source entity-escaped", async () => {
   assert.equal(await new Locator(driver, by.text(/Don't/)).shows("Don't show again"), true);
   await expect(new Locator(driver, by.text("Terms & Conditions"))).toShow("Terms & Conditions");
 });
+
+test("g-flagged regexes stay stateless across polls (shows/toShow/toHaveText)", async () => {
+  // A /g regex advances lastIndex after a hit, so re-testing it every poll alternates
+  // match/no-match — which made expect(...).not.toShow(/x/g) falsely pass.
+  const driver = new FakeDriver('<node text="Logout" bounds="[0,0][100,50]" />');
+  const loc = new Locator(driver, by.text("Logout"));
+  const pattern = /Logout/g;
+  assert.equal(await loc.shows(pattern), true);
+  assert.equal(await loc.shows(pattern), true); // second call must not consume lastIndex
+  await assert.rejects(
+    () => expect(loc).not.toShow(/Logout/g, { timeout: 30, interval: 5 }),
+    /assertion not met/,
+  );
+  await assert.rejects(
+    () => expect(loc).not.toHaveText(/Logout/g, { timeout: 30, interval: 5 }),
+    /assertion not met/,
+  );
+});

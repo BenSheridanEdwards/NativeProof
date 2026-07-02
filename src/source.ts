@@ -70,6 +70,15 @@ export function parseNodeBounds(node: string): Bounds | null {
 }
 
 /**
+ * A caller's RegExp with the `g` flag stripped. A `g`-flagged RegExp is stateful across
+ * `.test()` calls (`lastIndex` advances after a hit), so polling the same pattern every
+ * wait interval alternates match/no-match — `expect(...).not.toShow(/x/g)` falsely passes.
+ */
+export function deGlobal(pattern: RegExp): RegExp {
+  return pattern.global ? new RegExp(pattern.source, pattern.flags.replace("g", "")) : pattern;
+}
+
+/**
  * Regex fragment matching `name="` only as a WHOLE attribute name. Without the
  * lookbehind, `clickable=` also matches inside `long-clickable=` (UiAutomator emits it
  * on nearly every node) and `value=` inside iOS `placeholderValue=` — silently reading
@@ -126,8 +135,7 @@ export function nodesForAttribute(source: string, attribute: string, value: stri
   const test =
     typeof value === "string"
       ? (candidate: string) => candidate === value
-      : (candidate: string) =>
-          (value.global ? new RegExp(value.source, value.flags.replace("g", "")) : value).test(candidate);
+      : (candidate: string) => deGlobal(value).test(candidate);
   // `attribute` may be an alternation (e.g. `(?:text|content-desc)`), and a node can carry
   // more than one of them — Android often exposes both `text=""` and `content-desc="…"`. Test
   // the pattern against EVERY matching attribute's value, not just the first: otherwise a label
@@ -150,7 +158,7 @@ function attributeValueMatches(node: string, attribute: string, value: string | 
     decodeXmlEntities(match[1] ?? ""),
   );
   if (typeof value === "string") return values.some((candidate) => candidate === value);
-  const test = value.global ? new RegExp(value.source, value.flags.replace("g", "")) : value;
+  const test = deGlobal(value);
   return values.some((candidate) => test.test(candidate));
 }
 

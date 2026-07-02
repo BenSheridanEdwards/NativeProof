@@ -792,6 +792,20 @@ function findMatchingBrace(contents: string, openIndex: number): number {
       }
       continue;
     }
+    // Comments may contain quotes and braces ("// don't pin a model", "/* { */"), which
+    // desynced the quote tracker and made onboarding fail on — or rewrite — the wrong block.
+    if (char === "/" && contents[index + 1] === "/") {
+      const newline = contents.indexOf("\n", index);
+      if (newline === -1) return -1;
+      index = newline;
+      continue;
+    }
+    if (char === "/" && contents[index + 1] === "*") {
+      const close = contents.indexOf("*/", index + 2);
+      if (close === -1) return -1;
+      index = close + 1;
+      continue;
+    }
     if (char === '"' || char === "'" || char === "`") {
       quote = char;
       continue;

@@ -17,9 +17,11 @@ import {
   type AppiumOptions,
   findConfigFile,
   type NativeProofConfig,
+  projectCapabilities,
   type RunnerEnv,
   resolveProject,
 } from "./config.js";
+import { selectorSuggestions } from "./inspect.js";
 
 /**
  * The `nativeproof` CLI — the single-command entry, in the spirit of `playwright test`.
@@ -32,7 +34,7 @@ import {
  */
 
 export interface CliArgs {
-  command: "test" | "init" | "onboard" | "help" | "version";
+  command: "test" | "init" | "onboard" | "inspect" | "help" | "version";
   platform: "android" | "ios" | undefined;
   initPlatform: "android" | "ios" | undefined;
   onboardPath: string | undefined;
@@ -96,6 +98,10 @@ export function parseArgs(
       args.command = "onboard";
       continue;
     }
+    if (arg === "inspect") {
+      args.command = "inspect";
+      continue;
+    }
     if (arg === "-h" || arg === "--help") return { ...args, command: "help" };
     if (arg === "-v" || arg === "--version") return { ...args, command: "version" };
     if (arg === "--ios") {
@@ -145,6 +151,7 @@ export function helpText(): string {
     "  nativeproof init --ios         scaffold nativeproof.config.ts + a sample spec for iOS",
     "  nativeproof init --android     scaffold nativeproof.config.ts + a sample spec for Android",
     "  nativeproof onboard <path>     point nativeproof.config.ts at an app artifact or iOS project",
+    "  nativeproof inspect            launch the configured app and print candidate locators",
     "  nativeproof-init --ios         same init shortcut, useful from package-manager bins",
     "  nativeproof-init --android     same init shortcut for Android",
     "  nativeproof-onboard <path>     onboard shortcut, useful from package-manager bins",
@@ -1144,6 +1151,42 @@ export function runSelection(args: CliArgs, env: NodeJS.ProcessEnv = process.env
   return selection;
 }
 
+/**
+ * `nativeproof inspect` — selector discovery (issue #23, step 2): start a session with the
+ * configured project (noReset so app state survives), dump the first screen's candidate
+ * locators, and tear the session down. Kills the read-the-XML-and-guess authoring loop.
+ */
+async function runInspect(args: CliArgs): Promise<number> {
+  const { configPath } = resolveRunner(args);
+  const userConfig = await loadNativeProofConfig(configPath);
+  const project = resolveProject(userConfig, runSelection(args));
+  const appium = await ensureAppium(userConfig.appium, args.startAppium, project.platform);
+  try {
+    const { remote } = await import("webdriverio");
+    const endpoint = appiumEndpoint(userConfig.appium);
+    const session = await remote({
+      hostname: endpoint.host,
+      port: endpoint.port,
+      path: endpoint.path,
+      logLevel: "warn",
+      capabilities: { ...projectCapabilities(userConfig, project), "appium:noReset": true },
+    });
+    try {
+      const source = await session.getPageSource();
+      const suggestions = selectorSuggestions(source, project.platform);
+      console.log(
+        `nativeproof inspect — ${suggestions.length} candidate locators on the current ${project.platform} screen\n`,
+      );
+      for (const suggestion of suggestions) console.log(`  ${suggestion}`);
+    } finally {
+      await session.deleteSession().catch(() => {});
+    }
+    return 0;
+  } finally {
+    appium?.kill();
+  }
+}
+
 async function runTests(args: CliArgs): Promise<number> {
   const { wdioConfig, configPath, extraEnv } = resolveRunner(args);
   const userConfig = await loadNativeProofConfig(configPath);
@@ -1191,6 +1234,9 @@ export async function main(
       );
     }
     return onboardCommand(process.cwd(), args.onboardPath, { platform: args.platform ?? undefined });
+  }
+  if (args.command === "inspect") {
+    return runInspect(args);
   }
   return runTests(args);
 }

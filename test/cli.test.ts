@@ -659,3 +659,8 @@ test("runSelection falls back to the env vars the runner itself reads", () => {
   assert.deepEqual(runSelection(args, { NATIVEPROOF_PROJECT: "beta" }), { project: "beta" });
   assert.deepEqual(runSelection(parseArgs(["--android"]), { PLATFORM: "ios" }), { platform: "android" });
 });
+
+test("parseArgs recognises the inspect command and helpText documents it", () => {
+  assert.equal(parseArgs(["inspect", "--android"]).command, "inspect");
+  assert.match(helpText(), /nativeproof inspect\s+launch the configured app and print candidate locators/);
+});

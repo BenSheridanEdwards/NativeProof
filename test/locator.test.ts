@@ -734,3 +734,39 @@ test("g-flagged regexes stay stateless across polls (shows/toShow/toHaveText)", 
     /assertion not met/,
   );
 });
+
+test("near() pairs candidates and anchor from ONE source snapshot", async () => {
+  // Two queued frames model a list that shifts while settling. Resolving nodes and the
+  // anchor from separate fetches paired frame-1 checkboxes with the frame-2 label and
+  // picked the wrong row's control.
+  const frame1 =
+    '<node class="android.widget.CheckBox" content-desc="wifi-box" checked="true" bounds="[0,0][40,40]" />' +
+    '<node text="Wi-Fi" bounds="[50,0][200,40]" />' +
+    '<node class="android.widget.CheckBox" content-desc="bt-box" checked="false" bounds="[0,500][40,540]" />' +
+    '<node text="Bluetooth" bounds="[50,500][200,540]" />';
+  const frame2 = frame1.replaceAll("[0,0]", "[0,900]").replaceAll("[50,0]", "[50,900]");
+  const driver = new FakeDriver(frame1, frame2);
+  const wifiBox = new Locator(driver, by.role("checkbox")).near(new Locator(driver, by.text("Wi-Fi")));
+  // One resolution consumes exactly one snapshot and picks the frame-1 Wi-Fi checkbox.
+  assert.equal(await wifiBox.isChecked(), true);
+});
+
+test("a full near() + clickableAncestor tap reads the source exactly once", async () => {
+  let fetches = 0;
+  const driver: Driver = {
+    platform: "android",
+    async source() {
+      fetches += 1;
+      return (
+        '<node class="android.widget.CheckBox" content-desc="box" bounds="[10,10][40,40]" />' +
+        '<node text="Wi-Fi" bounds="[50,10][200,40]" />' +
+        '<node clickable="true" bounds="[0,0][220,50]" />'
+      );
+    },
+    async pause() {},
+    async tapAt() {},
+  };
+  const box = new Locator(driver, by.role("checkbox")).near(new Locator(driver, by.text("Wi-Fi")));
+  await box.tap({ clickableAncestor: true });
+  assert.equal(fetches, 1); // was 3: nodes, anchor, ancestor — each from a different frame
+});

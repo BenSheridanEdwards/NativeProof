@@ -17,6 +17,8 @@ export interface LocatorAssertions {
   toShow(text: string | RegExp, options?: WaitOptions): Promise<void>;
   /** The matched node's own text equals/contains/matches `text`. */
   toHaveText(text: string | RegExp, options?: WaitOptions): Promise<void>;
+  /** The matched input's own content equals `value` (string) or matches it (RegExp). */
+  toHaveValue(value: string | RegExp, options?: WaitOptions): Promise<void>;
   /** The matched checkbox/switch is checked (`checked="true"`). */
   toBeChecked(options?: WaitOptions): Promise<void>;
   /** The matched element is enabled (present and not `enabled="false"`). */
@@ -80,6 +82,18 @@ class LocatorExpectation implements LocatorAssertions {
         return typeof text === "string" ? content.includes(text) : deGlobal(text).test(content);
       },
       `have text ${JSON.stringify(String(text))}`,
+      options,
+    );
+  }
+
+  toHaveValue(value: string | RegExp, options: WaitOptions = {}): Promise<void> {
+    return this.check(
+      async () => {
+        const content = await this.locator.inputValue();
+        if (content === null) return false;
+        return typeof value === "string" ? content === value : deGlobal(value).test(content);
+      },
+      `have value ${JSON.stringify(String(value))}`,
       options,
     );
   }

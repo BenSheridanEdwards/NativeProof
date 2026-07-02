@@ -29,7 +29,15 @@ export type Selector =
   | { readonly by: "id"; readonly value: string | RegExp }
   | { readonly by: "testId"; readonly value: string | RegExp }
   | { readonly by: "label"; readonly value: string | RegExp }
-  | { readonly by: "role"; readonly value: string; readonly name?: string | RegExp };
+  | {
+      readonly by: "role";
+      readonly value: string;
+      readonly name?: string | RegExp;
+      /** Keep only elements whose checked state matches (see {@link Locator.isChecked}). */
+      readonly checked?: boolean;
+      /** Keep only elements whose own `enabled` attribute matches (no ancestor walk). */
+      readonly disabled?: boolean;
+    };
 
 /**
  * Build selectors Playwright-style. The cross-platform attribute each maps to is resolved
@@ -47,15 +55,33 @@ export const by = {
   /** The accessibility label (Android `content-desc`, iOS `label`). */
   label: (value: string | RegExp): Selector => ({ by: "label", value }),
   /** A semantic role, matched by element class/type — `checkbox`, `switch`, `button`, `textfield`, `image`. */
-  role: (value: string, options: { name?: string | RegExp } = {}): Selector =>
-    options.name === undefined ? { by: "role", value } : { by: "role", value, name: options.name },
+  role: (
+    value: string,
+    options: { name?: string | RegExp; checked?: boolean; disabled?: boolean } = {},
+  ): Selector => {
+    const selector: { -readonly [K in keyof Extract<Selector, { by: "role" }>]?: unknown } = {
+      by: "role",
+      value,
+    };
+    if (options.name !== undefined) selector.name = options.name;
+    if (options.checked !== undefined) selector.checked = options.checked;
+    if (options.disabled !== undefined) selector.disabled = options.disabled;
+    return selector as Selector;
+  },
 } as const;
 
 export function describeSelector(selector: Selector): string {
   const value = selector.value instanceof RegExp ? String(selector.value) : JSON.stringify(selector.value);
-  if (selector.by === "role" && selector.name !== undefined) {
-    const name = selector.name instanceof RegExp ? String(selector.name) : JSON.stringify(selector.name);
-    return `by.role(${value}, { name: ${name} })`;
+  if (selector.by === "role") {
+    const options: string[] = [];
+    if (selector.name !== undefined) {
+      options.push(
+        `name: ${selector.name instanceof RegExp ? String(selector.name) : JSON.stringify(selector.name)}`,
+      );
+    }
+    if (selector.checked !== undefined) options.push(`checked: ${selector.checked}`);
+    if (selector.disabled !== undefined) options.push(`disabled: ${selector.disabled}`);
+    return options.length > 0 ? `by.role(${value}, { ${options.join(", ")} })` : `by.role(${value})`;
   }
   return `by.${selector.by}(${value})`;
 }
@@ -244,9 +270,17 @@ export class Locator {
 
   /** Node tags this selector matches in `source`, in document order (role- or attribute-based). */
   private nodesIn(source: string): string[] {
-    return this.selector.by === "role"
-      ? nodesForRole(source, this.selector.value, this.driver.platform, this.selector.name)
-      : nodesForAttribute(source, this.attribute(), this.selector.value);
+    if (this.selector.by !== "role") {
+      return nodesForAttribute(source, this.attribute(), this.selector.value);
+    }
+    const { checked, disabled } = this.selector;
+    let nodes = nodesForRole(source, this.selector.value, this.driver.platform, this.selector.name);
+    if (checked !== undefined) nodes = nodes.filter((node) => nodeIsChecked(node) === checked);
+    if (disabled !== undefined) {
+      const disabledPattern = new RegExp(`${attrPattern("enabled")}false"`);
+      nodes = nodes.filter((node) => disabledPattern.test(node) === disabled);
+    }
+    return nodes;
   }
 
   /**
@@ -345,6 +379,17 @@ export class Locator {
       .filter((v): v is string => v !== undefined);
     const raw = present.find((v) => v !== "") ?? present[0];
     return raw === undefined ? null : decodeXmlEntities(raw);
+  }
+
+  /**
+   * The matched input's own content — iOS `value`, Android `text` — or null when the
+   * node is absent. Unlike {@link Locator.textContent} there is no label fallback, so an
+   * empty field reads "" rather than its label/placeholder.
+   */
+  async inputValue(): Promise<string | null> {
+    const node = this.pick(await this.matchedNodes());
+    if (!node) return null;
+    return nodeAttribute(node, this.driver.platform === "ios" ? "value" : "text") ?? "";
   }
 
   /** True if the selector is present AND `text` appears in the source. */

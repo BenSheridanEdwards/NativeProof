@@ -3,6 +3,7 @@ import {
   attrPattern,
   type Bounds,
   decodeXmlEntities,
+  deGlobal,
   escapeRegExp,
   nodesForAttribute,
   nodesForRole,
@@ -300,7 +301,7 @@ export class Locator {
     if (this.pick(this.nodesIn(source)) === null) return false;
     // Test against the DECODED source so the entity form the toolkit chose
     // (&apos; vs &#39; vs a literal apostrophe) never matters to the caller.
-    const pattern = typeof text === "string" ? new RegExp(escapeRegExp(text)) : text;
+    const pattern = typeof text === "string" ? new RegExp(escapeRegExp(text)) : deGlobal(text);
     return pattern.test(decodeXmlEntities(source));
   }
 

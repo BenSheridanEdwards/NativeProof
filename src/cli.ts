@@ -582,6 +582,15 @@ export function selectIosScheme(schemes: readonly string[], projectName: string)
   if (!first) {
     throw new Error("nativeproof onboard: iOS project has no shared Xcode schemes");
   }
+  if (candidates.length > 1) {
+    console.warn(
+      `nativeproof: multiple Xcode schemes found; building "${first}" (others: ${candidates
+        .slice(1)
+        .join(
+          ", ",
+        )}). If that is the wrong scheme, build the app yourself and onboard the produced simulator .app path.`,
+    );
+  }
   return first;
 }
 
@@ -670,7 +679,7 @@ export function buildIosProjectForOnboarding(
   if (!builtApp) {
     const command = `xcodebuild ${args.map(shellArg).join(" ")}`;
     throw new Error(
-      `nativeproof onboard: iOS project build did not produce a simulator .app (xcodebuild exited ${result.code}).\nCommand: ${command}`,
+      `nativeproof onboard: iOS project build did not produce a simulator .app (xcodebuild exited ${result.code}).\nCommand: ${command}\nThe xcodebuild output above has the failure detail. If the project needs custom setup, build it in Xcode and onboard the produced simulator .app path directly.`,
     );
   }
 
@@ -746,7 +755,7 @@ export function detectOnboardTarget(
 
   if ((requested === "android" || !requested) && hasAndroidProjectMarker(sourcePath)) {
     throw new Error(
-      "nativeproof onboard: Android project detected, but no built .apk was found. Build the app or pass the .apk path.",
+      "nativeproof onboard: Android project detected, but no built .apk was found. Build a debug APK (usually `./gradlew assembleDebug`, run where the Gradle wrapper lives — often the android/ directory) or pass the .apk path.",
     );
   }
 
@@ -824,6 +833,15 @@ export function updateConfigAppPath(
       existingApp.index + existingApp[0].length,
     )}`;
     return `${before}${updatedBlock}${after}`;
+  }
+
+  // An "appium:app" that is not a plain string literal (template literal, variable, import)
+  // cannot be rewritten safely — and inserting a second key would silently lose to the
+  // existing one, so onboarding would claim success while changing nothing.
+  if (/["']appium:app["']\s*:/.test(block)) {
+    throw new Error(
+      `nativeproof onboard: the ${options.platform} project sets "appium:app" in a form onboarding cannot rewrite. Point it at ${appLiteral} manually.`,
+    );
   }
 
   const capabilities = /capabilities\s*:\s*\{/.exec(block);
@@ -985,8 +1003,12 @@ export async function ensureAppiumDriver(
   console.log(`nativeproof: installing Appium ${driverName} driver …`);
   const install = await runCommand(["driver", "install", driverName], { stdio: "inherit" });
   if (install.code !== 0) {
+    const iosHint =
+      platform === "ios"
+        ? " XCUITest needs full Xcode installed (`xcode-select -p` should point at Xcode.app, not CommandLineTools)."
+        : "";
     throw new Error(
-      `nativeproof: could not install the Appium ${driverName} driver. Run \`npx appium driver install ${driverName}\` and retry.`,
+      `nativeproof: could not install the Appium ${driverName} driver.${iosHint} Run \`npx appium driver install ${driverName}\` and retry.`,
     );
   }
   return true;

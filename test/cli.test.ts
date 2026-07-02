@@ -20,6 +20,7 @@ import {
   type ScaffoldIo,
   scaffold,
   scaffoldFiles,
+  selectIosScheme,
   updateConfigAppPath,
   version,
 } from "../src/cli.js";
@@ -555,4 +556,66 @@ test("updateConfigAppPath inserts an app path when the project has capabilities 
   const updated = updateConfigAppPath(contents, { platform: "ios", appPath: "./Example.app" });
   assert.match(updated, /"appium:app": "\.\/Example\.app"/);
   assert.match(updated, /"appium:deviceName": "iPhone 15"/);
+});
+
+test("selectIosScheme warns when it falls back to the first of several ambiguous schemes", () => {
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args.map(String).join(" "));
+  };
+  try {
+    assert.equal(selectIosScheme(["Alpha", "Beta"], "MyApp"), "Alpha");
+    assert.match(warnings.join("\n"), /multiple Xcode schemes found; building "Alpha" \(others: Beta\)/);
+
+    warnings.length = 0;
+    assert.equal(selectIosScheme(["Alpha", "MyApp"], "MyApp"), "MyApp"); // heuristic hit — no warning
+    assert.deepEqual(warnings, []);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test("updateConfigAppPath refuses to shadow an appium:app it cannot rewrite", () => {
+  const contents = `export default defineConfig({
+  projects: [
+    {
+      name: "ios",
+      platform: "ios",
+      capabilities: {
+        "appium:app": appPathFromEnv,
+        "appium:deviceName": "iPhone 15",
+      },
+    },
+  ],
+});
+`;
+  // Inserting a second "appium:app" would silently lose to the existing entry, so this must throw.
+  assert.throws(
+    () => updateConfigAppPath(contents, { platform: "ios", appPath: "./Example.app" }),
+    /sets "appium:app" in a form onboarding cannot rewrite/,
+  );
+});
+
+test("Android project onboarding failure explains how to build the missing APK", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-android-hint-"));
+  try {
+    writeFileSync(path.join(dir, "gradlew"), "");
+    assert.throws(() => detectOnboardTarget(dir), /\.\/gradlew assembleDebug/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("ensureAppiumDriver install failure on iOS points at the full-Xcode requirement", {
+  skip: process.platform !== "darwin",
+}, async () => {
+  const runCommand = async (args: readonly string[]) =>
+    args[1] === "list"
+      ? { code: 0, stdout: JSON.stringify({}), stderr: "" }
+      : { code: 1, stdout: "", stderr: "boom" };
+  await assert.rejects(
+    () => ensureAppiumDriver("ios", {}, runCommand),
+    /full Xcode installed .*xcode-select -p/,
+  );
 });

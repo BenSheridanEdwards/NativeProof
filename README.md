@@ -155,31 +155,71 @@ await acceptTerms();
 expectTermsAccepted();
 ```
 
-Useful locators:
+### Locators
+
+Every locator takes an exact string or a RegExp:
 
 ```ts
 native.getByText("Welcome back");
 native.getByText(/welcome back/i);
-native.getByRole("button", { name: "Log in" });
+native.getByRole("button", { name: "Log in" });     // roles: button, checkbox, switch, textfield, image
 native.getByRole("checkbox", { name: /Accept Agreement/ });
-native.getByLabel("Email");
-native.getByTestId("login-button");
+native.getByLabel("Email");                          // accessibility label
+native.getByTestId("login-button");                  // resource-id / accessibilityIdentifier
 native.getById("message-list");
 ```
 
-Useful interactions:
+Narrow multiple matches by position or proximity:
 
 ```ts
-await native.tap("Log in");
-await native.getByRole("button", { name: "Hold to talk" }).press({ duration: 1500 });
+native.getByText("Delete").first();
+native.getByText("Delete").last();
+native.getByText("Delete").nth(1);                  // 0-based; negative counts from the end
+await native.getByText("Item").count();             // how many match right now
+
+// The relative locator for native layouts: the switch in the Wi-Fi row.
+native.getByRole("switch").near(native.getByText("Wi-Fi"));
+native.getByRole("switch").near(native.getByText("Wi-Fi"), { maxDistance: 200 });
 ```
 
-Useful assertions:
+### Interactions
+
+Every interaction auto-waits for its element:
+
+```ts
+await native.tap("Log in");                                       // tap by visible text
+await native.getByText("Advanced").tap({ clickableAncestor: true }); // tap the real touch target around a label
+await native.getByRole("button", { name: "Hold to talk" }).press({ duration: 1500 });
+
+await native.getByRole("textfield").fill("me@example.com");       // replaces the current value (clear + type)
+await native.getByRole("textfield").clear();
+await native.fill("Email", "me@example.com");                     // field found by its visible text
+
+await native.getByRole("checkbox", { name: /Terms/ }).check();    // no-op if already checked
+await native.getByRole("checkbox", { name: /Terms/ }).uncheck();
+
+await native.getByText("Dashboard").waitFor();                    // explicit wait, throws on timeout
+```
+
+### Assertions
+
+Every matcher polls until it holds or times out; `.not` inverts:
 
 ```ts
 await expect(native.getByText("Welcome back")).toBeVisible();
+await expect(native.getByText("Spinner")).not.toBeVisible();
 await expect(native.getByRole("button", { name: "Accept" })).toBeEnabled();
+await expect(native.getByRole("button", { name: "Submit" })).toBeDisabled();
 await expect(native.getByRole("checkbox", { name: /Accept Agreement/ })).toBeChecked();
+await expect(native.getByTestId("greeting")).toHaveText(/Welcome, \w+/);
+await expect(native.getByText("Item")).toHaveCount(3);
+await expect(native.getByText("Cart")).toShow("2 items"); // element present AND text on screen
+```
+
+When a locator finds nothing, the error names the closest on-screen candidates:
+
+```text
+by.text("Login") did not become visible within 10000ms — did you mean "Log in", "Log in help"?
 ```
 
 ## Mocking And Backend Setup
@@ -212,6 +252,21 @@ export default defineConfig({
     },
   ],
 });
+```
+
+Control replies per path and assert on traffic, Playwright-style:
+
+```ts
+// In a spec — mock is exported from nativeproof.config.ts:
+mock.route("/api/login").fulfill({ status: "ok", token: "t-123" });
+mock.route("/api/flaky").reject({ code: 503 });
+mock.route("/api/dead").abort();
+
+await native.tap("Log in");
+
+await expect(mock).toHaveSent({ path: /\/api\/login/ });        // the app called the backend
+await expect(mock).toHaveReceived({ type: "response" });         // and got the mocked reply
+mock.send("/feed", { type: "announcement", body: "hi" });        // push a server-initiated WS frame
 ```
 
 Device host rules:
@@ -263,9 +318,19 @@ NativeProof runs through Appium, so CI needs a device target.
 | iOS repo onboarding cannot find a scheme | Share the app scheme in Xcode, or onboard a built simulator `.app`. |
 | iOS build exits `65` | If a simulator `.app` was produced, NativeProof stages it and continues. If not, fix the Xcode error and retry. |
 | Android app cannot reach mock server | Use `10.0.2.2` from the Android emulator, not `127.0.0.1`. |
-| Locator times out | Read the real page source and match the exposed label, value, id, or role. Prefer semantic locators over guessing implementation selectors. |
+| Locator times out | The error lists the closest on-screen candidates ("did you mean …?") — the usual cause is an exact-string mismatch with the real label. Prefer semantic locators over guessing implementation selectors. |
 
-On any failed test, NativeProof writes evidence under `.e2e-artifacts` by default.
+## Evidence
+
+On any failed test, NativeProof writes a screenshot + redacted page source under
+`.e2e-artifacts` (configurable via `artifacts.dir`), named after the failing spec. To capture
+extra checkpoints inside a spec:
+
+```ts
+import { captureState } from "nativeproof";
+
+await captureState("after-login"); // screenshot + page-source pair in the artifact dir
+```
 
 ## Current Limits
 

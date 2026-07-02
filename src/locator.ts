@@ -169,6 +169,14 @@ function swipeVector(
   }
 }
 
+/** Element classes/types that accept text — the targets fill()/clear() expect to hit. */
+function looksLikeTextInput(node: string, platform: Platform): boolean {
+  if (platform === "ios") {
+    return /\btype="XCUIElementType(?:TextField|SecureTextField|SearchField|TextView)"/.test(node);
+  }
+  return /(?:EditText|AutoCompleteTextView|SearchView)/.test(nodeAttribute(node, "class") ?? "");
+}
+
 function nodeAttribute(node: string, attribute: string): string | undefined {
   const value = new RegExp(`${attrPattern(attribute)}([^"]*)"`).exec(node)?.[1];
   return value === undefined ? undefined : decodeXmlEntities(value);
@@ -483,6 +491,18 @@ export class Locator {
   private async trySetValueOnNode(text: string, options: WaitOptions): Promise<boolean> {
     if (!this.driver.setValueOnNode) return false;
     const target = await this.resolveTouchTarget(options);
+    // WDA/UiAutomator2 can "succeed" at setting a value on a label without typing
+    // anywhere (observed on-device), and the keyboard fallback types into whatever
+    // has focus — both are silent no-ops. Warn, don't throw: custom controls can
+    // legitimately accept text under unusual classes.
+    if (!looksLikeTextInput(target.node, this.driver.platform)) {
+      const kind =
+        nodeAttribute(target.node, this.driver.platform === "ios" ? "type" : "class") ??
+        "an element with no class/type";
+      console.warn(
+        `[nativeproof] ${describeSelector(this.selector)} matched ${kind}, which does not look like a text input — fill/clear may silently go nowhere. Target the field itself, e.g. getByRole("textfield").`,
+      );
+    }
     return this.driver.setValueOnNode(target.node, text);
   }
 

@@ -773,7 +773,7 @@ test("a full near() + clickableAncestor tap reads the source exactly once", asyn
 
 test("scrollIntoView swipes toward the element and stops when it appears", async () => {
   const offscreen = '<node text="Header" bounds="[0,0][1080,2000]" />';
-  const revealed = offscreen + '<node text="About device" bounds="[0,1500][1080,1600]" />';
+  const revealed = `${offscreen}<node text="About device" bounds="[0,1500][1080,1600]" />`;
   const driver = new FakeDriver(offscreen, offscreen, revealed);
   const swipes: Array<[number, number, number, number]> = [];
   (driver as unknown as Driver & { swipe: NonNullable<Driver["swipe"]> }).swipe = async (

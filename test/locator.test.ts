@@ -501,3 +501,86 @@ test("expect(locator).toBeVisible rejects when the element never appears", async
     /to be visible/,
   );
 });
+
+const SETTINGS_SCREEN =
+  '<node text="Open info and settings" bounds="[0,0][200,50]" />' +
+  '<node text="Sign out" bounds="[0,60][200,110]" />' +
+  '<node text="Members (3)" bounds="[0,120][200,170]" />' +
+  '<node text="Privacy policy" bounds="[0,180][200,230]" />';
+
+test("waitFor timeout names the nearest on-screen labels, nearest first", async () => {
+  const driver = new FakeDriver(SETTINGS_SCREEN);
+  await assert.rejects(
+    () => new Locator(driver, by.text("Open info settings")).waitFor({ timeout: 10, interval: 5 }),
+    (error: Error) => {
+      assert.match(
+        error.message,
+        /did not become visible within 10ms — did you mean "Open info and settings"/,
+      );
+      assert.doesNotMatch(error.message, /Members \(3\)/); // capped at the closest few
+      return true;
+    },
+  );
+});
+
+test("tap timeout carries the did-you-mean hint", async () => {
+  const driver = new FakeDriver(SETTINGS_SCREEN);
+  await assert.rejects(
+    () => new Locator(driver, by.text("Sign Out")).tap({ timeout: 10, interval: 5 }),
+    /was not found to tap within 10ms — did you mean "Sign out"/,
+  );
+});
+
+test("timeout errors stay unchanged when the screen offers no candidates", async () => {
+  const driver = new FakeDriver("");
+  await assert.rejects(
+    () => new Locator(driver, by.text("Anything")).waitFor({ timeout: 10, interval: 5 }),
+    (error: Error) => {
+      assert.match(error.message, /did not become visible within 10ms$/);
+      return true;
+    },
+  );
+});
+
+test("id selectors suggest nearby ids, not visible labels", async () => {
+  const driver = new FakeDriver(
+    '<node resource-id="com.app:id/login_btn" text="Log in" bounds="[0,0][100,50]" />',
+  );
+  await assert.rejects(
+    () => new Locator(driver, by.id("com.app:id/login_button")).waitFor({ timeout: 10, interval: 5 }),
+    /did you mean "com\.app:id\/login_btn"/,
+  );
+});
+
+test("role selectors rank candidates by the requested name", async () => {
+  const driver = new FakeDriver(
+    '<node class="android.widget.CheckBox" text="Accept agreement" bounds="[0,0][100,50]" />',
+  );
+  await assert.rejects(
+    () =>
+      new Locator(driver, by.role("checkbox", { name: "Accept agreements" })).waitFor({
+        timeout: 10,
+        interval: 5,
+      }),
+    /did you mean "Accept agreement"/,
+  );
+});
+
+test("expect(locator).toBeVisible failure includes the did-you-mean hint when the element is absent", async () => {
+  const driver = new FakeDriver('<node text="Welcome back!" bounds="[0,0][100,50]" />');
+  await assert.rejects(
+    () => expect(new Locator(driver, by.text("Welcome back"))).toBeVisible({ timeout: 10, interval: 5 }),
+    /assertion not met — did you mean "Welcome back!"/,
+  );
+});
+
+test("negated expect failures never carry a did-you-mean hint", async () => {
+  const driver = new FakeDriver(SETTLED);
+  await assert.rejects(
+    () => expect(new Locator(driver, by.desc("Sign out"))).not.toBeVisible({ timeout: 10, interval: 5 }),
+    (error: Error) => {
+      assert.doesNotMatch(error.message, /did you mean/);
+      return true;
+    },
+  );
+});

@@ -109,8 +109,13 @@ class LocatorExpectation implements LocatorAssertions {
     const settled = await waitUntil(predicate, (value) => value === want, opts);
     if (settled !== want) {
       const not = this.negated ? ".not" : "";
+      // When a positive assertion failed because the element never matched at all,
+      // surface the nearest on-screen candidates — the usual cause is an exact-string
+      // mismatch with the real label, not a missing element.
+      const hint =
+        !this.negated && !(await this.locator.isVisible()) ? await this.locator.suggestionsHint() : "";
       throw new Error(
-        `expect(${describeSelector(this.locator.selector)})${not}.to ${description} — assertion not met`,
+        `expect(${describeSelector(this.locator.selector)})${not}.to ${description} — assertion not met${hint}`,
       );
     }
   }

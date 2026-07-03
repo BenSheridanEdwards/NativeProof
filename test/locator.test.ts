@@ -921,3 +921,37 @@ test("getByRole state filters pick by checked and disabled", async () => {
     /by\.role\("checkbox", \{ name: "Wi-Fi", checked: false \}\) did not become visible/,
   );
 });
+
+test("getByRole { visible } picks the on-screen instance among shadow duplicates (iOS visible=)", async () => {
+  // A SwiftUI sheet often exposes a hidden text field behind the focused one; document
+  // order returns the hidden one first, so fill() types nowhere. { visible: true } picks the live one.
+  const driver = new FakeDriver(
+    '<XCUIElementTypeTextField type="XCUIElementTypeTextField" value="" visible="false" x="0" y="0" width="100" height="40" />' +
+      '<XCUIElementTypeTextField type="XCUIElementTypeTextField" value="typed" visible="true" x="0" y="60" width="100" height="40" />',
+  );
+  driver.platform = "ios";
+  assert.equal(await new Locator(driver, by.role("textfield", { visible: true })).inputValue(), "typed");
+  assert.equal(await new Locator(driver, by.role("textfield", { visible: false })).inputValue(), "");
+  assert.equal(await new Locator(driver, by.role("textfield")).count(), 2);
+  assert.equal(await new Locator(driver, by.role("textfield", { visible: true })).count(), 1);
+});
+
+test("getByRole { visible } uses Android displayed= and composes with other filters", async () => {
+  const driver = new FakeDriver(
+    '<node class="android.widget.EditText" text="offscreen" displayed="false" bounds="[0,0][10,10]" />' +
+      '<node class="android.widget.EditText" text="onscreen" displayed="true" bounds="[0,20][10,30]" />',
+  );
+  assert.equal(await new Locator(driver, by.role("textfield", { visible: true })).textContent(), "onscreen");
+  // A node lacking the displayed attribute is treated as not-visible under { visible: true }.
+  const noAttr = new FakeDriver('<node class="android.widget.EditText" text="x" bounds="[0,0][10,10]" />');
+  assert.equal(await new Locator(noAttr, by.role("textfield", { visible: true })).count(), 0);
+  // visible appears in the describeSelector failure message.
+  await assert.rejects(
+    () =>
+      new Locator(driver, by.role("textfield", { visible: true, name: "Nope" })).waitFor({
+        timeout: 20,
+        interval: 5,
+      }),
+    /by\.role\("textfield", \{ name: "Nope", visible: true \}\)/,
+  );
+});

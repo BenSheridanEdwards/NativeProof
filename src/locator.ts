@@ -37,6 +37,12 @@ export type Selector =
       readonly checked?: boolean;
       /** Keep only elements whose own `enabled` attribute matches (no ancestor walk). */
       readonly disabled?: boolean;
+      /**
+       * Keep only elements the toolkit reports on screen — iOS `visible="true"`, Android
+       * `displayed="true"`. Native trees often carry offscreen or shadow duplicates of the
+       * same role (a hidden SwiftUI text field behind the focused one); this picks the live one.
+       */
+      readonly visible?: boolean;
     };
 
 /**
@@ -57,7 +63,7 @@ export const by = {
   /** A semantic role, matched by element class/type — `checkbox`, `switch`, `button`, `textfield`, `image`. */
   role: (
     value: string,
-    options: { name?: string | RegExp; checked?: boolean; disabled?: boolean } = {},
+    options: { name?: string | RegExp; checked?: boolean; disabled?: boolean; visible?: boolean } = {},
   ): Selector => {
     const selector: { -readonly [K in keyof Extract<Selector, { by: "role" }>]?: unknown } = {
       by: "role",
@@ -66,6 +72,7 @@ export const by = {
     if (options.name !== undefined) selector.name = options.name;
     if (options.checked !== undefined) selector.checked = options.checked;
     if (options.disabled !== undefined) selector.disabled = options.disabled;
+    if (options.visible !== undefined) selector.visible = options.visible;
     return selector as Selector;
   },
 } as const;
@@ -81,6 +88,7 @@ export function describeSelector(selector: Selector): string {
     }
     if (selector.checked !== undefined) options.push(`checked: ${selector.checked}`);
     if (selector.disabled !== undefined) options.push(`disabled: ${selector.disabled}`);
+    if (selector.visible !== undefined) options.push(`visible: ${selector.visible}`);
     return options.length > 0 ? `by.role(${value}, { ${options.join(", ")} })` : `by.role(${value})`;
   }
   return `by.${selector.by}(${value})`;
@@ -273,12 +281,19 @@ export class Locator {
     if (this.selector.by !== "role") {
       return nodesForAttribute(source, this.attribute(), this.selector.value);
     }
-    const { checked, disabled } = this.selector;
+    const { checked, disabled, visible } = this.selector;
     let nodes = nodesForRole(source, this.selector.value, this.driver.platform, this.selector.name);
     if (checked !== undefined) nodes = nodes.filter((node) => nodeIsChecked(node) === checked);
     if (disabled !== undefined) {
       const disabledPattern = new RegExp(`${attrPattern("enabled")}false"`);
       nodes = nodes.filter((node) => disabledPattern.test(node) === disabled);
+    }
+    if (visible !== undefined) {
+      // iOS reports on-screen state as visible="true", Android as displayed="true".
+      const visiblePattern = new RegExp(
+        `${attrPattern(this.driver.platform === "ios" ? "visible" : "displayed")}true"`,
+      );
+      nodes = nodes.filter((node) => visiblePattern.test(node) === visible);
     }
     return nodes;
   }

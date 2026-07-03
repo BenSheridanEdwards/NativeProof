@@ -22,7 +22,12 @@ export interface Page {
    */
   getByRole(
     role: string,
-    options?: { name?: string | RegExp; checked?: boolean; disabled?: boolean } & WaitOptions,
+    options?: {
+      name?: string | RegExp;
+      checked?: boolean;
+      disabled?: boolean;
+      visible?: boolean;
+    } & WaitOptions,
   ): Locator;
 }
 
@@ -34,16 +39,22 @@ export function page(driver: Driver): Page {
     getByLabel: (label, options = {}) => locator(driver, by.label(label), options),
     getById: (id, options = {}) => locator(driver, by.id(id), options),
     getByRole: (role, options = {}) => {
-      const { name, checked, disabled, ...wait } = options;
+      const { name, checked, disabled, visible, ...wait } = options;
       if (name === "") {
         throw new Error(
           `getByRole(${JSON.stringify(role)}, { name: "" }) — name must be non-empty; omit it to match by role`,
         );
       }
-      const roleOptions: { name?: string | RegExp; checked?: boolean; disabled?: boolean } = {};
+      const roleOptions: {
+        name?: string | RegExp;
+        checked?: boolean;
+        disabled?: boolean;
+        visible?: boolean;
+      } = {};
       if (name !== undefined) roleOptions.name = name;
       if (checked !== undefined) roleOptions.checked = checked;
       if (disabled !== undefined) roleOptions.disabled = disabled;
+      if (visible !== undefined) roleOptions.visible = visible;
       return locator(driver, by.role(role, roleOptions), wait);
     },
   };

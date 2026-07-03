@@ -4,6 +4,20 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.13.0
+
+Visible-state locator filtering.
+
+**Added**
+
+- `getByRole(role, { visible: true | false })` (and `by.role`) keeps only elements the
+  toolkit reports on screen — iOS `visible="true"`, Android `displayed="true"`. Native
+  trees carry offscreen or shadow duplicates of the same role (a hidden SwiftUI text field
+  behind the focused one returns first in document order, so `fill()` types nowhere);
+  `{ visible: true }` picks the live instance. Composes with `name`/`checked`/`disabled`
+  and closes the gap that forced consumer suites onto raw
+  `-ios predicate string:... AND visible == 1` selectors.
+
 ## 0.12.0
 
 Scrolling, selector discovery, and a hardened locator core.

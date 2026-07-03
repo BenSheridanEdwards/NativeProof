@@ -272,6 +272,15 @@ export class Locator {
     private readonly proximity?: { anchor: Locator; maxDistance?: number },
   ) {}
 
+  /**
+   * The wait options (timeout/interval) this locator was constructed with. Its own
+   * interactions merge these into every wait; exposing them lets `expect(locator)`
+   * honour the same per-locator timeout instead of falling back to the default.
+   */
+  get waitOptions(): WaitOptions {
+    return this.options;
+  }
+
   private attribute(): string {
     return attributeFor(this.selector, this.driver.platform);
   }

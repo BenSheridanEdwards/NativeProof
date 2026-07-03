@@ -955,3 +955,28 @@ test("getByRole { visible } uses Android displayed= and composes with other filt
     /by\.role\("textfield", \{ name: "Nope", visible: true \}\)/,
   );
 });
+
+test("expect(locator) honours the locator's own wait options, call-site overrides win", async () => {
+  const pauses: number[] = [];
+  const driver: Driver = {
+    platform: "android",
+    async source() {
+      return '<node text="Present" bounds="[0,0][10,10]" />';
+    },
+    async pause(ms) {
+      pauses.push(ms);
+    },
+    async tapAt() {},
+  };
+  // The locator carries its own short timeout + a distinctive interval; the element is
+  // absent, so the matcher polls until that timeout. Its interactions already honour
+  // these options — this proves expect(...) does too (it used the 250ms default before).
+  const loc = new Locator(driver, by.text("Absent"), { timeout: 25, interval: 7 });
+  await assert.rejects(() => expect(loc).toBeVisible(), /assertion not met/);
+  assert.ok(pauses.length > 0, "the matcher should have polled at least once");
+  assert.deepEqual([...new Set(pauses)], [7]); // every poll used the locator's 7ms interval
+
+  pauses.length = 0;
+  await assert.rejects(() => expect(loc).toBeVisible({ interval: 3, timeout: 25 }), /assertion not met/);
+  assert.deepEqual([...new Set(pauses)], [3]); // a call-site interval overrides the locator's
+});

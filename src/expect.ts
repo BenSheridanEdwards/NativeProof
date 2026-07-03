@@ -120,7 +120,14 @@ class LocatorExpectation implements LocatorAssertions {
     options: WaitOptions,
   ): Promise<void> {
     const want = !this.negated;
-    const opts: WaitOptions = { ...options, sleep: (ms) => this.locator.driver.pause(ms) };
+    // Honour the locator's own timeout/interval (as its interactions do), then let the
+    // call-site options override — otherwise a locator built with a custom timeout has it
+    // respected by tap()/waitFor() but silently dropped by every expect(...) matcher.
+    const opts: WaitOptions = {
+      ...this.locator.waitOptions,
+      ...options,
+      sleep: (ms) => this.locator.driver.pause(ms),
+    };
     const settled = await waitUntil(predicate, (value) => value === want, opts);
     if (settled !== want) {
       const not = this.negated ? ".not" : "";

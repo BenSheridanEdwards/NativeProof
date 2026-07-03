@@ -444,6 +444,40 @@ test("onboard builds and stages an iOS project when no built app exists", () => 
   }
 });
 
+test("onboard builds an iOS project instead of reusing stale app output", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-ios-stale-"));
+  try {
+    const iosRepo = path.join(dir, "ios", "sample-mobile-ios");
+    mkdirSync(path.join(iosRepo, "Example.xcodeproj"), { recursive: true });
+    mkdirSync(path.join(iosRepo, "build", "Debug-iphonesimulator", "Old.app"), { recursive: true });
+
+    const runCommand: NativeBuildCommandRunner = (_command, args) => {
+      if (args.includes("-list")) {
+        return {
+          code: 0,
+          stdout: JSON.stringify({ project: { name: "Example", schemes: ["Example"] } }),
+          stderr: "",
+        };
+      }
+
+      const derivedDataPath = args[args.indexOf("-derivedDataPath") + 1];
+      if (typeof derivedDataPath !== "string") {
+        throw new Error("expected -derivedDataPath in xcodebuild args");
+      }
+      mkdirSync(path.join(derivedDataPath, "Build", "Products", "Debug-iphonesimulator", "New.app"), {
+        recursive: true,
+      });
+      return { code: 0, stdout: "", stderr: "" };
+    };
+
+    const result = onboard(dir, "./ios/sample-mobile-ios", { runCommand });
+    assert.equal(result.target.appPath, "./build/ios/New.app");
+    assert.ok(existsSync(path.join(dir, "build", "ios", "New.app")));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("onboard reports an iOS project build that produces no simulator app", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-ios-build-fail-"));
   try {

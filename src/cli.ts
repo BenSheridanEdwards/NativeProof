@@ -709,21 +709,17 @@ export function resolveOnboardTarget(
   options: OnboardOptions = {},
   cwd: string = process.cwd(),
 ): OnboardTarget {
-  try {
-    return detectOnboardTarget(inputPath, options, cwd);
-  } catch (error) {
-    const sourcePath = path.resolve(cwd, inputPath);
-    const requested = options.platform;
-    const shouldBuildIos =
-      existsSync(sourcePath) &&
-      isDirectory(sourcePath) &&
-      hasIosProjectMarker(sourcePath) &&
-      (requested === "ios" || (!requested && !hasAndroidProjectMarker(sourcePath)));
-    if (shouldBuildIos) {
-      return buildIosProjectForOnboarding(sourcePath, cwd, options.runCommand ?? runNativeBuildCommand);
-    }
-    throw error;
+  const sourcePath = path.resolve(cwd, inputPath);
+  const requested = options.platform;
+  const shouldBuildIos =
+    existsSync(sourcePath) &&
+    isDirectory(sourcePath) &&
+    hasIosProjectMarker(sourcePath) &&
+    (requested === "ios" || (!requested && !hasAndroidProjectMarker(sourcePath)));
+  if (shouldBuildIos) {
+    return buildIosProjectForOnboarding(sourcePath, cwd, options.runCommand ?? runNativeBuildCommand);
   }
+  return detectOnboardTarget(inputPath, options, cwd);
 }
 
 export function detectOnboardTarget(

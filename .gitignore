@@ -4,3 +4,8 @@ coverage/
 .e2e-artifacts/
 *.log
 .DS_Store
+
+# Claude Code agent tooling (GitNexus index, Graphify output, local settings)
+.gitnexus/
+graphify-out/
+.claude/settings.local.json

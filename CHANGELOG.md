@@ -4,6 +4,15 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.13.1
+
+**Fixed**
+
+- iOS project onboarding now stages the freshly built simulator app instead of allowing an older
+  source-tree `.app` to win when both are present.
+- `expect(locator)` now honors the locator's configured wait options, while still letting
+  call-site matcher options override them.
+
 ## 0.13.0
 
 Visible-state locator filtering.

@@ -7,7 +7,7 @@ import { browser } from "@wdio/globals";
  *
  * A passing mobile test must prove app state, not just "the runner did not throw".
  * Every meaningful step writes a `.png` + redacted `.xml` pair into the artifact
- * directory so a green run is auditable. Secrets are stripped before anything
+ * directory so a green run is auditable. Common secrets are stripped before anything
  * touches disk. Part of the reusable framework core.
  */
 
@@ -19,11 +19,31 @@ export function setArtifactDir(dir: string | undefined): void {
   artifactDir = dir?.trim() ? dir : DEFAULT_ARTIFACT_DIR;
 }
 
+const SENSITIVE_FIELD_HINT =
+  /\b(?:password|secure)=["']?true["']?|\b(?:resource-id|id|name|label|content-desc|class)=["'][^"']*(?:password|passcode|secret|token|api[-_ ]?key|session|cookie|authorization|oauth|secure)[^"']*["']/i;
+const SENSITIVE_KEY_VALUE =
+  /\b(password|passcode|secret|api[-_ ]?key|apikey|x-api-key|session(?:id)?|cookie|authorization|auth[-_]?token|access[-_]?token|refresh[-_]?token|id[-_]?token|token)(["']?\s*[:=]\s*["']?)([^"'\s&<>;,]+)/gi;
+
+function redactSensitiveFieldValues(contents: string): string {
+  return contents.replace(/<[^>]+>/g, (tag) => {
+    if (!SENSITIVE_FIELD_HINT.test(tag)) return tag;
+    return tag.replace(/\b(text|value)=(["'])(.*?)\2/gi, (_match, name: string, quote: string) => {
+      return `${name}=${quote}[REDACTED]${quote}`;
+    });
+  });
+}
+
 export function redactEvidenceText(contents: string): string {
-  return String(contents)
+  return redactSensitiveFieldValues(String(contents))
     .replace(/(text=")\d{4,8}(")/g, "$1[REDACTED]$2")
     .replace(/(passcode"?\s*[:=]\s*"?)\d{4,8}/gi, "$1[REDACTED]")
-    .replace(/(Bearer\s+)[A-Za-z0-9._-]+/g, "$1[REDACTED]");
+    .replace(/\b((?:Set-Cookie|Cookie)\s*:\s*)[^\n\r<]+/gi, "$1[REDACTED]")
+    .replace(/\b(Authorization\s*[:=]\s*)(?:Bearer\s+)?[^"'\s&<>;,]+(?:\s+[^"'\s&<>;,]+)?/gi, "$1[REDACTED]")
+    .replace(/\b(Bearer\s+)[A-Za-z0-9._-]+/gi, "$1[REDACTED]")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[REDACTED]")
+    .replace(SENSITIVE_KEY_VALUE, (match, key: string, prefix: string, value: string) => {
+      return /^(?:true|false|null)$/i.test(value) ? match : `${key}${prefix}[REDACTED]`;
+    });
 }
 
 async function ensureArtifactDir(): Promise<void> {

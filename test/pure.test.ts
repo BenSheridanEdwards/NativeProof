@@ -112,9 +112,20 @@ test("LEAKED_SECRET_PATTERN is app-agnostic: catches real bearer tokens, ignores
   assert.equal(LEAKED_SECRET_PATTERN.test("1234"), false);
 });
 
-test("redactEvidenceText strips passcodes, 4-8 digit values and bearer tokens", () => {
+test("redactEvidenceText strips common evidence secrets", () => {
   assert.match(redactEvidenceText('<node text="1234" />'), /\[REDACTED\]/);
   assert.match(redactEvidenceText("passcode: 123400"), /passcode: \[REDACTED\]/);
-  assert.match(redactEvidenceText("Authorization: Bearer abc.def"), /Bearer \[REDACTED\]/);
+  assert.match(redactEvidenceText("Bearer abc.def"), /Bearer \[REDACTED\]/);
+  assert.match(redactEvidenceText("Authorization: Bearer abc.def"), /Authorization: \[REDACTED\]/);
+  const redacted = redactEvidenceText(`
+    <node resource-id="login_password" password="true" text="hunter2horse" value="hunter2horse" />
+    <node text="alex@example.com" />
+    GET /callback?token=oauth-abc&email=alex@example.com
+    Cookie: sessionid=s-123; theme=dark
+    apiKey: sk_live_123
+  `);
+  assert.doesNotMatch(redacted, /hunter2horse|alex@example.com|oauth-abc|s-123|sk_live_123/);
+  assert.match(redacted, /text="\[REDACTED\]"/);
+  assert.match(redacted, /value="\[REDACTED\]"/);
   assert.doesNotMatch(redactEvidenceText("hello world"), /\[REDACTED\]/);
 });

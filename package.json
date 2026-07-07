@@ -52,8 +52,11 @@
     "format": "biome format --write .",
     "check": "biome check . && tsc --noEmit",
     "test": "node --import tsx --test 'test/**/*.test.ts'",
-    "prepare": "npm run build",
-    "prepublishOnly": "npm run check && npm test"
+    "quality:pre-commit": "npm run check",
+    "quality:pre-push": "npm run check && npm test",
+    "quality:ci": "npm run build && npm run check && npm test && npm pack --dry-run --json",
+    "prepare": "npm run build && husky",
+    "prepublishOnly": "npm run quality:ci"
   },
   "dependencies": {
     "@wdio/cli": "^9.29.1",
@@ -71,6 +74,7 @@
     "@types/node": "^24.10.1",
     "@types/ws": "^8.18.1",
     "expect-webdriverio": "^5.5.0",
+    "husky": "^9.1.7",
     "typescript": "^5.9.3"
   },
   "engines": {

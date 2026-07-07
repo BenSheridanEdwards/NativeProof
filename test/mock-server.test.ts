@@ -69,6 +69,21 @@ test("route().fulfill replies to a websocket connect and records it as received"
   }
 });
 
+test("route().fulfill replies to an already-connected websocket", async () => {
+  const server = await startMockServer();
+  try {
+    const client = new WebSocket(`${server.wsUrl}/feed`);
+    await waitOpen(client);
+    const message = firstMessage(client);
+    server.route("/feed").fulfill({ type: "message", text: "late" });
+    assert.deepEqual(await message, { type: "message", text: "late" });
+    await expect(server).toHaveReceived({ path: "/feed", type: "message", text: "late" }, FAST);
+    client.close();
+  } finally {
+    await server.stop();
+  }
+});
+
 test("send() pushes a server-initiated frame to a connected socket", async () => {
   const server = await startMockServer();
   try {
@@ -93,6 +108,21 @@ test("route().reject closes the websocket connect with the given code", async ()
       client.once("close", (code) => resolve(code));
     });
     assert.equal(closeCode, 4001);
+  } finally {
+    await server.stop();
+  }
+});
+
+test("route().reject closes an already-connected websocket with the given code", async () => {
+  const server = await startMockServer();
+  try {
+    const client = new WebSocket(`${server.wsUrl}/blocked`);
+    await waitOpen(client);
+    const closeCode = new Promise<number>((resolve) => {
+      client.once("close", (code) => resolve(code));
+    });
+    server.route("/blocked").reject({ code: 4002 });
+    assert.equal(await closeCode, 4002);
   } finally {
     await server.stop();
   }

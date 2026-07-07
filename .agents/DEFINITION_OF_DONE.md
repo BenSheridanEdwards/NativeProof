@@ -7,8 +7,9 @@ A NativeProof change is done only when the local proof matches the claim.
 - Run `npm run check`.
 - Run `npm test`.
 - For generated project or CLI changes, prove the generated project still builds or explain the
-  exact unverified surface.
-- For device/Appium behaviour changes, run the focused device lane or state why it was not run.
+  exact unverified surface (see `.agents/skills/verify-generated-project/SKILL.md`).
+- For device/Appium behaviour changes, run the focused device lane or state why it was not run
+  (see `.agents/skills/device-lane-proof/SKILL.md`).
 
 ## Local Gates
 

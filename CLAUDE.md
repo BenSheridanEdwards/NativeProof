@@ -13,6 +13,15 @@ Use Ponytail for coding, review, refactor, and design tasks unless the user says
 otherwise. Default level: `full`: delete code, reuse existing patterns, and use
 stdlib or native platform features before adding abstractions or dependencies.
 
+## Skills
+
+Read the matching skill in `.agents/skills/` before these tasks:
+
+- `verify-generated-project` — CLI/init/onboard or generated-project changes.
+- `device-lane-proof` — device/Appium behaviour changes and on-device screenshot proof.
+- `release-changelog` — version bumps, CHANGELOG entries, cutting a release.
+- `pr-inline-screenshot-proof` — embedding proof inline in any PR body.
+
 ## PR Proof Law
 
 Before opening, updating, or marking a PR ready, read

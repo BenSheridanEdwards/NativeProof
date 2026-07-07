@@ -67,6 +67,26 @@ export async function startMockServer(options: MockServerOptions = {}): Promise<
     recorded.push({ path, type, direction, payload });
   };
 
+  const applySocketAction = (entry: { socket: WebSocket; path: string }, action: RouteAction): void => {
+    if (action.kind === "reject") {
+      entry.socket.close(wsCloseCode(action.code), String(action.code));
+      return;
+    }
+    if (action.kind === "abort") {
+      entry.socket.terminate();
+      return;
+    }
+    record(entry.path, "received", frameType(action.frame, "message"), action.frame);
+    entry.socket.send(JSON.stringify(action.frame));
+  };
+
+  const routeSocketAction = (path: string, action: RouteAction): void => {
+    routes.set(path, action);
+    for (const entry of sockets) {
+      if (entry.path === path) applySocketAction(entry, action);
+    }
+  };
+
   const http: Server = createServer((req, res) => {
     const path = pathOf(req.url);
     record(path, "sent", "request", { method: req.method ?? "GET" });
@@ -96,16 +116,6 @@ export async function startMockServer(options: MockServerOptions = {}): Promise<
     sockets.add(entry);
     record(path, "sent", "open", {});
 
-    const action = routes.get(path);
-    if (action?.kind === "reject") {
-      socket.close(wsCloseCode(action.code), String(action.code));
-      return;
-    }
-    if (action?.kind === "abort") {
-      socket.terminate();
-      return;
-    }
-
     socket.on("message", (data) => {
       let parsed: unknown;
       try {
@@ -120,10 +130,8 @@ export async function startMockServer(options: MockServerOptions = {}): Promise<
       sockets.delete(entry);
     });
 
-    if (action?.kind === "fulfill") {
-      record(path, "received", frameType(action.frame, "message"), action.frame);
-      socket.send(JSON.stringify(action.frame));
-    }
+    const action = routes.get(path);
+    if (action) applySocketAction(entry, action);
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -164,13 +172,13 @@ export async function startMockServer(options: MockServerOptions = {}): Promise<
     route(path: string): MockRoute {
       return {
         fulfill: (frame) => {
-          routes.set(path, { kind: "fulfill", frame });
+          routeSocketAction(path, { kind: "fulfill", frame });
         },
         reject: (opts) => {
-          routes.set(path, { kind: "reject", code: opts.code });
+          routeSocketAction(path, { kind: "reject", code: opts.code });
         },
         abort: () => {
-          routes.set(path, { kind: "abort" });
+          routeSocketAction(path, { kind: "abort" });
         },
       };
     },

@@ -78,5 +78,9 @@
   },
   "overrides": {
     "serialize-javascript": "^7.0.6"
+  },
+  "directories": {
+    "doc": "docs",
+    "test": "test"
   }
 }

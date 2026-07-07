@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -24,6 +25,7 @@ import {
   selectIosScheme,
   updateConfigAppPath,
   version,
+  waitForRunnerExit,
 } from "../src/cli.js";
 
 /**
@@ -210,6 +212,32 @@ test("ensureAppiumDriver skips install when the platform driver already exists",
 
   assert.equal(await ensureAppiumDriver("android", {}, runCommand), false);
   assert.deepEqual(calls, [["driver", "list", "--installed", "--json"]]);
+});
+
+class FakeChildProcess extends EventEmitter {
+  killed = false;
+  readonly killedSignals: NodeJS.Signals[] = [];
+
+  kill(signal: NodeJS.Signals = "SIGTERM"): boolean {
+    this.killed = true;
+    this.killedSignals.push(signal);
+    return true;
+  }
+}
+
+test("waitForRunnerExit kills WDIO and Appium children on SIGTERM", async () => {
+  const runner = new FakeChildProcess();
+  const appium = new FakeChildProcess();
+  const signals = new EventEmitter();
+  const result = waitForRunnerExit(runner, appium, signals);
+
+  signals.emit("SIGTERM", "SIGTERM");
+
+  assert.equal(await result, 143);
+  assert.deepEqual(runner.killedSignals, ["SIGTERM"]);
+  assert.deepEqual(appium.killedSignals, ["SIGTERM"]);
+  assert.equal(signals.listenerCount("SIGINT"), 0);
+  assert.equal(signals.listenerCount("SIGTERM"), 0);
 });
 
 test("parseArgs surfaces the init command, and help lists it", () => {

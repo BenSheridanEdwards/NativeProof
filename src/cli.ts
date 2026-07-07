@@ -1110,6 +1110,55 @@ function runnerEnv(args: CliArgs): NodeJS.ProcessEnv {
   return env;
 }
 
+type CliSignal = "SIGINT" | "SIGTERM";
+
+interface KillableChild {
+  killed: boolean;
+  kill(signal?: NodeJS.Signals): boolean;
+  on(event: "error", listener: (error: Error) => void): unknown;
+  on(event: "exit", listener: (code: number | null) => void): unknown;
+}
+
+interface SignalSource {
+  once(signal: CliSignal, listener: (signal: CliSignal) => void): unknown;
+  off(signal: CliSignal, listener: (signal: CliSignal) => void): unknown;
+}
+
+function signalExitCode(signal: CliSignal): number {
+  return signal === "SIGINT" ? 130 : 143;
+}
+
+function killChild(child: KillableChild | null | undefined, signal: CliSignal): void {
+  if (child && !child.killed) child.kill(signal);
+}
+
+export function waitForRunnerExit(
+  runner: KillableChild,
+  appium: KillableChild | null,
+  signals: SignalSource = process,
+): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    let settled = false;
+    const settle = (complete: () => void): void => {
+      if (settled) return;
+      settled = true;
+      signals.off("SIGINT", onSignal);
+      signals.off("SIGTERM", onSignal);
+      complete();
+    };
+    const onSignal = (signal: CliSignal): void => {
+      killChild(runner, signal);
+      killChild(appium, signal);
+      settle(() => resolve(signalExitCode(signal)));
+    };
+
+    signals.once("SIGINT", onSignal);
+    signals.once("SIGTERM", onSignal);
+    runner.on("error", (error) => settle(() => reject(error)));
+    runner.on("exit", (code) => settle(() => resolve(code ?? 1)));
+  });
+}
+
 interface ResolvedRunner {
   wdioConfig: string;
   configPath: string;
@@ -1220,14 +1269,11 @@ async function runTests(args: CliArgs): Promise<number> {
   const project = resolveProject(userConfig, runSelection(args));
   const appium = await ensureAppium(userConfig.appium, args.startAppium, project.platform);
   try {
-    return await new Promise<number>((resolve, reject) => {
-      const runner = spawn(localBin("wdio"), ["run", wdioConfig], {
-        stdio: "inherit",
-        env: { ...runnerEnv(args), ...extraEnv },
-      });
-      runner.on("error", reject);
-      runner.on("exit", (code) => resolve(code ?? 1));
+    const runner = spawn(localBin("wdio"), ["run", wdioConfig], {
+      stdio: "inherit",
+      env: { ...runnerEnv(args), ...extraEnv },
     });
+    return await waitForRunnerExit(runner, appium);
   } finally {
     appium?.kill();
   }

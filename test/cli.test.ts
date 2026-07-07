@@ -166,6 +166,14 @@ test("Appium driver helpers map platforms and parse installed-driver output", ()
   assert.equal(appiumDriverListHasDriver('{"xcuitest":{"version":"1.0.0"}}', "xcuitest"), true);
   assert.equal(appiumDriverListHasDriver("{}", "xcuitest"), false);
   assert.equal(appiumDriverListHasDriver("not json", "xcuitest"), false);
+  // npm notices / Appium update-check warnings can share stdout with the JSON object; the driver
+  // must still be detected so an installed driver is not needlessly reinstalled.
+  const noisy = [
+    "npm notice New major version of npm available!",
+    '{"xcuitest":{"version":"9.0.0","installed":true}}',
+    "",
+  ].join("\n");
+  assert.equal(appiumDriverListHasDriver(noisy, "xcuitest"), true);
 });
 
 test("ensureAppiumDriver installs the missing platform driver unless config opts out", async () => {
@@ -221,6 +229,13 @@ test("parseArgs surfaces the onboard command, and help lists it", () => {
   assert.equal(args.platform, "ios");
   assert.match(helpText(), /nativeproof onboard <path>/);
   assert.match(helpText(), /nativeproof-onboard <path>/);
+});
+
+test("parseArgs treats a bare word after a command as a positional, not a second command", () => {
+  // `onboard test` should onboard a path named `test`, not silently switch to the test command.
+  const args = parseArgs(["onboard", "test"]);
+  assert.equal(args.command, "onboard");
+  assert.equal(args.onboardPath, "test");
 });
 
 test("nativeproof-init defaults to the init command", () => {

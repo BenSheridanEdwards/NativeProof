@@ -10,6 +10,7 @@ import {
   defineConfig,
   findConfigFile,
   resolveProject,
+  splitSpecGlobs,
 } from "../src/config.js";
 import { captureText, failureEvidenceName, setArtifactDir } from "../src/evidence.js";
 
@@ -87,6 +88,35 @@ test("bootedIosSimulatorFromSimctl picks the first booted available iOS simulato
 
   assert.deepEqual(bootedIosSimulatorFromSimctl(raw), { name: "iPhone 16", udid: "B" });
   assert.equal(bootedIosSimulatorFromSimctl('{"devices":{}}'), null);
+});
+
+test("bootedIosSimulatorFromSimctl skips a booted watchOS runtime and picks the iOS one", () => {
+  const raw = JSON.stringify({
+    devices: {
+      // A paired Apple Watch boots alongside the iPhone and sorts first by runtime id; pinning
+      // its udid would fail XCUITest session creation, so it must be ignored.
+      "com.apple.CoreSimulator.SimRuntime.watchOS-11-0": [
+        { name: "Apple Watch Series 10", udid: "W", state: "Booted", isAvailable: true },
+      ],
+      "com.apple.CoreSimulator.SimRuntime.iOS-26-5": [
+        { name: "iPhone 16", udid: "B", state: "Booted", isAvailable: true },
+      ],
+    },
+  });
+
+  assert.deepEqual(bootedIosSimulatorFromSimctl(raw), { name: "iPhone 16", udid: "B" });
+});
+
+test("splitSpecGlobs splits on commas but preserves brace globs", () => {
+  assert.deepEqual(splitSpecGlobs("a.spec.ts, b.spec.ts"), ["a.spec.ts", "b.spec.ts"]);
+  // The comma inside {login,signup} belongs to the brace expansion, not the glob list.
+  assert.deepEqual(splitSpecGlobs("tests/{login,signup}.spec.ts"), ["tests/{login,signup}.spec.ts"]);
+  assert.deepEqual(splitSpecGlobs("tests/{a,b}.spec.ts, other.spec.ts"), [
+    "tests/{a,b}.spec.ts",
+    "other.spec.ts",
+  ]);
+  // A trailing comma leaves no empty glob behind.
+  assert.deepEqual(splitSpecGlobs("only.spec.ts,"), ["only.spec.ts"]);
 });
 
 test("buildWdioConfig honours a spec override and Appium settings from config", () => {

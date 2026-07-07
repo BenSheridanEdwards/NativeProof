@@ -20,6 +20,7 @@ import {
   ensureAppiumDriver,
   helpText,
   loadNativeProofConfig,
+  localBin,
   main,
   type NativeBuildCommandRunner,
   onboard,
@@ -120,6 +121,45 @@ test("resolveRunner ignores raw WebdriverIO configs and requires nativeproof.con
     writeFileSync(path.join(dir, "wdio.conf.ts"), "export const config = {};\n");
     assert.throws(() => resolveRunner(parseArgs([]), dir), /no nativeproof\.config/);
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("resolveRunner imports tsx from NativeProof's own dependencies", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-cli-tsx-"));
+  const previousNodeOptions = process.env.NODE_OPTIONS;
+  try {
+    writeFileSync(path.join(dir, "nativeproof.config.ts"), "export default { projects: [] };\n");
+    process.env.NODE_OPTIONS = "--trace-warnings";
+
+    const runner = resolveRunner(parseArgs([]), dir);
+    assert.match(
+      runner.extraEnv.NODE_OPTIONS ?? "",
+      /--import=file:\/\/.*\/node_modules\/tsx\/dist\/loader\.mjs/,
+    );
+    assert.match(runner.extraEnv.NODE_OPTIONS ?? "", /--trace-warnings/);
+    assert.doesNotMatch(runner.extraEnv.NODE_OPTIONS ?? "", /--import tsx(?:\s|$)/);
+  } finally {
+    if (previousNodeOptions === undefined) delete process.env.NODE_OPTIONS;
+    else process.env.NODE_OPTIONS = previousNodeOptions;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("localBin falls back to NativeProof's dependency bins when the consumer has none", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-cli-bin-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(dir);
+    for (const name of ["appium", "wdio"]) {
+      const bin = localBin(name);
+      assert.notEqual(bin, name);
+      assert.ok(path.isAbsolute(bin));
+      assert.ok(existsSync(bin));
+      assert.match(bin, new RegExp(`node_modules[/\\\\]\\.bin[/\\\\]${name}$`));
+    }
+  } finally {
+    process.chdir(previousCwd);
     rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -12,6 +12,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -23,6 +24,10 @@ import {
   resolveProject,
 } from "./config.js";
 import { selectorSuggestions } from "./inspect.js";
+
+const packageRoot = fileURLToPath(new URL("..", import.meta.url));
+const packageRequire = createRequire(import.meta.url);
+const tsxLoader = pathToFileURL(packageRequire.resolve("tsx")).href;
 
 /**
  * The `nativeproof` CLI — the single-command entry, in the spirit of `playwright test`.
@@ -971,9 +976,11 @@ export function onboardCommand(
   return 0;
 }
 
-function localBin(name: string): string {
+export function localBin(name: string): string {
   const bin = path.join(process.cwd(), "node_modules", ".bin", name);
-  return existsSync(bin) ? bin : name;
+  if (existsSync(bin)) return bin;
+  const ownBin = path.join(packageRoot, "node_modules", ".bin", name);
+  return existsSync(ownBin) ? ownBin : name;
 }
 
 type AppiumEndpoint = Required<Pick<AppiumOptions, "host" | "port" | "path">>;
@@ -1214,7 +1221,7 @@ export function resolveRunner(_args: CliArgs, cwd: string = process.cwd()): Reso
       configPath: nativeproofConfig,
       extraEnv: {
         NATIVEPROOF_CONFIG: nativeproofConfig,
-        NODE_OPTIONS: `--import tsx ${process.env.NODE_OPTIONS ?? ""}`.trim(),
+        NODE_OPTIONS: [`--import=${tsxLoader}`, process.env.NODE_OPTIONS].filter(Boolean).join(" "),
       },
     };
   }

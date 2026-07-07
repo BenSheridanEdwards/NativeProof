@@ -227,17 +227,22 @@ by.text("Login") did not become visible within 10000ms — did you mean "Log in"
 NativeProof includes a small HTTP/WebSocket mock server and traffic assertions, but your app must be
 able to point at it.
 
-Keep that control in `nativeproof.config.ts`:
+Keep the app endpoint in `nativeproof.config.ts`, but do not start a fixed-port mock server at
+config top level. NativeProof imports the config in the CLI, the WDIO launcher, and worker
+processes; a top-level `startMockServer({ port })` would try to bind the same port more than once.
 
 ```ts
-import { createNative, defineConfig, expect, startMockServer, wdioDriver } from "nativeproof";
+import { createNative, defineConfig, expect, wdioDriver } from "nativeproof";
 
-export const mock = await startMockServer({ port: 18113, host: "0.0.0.0" });
+export const mockPort = Number(process.env.NATIVEPROOF_MOCK_PORT ?? 18113);
+export const mockDeviceHost = process.env.NATIVEPROOF_MOCK_DEVICE_HOST ?? "127.0.0.1";
+export const mockHttpUrl = `http://${mockDeviceHost}:${mockPort}`;
+export const mockWsUrl = `ws://${mockDeviceHost}:${mockPort}`;
 
 export const native = createNative({
   driver: () => wdioDriver(),
   async navigate(route) {
-    // Deep link, reset app state, or prepare mock state here.
+    // Deep link, reset app state, or configure the app with mockHttpUrl/mockWsUrl here.
   },
 });
 
@@ -254,19 +259,33 @@ export default defineConfig({
 });
 ```
 
-Control replies per path and assert on traffic, Playwright-style:
+Start and stop the server in the runner process that owns the spec lifecycle:
 
 ```ts
-// In a spec — mock is exported from nativeproof.config.ts:
-mock.route("/api/login").fulfill({ status: "ok", token: "t-123" });
-mock.route("/api/flaky").reject({ code: 503 });
-mock.route("/api/dead").abort();
+import { startMockServer, type MockServer } from "nativeproof";
+import { expect, mockPort, native } from "../nativeproof.config";
 
-await native.tap("Log in");
+let mock: MockServer;
 
-await expect(mock).toHaveSent({ path: /\/api\/login/ });        // the app called the backend
-await expect(mock).toHaveReceived({ type: "response" });         // and got the mocked reply
-mock.send("/feed", { type: "announcement", body: "hi" });        // push a server-initiated WS frame
+before(async () => {
+  mock = await startMockServer({ port: mockPort, host: "0.0.0.0" });
+});
+
+after(async () => {
+  await mock.stop();
+});
+
+it("mocks backend traffic", async () => {
+  mock.route("/api/login").fulfill({ status: "ok", token: "t-123" });
+  mock.route("/api/flaky").reject({ code: 503 });
+  mock.route("/api/dead").abort();
+
+  await native.tap("Log in");
+
+  await expect(mock).toHaveSent({ path: /\/api\/login/ }); // the app called the backend
+  await expect(mock).toHaveReceived({ type: "response" }); // and got the mocked reply
+  mock.send("/feed", { type: "announcement", body: "hi" }); // push a server-initiated WS frame
+});
 ```
 
 Device host rules:

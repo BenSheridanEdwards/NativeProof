@@ -216,6 +216,10 @@ function nodeAttribute(node: string, attribute: string): string | undefined {
   return value === undefined ? undefined : decodeXmlEntities(value);
 }
 
+function nodeIsVisible(node: string, platform: Platform): boolean {
+  return nodeAttribute(node, platform === "ios" ? "visible" : "displayed") !== "false";
+}
+
 function nodeIsChecked(node: string): boolean {
   const checked = nodeAttribute(node, "checked");
   if (checked !== undefined) return /^(?:true|1)$/i.test(checked);
@@ -378,9 +382,13 @@ export class Locator {
     return (await this.matchedNodes()).length;
   }
 
-  /** True if the selector matches a node in the current source. */
+  /** True if the selector matches a node the source does not mark hidden/offscreen. */
   async isVisible(): Promise<boolean> {
-    return this.pick(await this.matchedNodes()) !== null;
+    const source = await this.driver.source();
+    return (
+      this.pick(this.matchedNodesIn(source).filter((node) => nodeIsVisible(node, this.driver.platform))) !==
+      null
+    );
   }
 
   /** Bounds of the matched node in the current source, or null if absent. */
@@ -494,7 +502,11 @@ export class Locator {
     const maxSwipes = options.maxSwipes ?? 10;
     for (let attempt = 0; attempt <= maxSwipes; attempt += 1) {
       const source = await this.driver.source();
-      if (this.pick(this.matchedNodesIn(source)) !== null) return;
+      if (
+        this.pick(this.matchedNodesIn(source).filter((node) => nodeIsVisible(node, this.driver.platform))) !==
+        null
+      )
+        return;
       if (attempt === maxSwipes) break;
       const extent = sourceExtent(source);
       if (!extent) break;
@@ -533,7 +545,9 @@ export class Locator {
         // Carry the snapshot the node was matched in, so the clickable ancestor is
         // resolved from the SAME tree — a second fetch paired stale bounds with a new frame.
         const source = await this.driver.source();
-        const node = this.pick(this.matchedNodesIn(source));
+        const node = this.pick(
+          this.matchedNodesIn(source).filter((node) => nodeIsVisible(node, this.driver.platform)),
+        );
         const bounds = node ? parseNodeBounds(node) : null;
         return node && bounds ? { node, bounds, source } : null;
       },

@@ -21,7 +21,7 @@ import { captureState, failureEvidenceName, setArtifactDir } from "./evidence.js
  * ```
  */
 
-/** Appium connection/settings (defaults: 127.0.0.1 : 4723 /wd/hub). */
+/** Appium connection/settings (defaults: 127.0.0.1 : 4723 /). */
 export interface AppiumOptions {
   host?: string;
   port?: number;
@@ -270,7 +270,7 @@ export function buildWdioConfig(
     runner: "local",
     hostname: config.appium?.host ?? "127.0.0.1",
     port: config.appium?.port ?? 4723,
-    path: config.appium?.path ?? "/wd/hub",
+    path: config.appium?.path ?? "/",
     specs: resolveSpecs(config, project, env, cwd),
     maxInstances: 1,
     capabilities: [projectCapabilities(config, project)],

@@ -962,14 +962,19 @@ function appiumEndpoint(options: AppiumOptions = {}): AppiumEndpoint {
   return {
     host: options.host ?? "127.0.0.1",
     port: options.port ?? 4723,
-    path: options.path ?? "/wd/hub",
+    path: options.path ?? "/",
   };
+}
+
+function appiumUrl(endpoint: AppiumEndpoint): string {
+  const basePath = endpoint.path.endsWith("/") ? endpoint.path : `${endpoint.path}/`;
+  return `http://${endpoint.host}:${endpoint.port}${basePath}`;
 }
 
 async function appiumReachable(options: AppiumOptions = {}): Promise<boolean> {
   const endpoint = appiumEndpoint(options);
   try {
-    const response = await fetch(`http://${endpoint.host}:${endpoint.port}${endpoint.path}/status`, {
+    const response = await fetch(`${appiumUrl(endpoint)}status`, {
       signal: AbortSignal.timeout(1500),
     });
     return response.ok;
@@ -1070,9 +1075,7 @@ async function ensureAppium(
   const endpoint = appiumEndpoint(appium);
   if (await appiumReachable(endpoint)) return null;
   if (!startAppium) {
-    throw new Error(
-      `Appium is not reachable at http://${endpoint.host}:${endpoint.port}${endpoint.path} (and --no-appium was set)`,
-    );
+    throw new Error(`Appium is not reachable at ${appiumUrl(endpoint)} (and --no-appium was set)`);
   }
   await ensureAppiumDriver(platform, appium);
   console.log("nativeproof: starting Appium …");
@@ -1091,9 +1094,26 @@ async function ensureAppium(
       stdio: "ignore",
     },
   );
+  let startError: Error | undefined;
+  let earlyExit: { code: number | null; signal: NodeJS.Signals | null } | undefined;
+  child.on("error", (error) => {
+    startError = error;
+  });
+  child.on("exit", (code, signal) => {
+    earlyExit = { code, signal };
+  });
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 500));
+    if (startError) {
+      throw new Error(`nativeproof: could not start Appium at ${appiumUrl(endpoint)}: ${startError.message}`);
+    }
+    if (earlyExit) {
+      const status = earlyExit.signal ? `signal ${earlyExit.signal}` : `exit code ${earlyExit.code ?? 1}`;
+      throw new Error(
+        `nativeproof: Appium exited before becoming reachable at ${appiumUrl(endpoint)} (${status}). If another Appium is already using this port, set appium.path to its base path or stop it.`,
+      );
+    }
     if (await appiumReachable(endpoint)) return child;
   }
   child.kill();

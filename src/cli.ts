@@ -83,23 +83,16 @@ export function parseArgs(
   options: { defaultCommand?: DefaultCommand } = {},
 ): CliArgs {
   const args: CliArgs = { ...DEFAULTS, command: options.defaultCommand ?? DEFAULTS.command };
+  // A command keyword is only the command in leading position. Once one is chosen, a later bare
+  // word is a positional for that command — otherwise `nativeproof onboard test` reads `test` as a
+  // command and silently launches a device run instead of onboarding a path named `test`.
+  let commandChosen = false;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === undefined) continue;
-    if (arg === "test") {
-      args.command = "test";
-      continue;
-    }
-    if (arg === "init") {
-      args.command = "init";
-      continue;
-    }
-    if (arg === "onboard") {
-      args.command = "onboard";
-      continue;
-    }
-    if (arg === "inspect") {
-      args.command = "inspect";
+    if (!commandChosen && (arg === "test" || arg === "init" || arg === "onboard" || arg === "inspect")) {
+      args.command = arg;
+      commandChosen = true;
       continue;
     }
     if (arg === "-h" || arg === "--help") return { ...args, command: "help" };
@@ -965,11 +958,24 @@ export function appiumDriverNameForPlatform(platform: InitPlatform): "uiautomato
 }
 
 export function appiumDriverListHasDriver(raw: string, driverName: string): boolean {
+  const parsed = parseAppiumDriverList(raw);
+  return isRecord(parsed) && isRecord(parsed[driverName]);
+}
+
+/**
+ * `appium driver list --json` prints a JSON object, but npm notices and Appium's own update-check
+ * warnings can share stdout, so a bare `JSON.parse` throws and the caller then treats an installed
+ * driver as missing and reinstalls it. Pull the JSON object out of the surrounding noise (notices
+ * carry no braces) and parse that. ponytail: brace-slice over separating the streams.
+ */
+function parseAppiumDriverList(raw: string): unknown {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
   try {
-    const parsed = JSON.parse(raw) as unknown;
-    return isRecord(parsed) && isRecord(parsed[driverName]);
+    return JSON.parse(raw.slice(start, end + 1));
   } catch {
-    return false;
+    return null;
   }
 }
 

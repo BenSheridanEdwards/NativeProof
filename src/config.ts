@@ -82,7 +82,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function bootedIosSimulatorFromSimctl(raw: string): IosSimulator | null {
   const parsed = JSON.parse(raw) as unknown;
   if (!isRecord(parsed) || !isRecord(parsed.devices)) return null;
-  for (const devices of Object.values(parsed.devices)) {
+  // `simctl list devices booted -j` keys devices by runtime id, and a paired Apple Watch (or a
+  // booted tvOS/visionOS runtime) can appear alongside the iPhone. Pinning `appium:udid` to a
+  // watchOS/tvOS simulator fails XCUITest session creation with a cryptic error, so only consider
+  // iOS runtimes. Apple always spells it "iOS"; sibling runtimes (watchOS/tvOS/visionOS) never
+  // contain that substring. ponytail: substring match over parsing the SimRuntime id.
+  for (const [runtime, devices] of Object.entries(parsed.devices)) {
+    if (!runtime.includes("iOS")) continue;
     if (!Array.isArray(devices)) continue;
     for (const device of devices) {
       if (!isRecord(device)) continue;
@@ -204,6 +210,29 @@ export function resolveProject(config: RunnerConfig, env: RunnerEnv = {}): Devic
 }
 
 /**
+ * Split a `--spec` value on commas that separate globs, but not commas inside a `{a,b}` brace
+ * expansion — otherwise `tests/{login,signup}.spec.ts` would shatter into two broken globs that
+ * match nothing. Empty segments are dropped so a trailing comma is harmless.
+ */
+export function splitSpecGlobs(spec: string): string[] {
+  const globs: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const char of spec) {
+    if (char === "{") depth += 1;
+    else if (char === "}") depth = Math.max(0, depth - 1);
+    if (char === "," && depth === 0) {
+      globs.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  globs.push(current);
+  return globs.map((glob) => glob.trim()).filter((glob) => glob.length > 0);
+}
+
+/**
  * Resolve the spec globs (absolute) for a run, in precedence order: an explicit `--spec` override
  * (comma-separated allowed), else the active project's own `specs`, else the top-level
  * `testDir`/`testMatch`. Absolute against `cwd` because the synthesised config is loaded from inside
@@ -211,7 +240,7 @@ export function resolveProject(config: RunnerConfig, env: RunnerEnv = {}): Devic
  */
 function resolveSpecs(config: RunnerConfig, project: DeviceProject, env: RunnerEnv, cwd: string): string[] {
   const abs = (glob: string): string => path.resolve(cwd, glob);
-  if (env.spec) return env.spec.split(",").map((glob) => abs(glob.trim()));
+  if (env.spec) return splitSpecGlobs(env.spec).map(abs);
   if (project.specs && project.specs.length > 0) return project.specs.map(abs);
   const testDir = config.testDir ?? "tests";
   const testMatch = config.testMatch ?? "**/*.spec.ts";

@@ -2,6 +2,7 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import {
   cpSync,
+  type Dirent,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -434,7 +435,15 @@ function discoverBuiltArtifacts(root: string, platform: InitPlatform | undefined
     if (!dir) continue;
     visited += 1;
 
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    // A single unreadable directory (permissions, a race with a build cleaning up) must not abort
+    // the whole walk and lose every other artifact — skip it and keep scanning.
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
       if (shouldSkipDiscoveryDirectory(entry.name)) continue;
       const entryPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -674,8 +683,24 @@ export function buildIosProjectForOnboarding(
     "build",
   ];
   console.log(`nativeproof: building iOS simulator app with scheme "${plan.scheme}" …`);
+  // `.nativeproof/ios/DerivedData` persists across runs, so after a FAILED rebuild the previous
+  // run's `.app` is still sitting there. Snapshot the cache first, then on a nonzero exit accept
+  // only an app this build actually produced or refreshed (a new path, or a newer mtime than the
+  // cached copy). Comparing filesystem mtimes to each other — not to `Date.now()`, which can read
+  // ahead of a just-written file's timestamp on some filesystems — keeps a fresh app from being
+  // rejected while still catching a stale one.
+  const cachedBefore = new Map(
+    discoverBuiltArtifacts(derivedDataPath, "ios").map((artifact) => [artifact.path, artifact.mtimeMs]),
+  );
   const result = runCommand("xcodebuild", args, { cwd: sourcePath, stdio: "inherit" });
-  const builtApp = discoverBuiltArtifacts(derivedDataPath, "ios")[0];
+  const discovered = discoverBuiltArtifacts(derivedDataPath, "ios");
+  const builtApp =
+    result.code === 0
+      ? discovered[0]
+      : discovered.find((artifact) => {
+          const cachedMtime = cachedBefore.get(artifact.path);
+          return cachedMtime === undefined || artifact.mtimeMs > cachedMtime;
+        });
   if (!builtApp) {
     const command = `xcodebuild ${args.map(shellArg).join(" ")}`;
     throw new Error(

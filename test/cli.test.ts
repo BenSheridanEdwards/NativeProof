@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -488,6 +488,51 @@ test("onboard builds an iOS project instead of reusing stale app output", () => 
     const result = onboard(dir, "./ios/sample-mobile-ios", { runCommand });
     assert.equal(result.target.appPath, "./build/ios/New.app");
     assert.ok(existsSync(path.join(dir, "build", "ios", "New.app")));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("onboard rejects a stale DerivedData app when the rebuild produces nothing", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-ios-failed-rebuild-"));
+  try {
+    const iosRepo = path.join(dir, "ios", "sample-mobile-ios");
+    mkdirSync(path.join(iosRepo, "Example.xcodeproj"), { recursive: true });
+
+    // A previous run left an app in the persistent DerivedData cache. utimes it into the past so it
+    // predates the (about-to-fail) rebuild.
+    const staleApp = path.join(
+      dir,
+      ".nativeproof",
+      "ios",
+      "DerivedData",
+      "Build",
+      "Products",
+      "Debug-iphonesimulator",
+      "Stale.app",
+    );
+    mkdirSync(staleApp, { recursive: true });
+    const anHourAgo = Date.now() / 1000 - 3600;
+    utimesSync(staleApp, anHourAgo, anHourAgo);
+
+    // The rebuild fails and produces no new app.
+    const runCommand: NativeBuildCommandRunner = (_command, args) => {
+      if (args.includes("-list")) {
+        return {
+          code: 0,
+          stdout: JSON.stringify({ project: { name: "Example", schemes: ["Example"] } }),
+          stderr: "",
+        };
+      }
+      return { code: 65, stdout: "", stderr: "build failed" };
+    };
+
+    assert.throws(
+      () => onboard(dir, "./ios/sample-mobile-ios", { runCommand }),
+      /iOS project build did not produce a simulator \.app.*xcodebuild exited 65/s,
+    );
+    // The stale app must not have been staged into the project.
+    assert.equal(existsSync(path.join(dir, "build", "ios", "Stale.app")), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

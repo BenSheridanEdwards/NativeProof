@@ -259,6 +259,25 @@ function packageTemplate(): string {
   )}\n`;
 }
 
+function tsconfigTemplate(): string {
+  return `${JSON.stringify(
+    {
+      compilerOptions: {
+        target: "ES2022",
+        module: "ESNext",
+        moduleResolution: "Bundler",
+        strict: true,
+        noEmit: true,
+        skipLibCheck: true,
+        types: ["node", "mocha", "@wdio/globals/types"],
+      },
+      include: ["nativeproof.config.ts", "tests/**/*.ts"],
+    },
+    null,
+    2,
+  )}\n`;
+}
+
 function packageCommand(): string {
   return "nativeproof";
 }
@@ -316,6 +335,7 @@ export function scaffoldFiles(options: ScaffoldOptions): ScaffoldFile[] {
     { path: "nativeproof.config.ts", contents: configTemplate(options) },
     { path: "tests/example.spec.ts", contents: SPEC_TEMPLATE },
     { path: "package.json", contents: packageTemplate() },
+    { path: "tsconfig.json", contents: tsconfigTemplate() },
   ];
 }
 

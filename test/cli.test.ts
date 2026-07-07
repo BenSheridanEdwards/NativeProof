@@ -337,9 +337,11 @@ test("scaffoldFiles are a platform-specific config, package script and readable 
   const config = files.find((f) => f.path === "nativeproof.config.ts");
   const spec = files.find((f) => f.path === "tests/example.spec.ts");
   const pkg = files.find((f) => f.path === "package.json");
+  const tsconfig = files.find((f) => f.path === "tsconfig.json");
   assert.ok(config, "writes nativeproof.config.ts");
   assert.ok(spec, "writes a sample spec");
   assert.ok(pkg, "writes package.json with an npm script");
+  assert.ok(tsconfig, "writes tsconfig.json for editor/typechecker defaults");
   // The config owns app/device control and exports the direct native surface specs use.
   assert.match(config.contents, /createNative\(/);
   assert.match(config.contents, /export const native/);
@@ -360,6 +362,8 @@ test("scaffoldFiles are a platform-specific config, package script and readable 
   assert.doesNotMatch(spec.contents, /test\.describe\(/);
   assert.match(pkg.contents, /"type": "module"/);
   assert.match(pkg.contents, /"test:e2e": "nativeproof"/);
+  assert.match(tsconfig.contents, /"moduleResolution": "Bundler"/);
+  assert.match(tsconfig.contents, /"@wdio\/globals\/types"/);
 });
 
 test("scaffoldFiles can pin the onboarded app path in config", () => {
@@ -380,7 +384,7 @@ test("scaffold writes missing files and never overwrites existing ones", () => {
     write: (file, contents) => written.set(file, contents),
   };
   const { created, skipped, updated } = scaffold("/proj", { platform: "android" }, io);
-  assert.deepEqual(created, ["tests/example.spec.ts", "package.json"]);
+  assert.deepEqual(created, ["tests/example.spec.ts", "package.json", "tsconfig.json"]);
   assert.deepEqual(skipped, ["nativeproof.config.ts"]); // existing one left intact
   assert.deepEqual(updated, []);
   assert.equal(written.has("/proj/nativeproof.config.ts"), false);
@@ -397,7 +401,7 @@ test("scaffold updates an existing package.json without overwriting its scripts"
     write: (file, contents) => written.set(file, contents),
   };
   const { created, skipped, updated } = scaffold("/proj", { platform: "android" }, io);
-  assert.deepEqual(created, ["nativeproof.config.ts", "tests/example.spec.ts"]);
+  assert.deepEqual(created, ["nativeproof.config.ts", "tests/example.spec.ts", "tsconfig.json"]);
   assert.deepEqual(skipped, []);
   assert.deepEqual(updated, ["package.json"]);
   const pkg = JSON.parse(written.get("/proj/package.json") ?? "{}") as {
@@ -638,7 +642,12 @@ test("onboard scaffolds a missing project with the detected app path", () => {
     const result = onboard(dir, apk);
     assert.equal(result.target.platform, "android");
     assert.equal(result.target.appPath, "./app-debug.apk");
-    assert.deepEqual(result.created, ["nativeproof.config.ts", "tests/example.spec.ts", "package.json"]);
+    assert.deepEqual(result.created, [
+      "nativeproof.config.ts",
+      "tests/example.spec.ts",
+      "package.json",
+      "tsconfig.json",
+    ]);
     assert.match(
       readFileSync(path.join(dir, "nativeproof.config.ts"), "utf8"),
       /"appium:app": "\.\/app-debug\.apk"/,

@@ -84,6 +84,7 @@ the artifact.
 nativeproof.config.ts
 tests/example.spec.ts
 package.json
+tsconfig.json
 ```
 
 `nativeproof.config.ts` owns the app path, device selection, Appium settings, artifacts, and

@@ -388,7 +388,7 @@ test("scaffold writes missing files and never overwrites existing ones", () => {
   assert.ok(written.get("/proj/package.json")?.includes('"test:e2e": "nativeproof"'));
 });
 
-test("scaffold updates an existing package.json without overwriting its scripts", () => {
+test("scaffold updates an existing package.json without overwriting its scripts or package type", () => {
   const written = new Map<string, string>();
   const present = new Set<string>(["/proj/package.json"]);
   const io: ScaffoldIo = {
@@ -405,7 +405,7 @@ test("scaffold updates an existing package.json without overwriting its scripts"
     scripts?: Record<string, string>;
     devDependencies?: Record<string, string>;
   };
-  assert.equal(pkg.type, "module");
+  assert.equal(pkg.type, undefined);
   assert.equal(pkg.scripts?.test, "vitest");
   assert.equal(pkg.scripts?.["test:e2e"], "nativeproof");
   assert.equal(pkg.devDependencies?.nativeproof, "latest");
@@ -649,7 +649,7 @@ test("onboard scaffolds a missing project with the detected app path", () => {
   }
 });
 
-test("onboard updates an existing nativeproof config and package.json", () => {
+test("onboard updates an existing nativeproof config and package.json without changing package type", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-update-"));
   try {
     const app = path.join(dir, "build", "ios", "Example.app");
@@ -670,7 +670,7 @@ test("onboard updates an existing nativeproof config and package.json", () => {
     };
     assert.match(updatedConfig, /"appium:app": "\.\/build\/ios\/Example\.app"/);
     assert.doesNotMatch(updatedConfig, /"\.\/build\/ios\/MyApp\.app"/);
-    assert.equal(updatedPackage.type, "module");
+    assert.equal(updatedPackage.type, undefined);
     assert.equal(updatedPackage.scripts?.test, "node test.js");
     assert.equal(updatedPackage.scripts?.["test:e2e"], "nativeproof");
     assert.equal(updatedPackage.devDependencies?.nativeproof, "latest");

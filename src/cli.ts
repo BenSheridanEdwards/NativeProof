@@ -2,6 +2,7 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import {
   cpSync,
+  type Dirent,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -441,7 +442,15 @@ function discoverBuiltArtifacts(root: string, platform: InitPlatform | undefined
     if (!dir) continue;
     visited += 1;
 
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    // A single unreadable directory (permissions, a race with a build cleaning up) must not abort
+    // the whole walk and lose every other artifact — skip it and keep scanning.
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
       if (shouldSkipDiscoveryDirectory(entry.name)) continue;
       const entryPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -681,8 +690,14 @@ export function buildIosProjectForOnboarding(
     "build",
   ];
   console.log(`nativeproof: building iOS simulator app with scheme "${plan.scheme}" …`);
+  // `.nativeproof/ios/DerivedData` persists across runs, so after a FAILED rebuild the previous
+  // run's `.app` is still sitting there. Only accept an artifact produced by this build (newer than
+  // its start), otherwise a failed rebuild would silently stage stale bits.
+  const buildStartedAt = Date.now();
   const result = runCommand("xcodebuild", args, { cwd: sourcePath, stdio: "inherit" });
-  const builtApp = discoverBuiltArtifacts(derivedDataPath, "ios")[0];
+  const builtApp = discoverBuiltArtifacts(derivedDataPath, "ios").find(
+    (artifact) => artifact.mtimeMs >= buildStartedAt,
+  );
   if (!builtApp) {
     const command = `xcodebuild ${args.map(shellArg).join(" ")}`;
     throw new Error(

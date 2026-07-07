@@ -971,6 +971,10 @@ function appiumUrl(endpoint: AppiumEndpoint): string {
   return `http://${endpoint.host}:${endpoint.port}${basePath}`;
 }
 
+function isLoopbackHost(host: string): boolean {
+  return host === "localhost" || host === "::1" || host.startsWith("127.");
+}
+
 async function appiumReachable(options: AppiumOptions = {}): Promise<boolean> {
   const endpoint = appiumEndpoint(options);
   try {
@@ -1076,6 +1080,11 @@ async function ensureAppium(
   if (await appiumReachable(endpoint)) return null;
   if (!startAppium) {
     throw new Error(`Appium is not reachable at ${appiumUrl(endpoint)} (and --no-appium was set)`);
+  }
+  if (!isLoopbackHost(endpoint.host)) {
+    throw new Error(
+      `nativeproof: configured Appium at ${appiumUrl(endpoint)} is not reachable. Start it or fix appium.host.`,
+    );
   }
   await ensureAppiumDriver(platform, appium);
   console.log("nativeproof: starting Appium …");

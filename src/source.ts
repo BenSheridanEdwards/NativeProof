@@ -222,8 +222,7 @@ function isIosCheckboxButton(node: string): boolean {
     Math.abs(bounds.width - bounds.height) <= 12;
   if (!isSmallSquare) return false;
 
-  if (!nodeHasAccessibleName(node, "ios")) return true;
-  return nodeAccessibleNameMatches(node, "ios", /^(?:0|1|selected|unselected|checked|unchecked)$/i);
+  return attributeValueMatches(node, "value", /^(?:0|1|selected|unselected|checked|unchecked)$/i);
 }
 
 const ROLE_LABEL_BOUNDS_TOLERANCE_PX = 2;

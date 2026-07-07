@@ -88,6 +88,31 @@ test("iosExactNodeXPath escapes apostrophes in accessible names", () => {
   );
 });
 
+test("wdioDriver clickNode does not fall back to the first same-named iOS element", async () => {
+  const browser = fakeBrowser();
+  const selectors: string[] = [];
+  browser.$ = (selector: string) => ({
+    async setValue() {},
+    async click() {
+      selectors.push(selector);
+      throw new Error("stale exact selector");
+    },
+  });
+  _setGlobal("browser", browser, false);
+  const driver = wdioDriver();
+
+  assert.ok(driver.clickNode);
+  assert.equal(
+    await driver.clickNode(
+      '<XCUIElementTypeButton type="XCUIElementTypeButton" name="Save" label="Save" x="50" y="200" width="80" height="44"/>',
+    ),
+    false,
+  );
+  assert.equal(selectors.length, 1);
+  assert.match(selectors[0] ?? "", /^\/\//);
+  assert.notEqual(selectors[0], "~Save");
+});
+
 test("wdioDriver types into the focused iOS element with Appium element send keys", async () => {
   const browser = fakeBrowser({ activeElementResponse: { [ELEMENT_ID]: "ios-field" } });
   _setGlobal("browser", browser, false);

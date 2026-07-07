@@ -55,7 +55,7 @@ test("buildWdioConfig synthesises a WebdriverIO config with absolute specs for t
     },
   ]);
   assert.deepEqual(wdio.specs, ["/proj/e2e/**/*.spec.ts"]);
-  assert.equal(wdio.path, "/wd/hub");
+  assert.equal(wdio.path, "/");
 });
 
 test("buildWdioConfig defaults platformName + automationName per platform, and a project's caps win", () => {

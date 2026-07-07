@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -210,6 +219,36 @@ test("ensureAppiumDriver skips install when the platform driver already exists",
 
   assert.equal(await ensureAppiumDriver("android", {}, runCommand), false);
   assert.deepEqual(calls, [["driver", "list", "--installed", "--json"]]);
+});
+
+test("main reports a local Appium process that exits before becoming reachable", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-appium-exit-"));
+  const previousCwd = process.cwd();
+  try {
+    const binDir = path.join(dir, "node_modules", ".bin");
+    mkdirSync(binDir, { recursive: true });
+    const appiumBin = path.join(binDir, "appium");
+    writeFileSync(appiumBin, "#!/bin/sh\nexit 48\n");
+    chmodSync(appiumBin, 0o755);
+    writeFileSync(
+      path.join(dir, "nativeproof.config.ts"),
+      [
+        "export default {",
+        "  appium: { autoInstallDrivers: false, port: 65534 },",
+        '  projects: [{ name: "android", platform: "android" }],',
+        "};",
+      ].join("\n"),
+    );
+
+    process.chdir(dir);
+    await assert.rejects(
+      () => main(["--android"]),
+      /Appium exited before becoming reachable at http:\/\/127\.0\.0\.1:65534\/ \(exit code 48\)/,
+    );
+  } finally {
+    process.chdir(previousCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("parseArgs surfaces the init command, and help lists it", () => {

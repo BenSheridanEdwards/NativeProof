@@ -88,7 +88,7 @@ export function createNative(options: NativeOptions): Native {
       await native.getByText(text).tap({ clickableAncestor: true, ...tapOptions });
     },
     async fill(label: string | RegExp, text: string, waitOptions: WaitOptions = {}): Promise<void> {
-      await native.getByText(label).fill(text, waitOptions);
+      await native.getByRole("textfield", waitOptions).near(native.getByText(label)).fill(text, waitOptions);
     },
   };
 

@@ -126,7 +126,7 @@ class LocatorExpectation implements LocatorAssertions {
     const opts: WaitOptions = {
       ...this.locator.waitOptions,
       ...options,
-      sleep: (ms) => this.locator.driver.pause(ms),
+      sleep: options.sleep ?? this.locator.waitOptions.sleep ?? ((ms) => this.locator.driver.pause(ms)),
     };
     const settled = await waitUntil(predicate, (value) => value === want, opts);
     if (settled !== want) {

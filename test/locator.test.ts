@@ -523,6 +523,50 @@ test("waitFor timeout names the nearest on-screen labels, nearest first", async 
   );
 });
 
+test("locator waits preserve a caller-supplied sleep", async () => {
+  const waitSleeps: number[] = [];
+  await new Locator(
+    new FakeDriver("", '<node text="Ready" bounds="[0,0][10,10]" />'),
+    by.text("Ready"),
+  ).waitFor({
+    timeout: 20,
+    interval: 2,
+    sleep: async (ms) => {
+      waitSleeps.push(ms);
+    },
+  });
+  assert.deepEqual(waitSleeps, [2]);
+
+  const tapSleeps: number[] = [];
+  const tapDriver = new FakeDriver("", '<node text="Tap" bounds="[0,0][10,10]" />');
+  await new Locator(tapDriver, by.text("Tap")).tap({
+    timeout: 20,
+    interval: 3,
+    sleep: async (ms) => {
+      tapSleeps.push(ms);
+    },
+  });
+  assert.deepEqual(tapSleeps, [3]);
+  assert.deepEqual(tapDriver.taps, [{ x: 5, y: 5 }]);
+
+  const checkSleeps: number[] = [];
+  const unchecked =
+    '<node class="android.widget.CheckBox" text="Terms" checked="false" bounds="[0,0][10,10]" />';
+  const checked =
+    '<node class="android.widget.CheckBox" text="Terms" checked="true" bounds="[0,0][10,10]" />';
+  await new Locator(
+    new FakeDriver(unchecked, unchecked, unchecked, checked),
+    by.role("checkbox", { name: "Terms" }),
+  ).check({
+    timeout: 20,
+    interval: 4,
+    sleep: async (ms) => {
+      checkSleeps.push(ms);
+    },
+  });
+  assert.deepEqual(checkSleeps, [4]);
+});
+
 test("tap timeout carries the did-you-mean hint", async () => {
   const driver = new FakeDriver(SETTINGS_SCREEN);
   await assert.rejects(
@@ -979,4 +1023,20 @@ test("expect(locator) honours the locator's own wait options, call-site override
   pauses.length = 0;
   await assert.rejects(() => expect(loc).toBeVisible({ interval: 3, timeout: 25 }), /assertion not met/);
   assert.deepEqual([...new Set(pauses)], [3]); // a call-site interval overrides the locator's
+
+  pauses.length = 0;
+  const sleeps: number[] = [];
+  await assert.rejects(
+    () =>
+      expect(loc).toBeVisible({
+        interval: 4,
+        timeout: 25,
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
+      }),
+    /assertion not met/,
+  );
+  assert.deepEqual([...new Set(sleeps)], [4]);
+  assert.deepEqual(pauses, []); // custom sleep must not be clobbered by driver.pause
 });

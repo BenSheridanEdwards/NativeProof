@@ -84,19 +84,9 @@ export function wdioDriver(): Driver {
     clickNode: async (node: string) => {
       if (browser.isAndroid || !iosNodeCanUseNativeClick(node)) return false;
       const exactSelector = iosExactNodeXPath(node);
-      if (exactSelector) {
-        try {
-          await browser.$(exactSelector).click();
-          return true;
-        } catch {
-          /* Fall back to accessibility id below. */
-        }
-      }
-      const name =
-        nodeAttribute(node, "name") ?? nodeAttribute(node, "label") ?? nodeAttribute(node, "value");
-      if (!name) return false;
+      if (!exactSelector) return false;
       try {
-        await browser.$(`~${name}`).click();
+        await browser.$(exactSelector).click();
         return true;
       } catch {
         return false;

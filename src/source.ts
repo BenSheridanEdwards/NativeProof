@@ -268,6 +268,7 @@ const ROLE_PATTERNS: Record<string, { android: readonly string[]; ios: readonly 
   textfield: { android: ["EditText"], ios: ["XCUIElementTypeTextField", "XCUIElementTypeSecureTextField"] },
   image: { android: ["ImageView"], ios: ["XCUIElementTypeImage"] },
 };
+const ANDROID_BUTTON_CLASS = /(?:^|\.)(?!(?:RadioButton|ToggleButton|ImageButton)$)[^.]*Button$/;
 
 /** Roles `by.role` / `getByRole(role)` can match without a name. */
 export const KNOWN_ROLES = Object.keys(ROLE_PATTERNS);
@@ -299,7 +300,7 @@ export function nodesForRole(
           node,
           attribute,
           platform === "android" && normalizedRole === "button"
-            ? new RegExp(`(?:^|\\.)${escapeRegExp(pattern)}$`)
+            ? ANDROID_BUTTON_CLASS
             : new RegExp(escapeRegExp(pattern)),
         ),
       );

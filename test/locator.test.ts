@@ -195,13 +195,17 @@ test('by.role("button") does not match Android RadioButton/ToggleButton/ImageBut
     '<node class="android.widget.RadioButton" text="Radio" bounds="[0,0][100,40]" />' +
       '<node class="android.widget.ToggleButton" text="Toggle" bounds="[0,50][100,90]" />' +
       '<node class="android.widget.ImageButton" content-desc="Icon" bounds="[0,100][100,140]" />' +
-      '<node class="android.widget.Button" text="Submit" bounds="[0,150][100,190]" />',
+      '<node class="android.widget.Button" text="Submit" bounds="[0,150][100,190]" />' +
+      '<node class="androidx.appcompat.widget.AppCompatButton" text="Compat" bounds="[0,200][100,240]" />' +
+      '<node class="com.google.android.material.button.MaterialButton" text="Material" bounds="[0,250][100,290]" />',
   );
 
   const buttons = new Locator(driver, by.role("button"));
 
-  assert.equal(await buttons.count(), 1);
-  assert.equal(await buttons.textContent(), "Submit");
+  assert.equal(await buttons.count(), 3);
+  assert.equal(await buttons.nth(0).textContent(), "Submit");
+  assert.equal(await buttons.nth(1).textContent(), "Compat");
+  assert.equal(await buttons.nth(2).textContent(), "Material");
 });
 
 test("by.role with name matches the role and accessible name together", async () => {

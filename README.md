@@ -287,6 +287,16 @@ it("mocks backend traffic", async () => {
 });
 ```
 
+Traffic assertions read an append-only log. Positive assertions auto-wait until a matching frame
+appears. Negative assertions such as `expect(mock).not.toHaveSent(...)` pass as soon as the current
+log has no match, so use them only after the action that could send the frame has finished, or after
+asserting a positive terminal signal.
+
+`mock.route(path).reject({ code })` uses `code` as an HTTP status for HTTP requests. For WebSockets,
+`code` is a WebSocket close code: use an application close code from `3000` to `4999`, because other
+values close as `4000`. Use `fulfill(...)` for a mocked HTTP response or WebSocket message, `reject`
+for a response/close, and `abort()` for a transport drop.
+
 Device host rules:
 
 - iOS simulator: use `http://127.0.0.1:<port>`.

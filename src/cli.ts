@@ -409,6 +409,11 @@ interface CandidateArtifact {
   mtimeMs: number;
 }
 
+interface ArtifactDiscoveryResult {
+  artifacts: CandidateArtifact[];
+  truncated: boolean;
+}
+
 export interface OnboardTarget {
   platform: InitPlatform;
   appPath: string;
@@ -438,19 +443,25 @@ function isFile(file: string): boolean {
   }
 }
 
-function candidate(platform: InitPlatform, artifactPath: string): CandidateArtifact {
-  return { path: artifactPath, platform, mtimeMs: statSync(artifactPath).mtimeMs };
+function candidate(platform: InitPlatform, artifactPath: string): CandidateArtifact | undefined {
+  try {
+    return { path: artifactPath, platform, mtimeMs: statSync(artifactPath).mtimeMs };
+  } catch {
+    return undefined;
+  }
 }
 
 function shouldSkipDiscoveryDirectory(name: string): boolean {
   return name === ".git" || name === "node_modules" || name === "Pods" || name === "DerivedData";
 }
 
-function discoverBuiltArtifacts(root: string, platform: InitPlatform | undefined): CandidateArtifact[] {
+const MAX_ARTIFACT_DISCOVERY_DIRECTORIES = 8000;
+
+function discoverBuiltArtifacts(root: string, platform: InitPlatform | undefined): ArtifactDiscoveryResult {
   const candidates: CandidateArtifact[] = [];
   const pending: string[] = [root];
   let visited = 0;
-  while (pending.length > 0 && visited < 8000) {
+  while (pending.length > 0 && visited < MAX_ARTIFACT_DISCOVERY_DIRECTORIES) {
     const dir = pending.pop();
     if (!dir) continue;
     visited += 1;
@@ -468,18 +479,30 @@ function discoverBuiltArtifacts(root: string, platform: InitPlatform | undefined
       const entryPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (entry.name.endsWith(".app")) {
-          if (!platform || platform === "ios") candidates.push(candidate("ios", entryPath));
+          if ((!platform || platform === "ios") && !entry.name.endsWith("-Runner.app")) {
+            const app = candidate("ios", entryPath);
+            if (app) candidates.push(app);
+          }
           continue;
         }
         pending.push(entryPath);
         continue;
       }
-      if (entry.isFile() && entry.name.endsWith(".apk") && (!platform || platform === "android")) {
-        candidates.push(candidate("android", entryPath));
+      if (
+        entry.isFile() &&
+        entry.name.endsWith(".apk") &&
+        !/-androidTest\.apk$/i.test(entry.name) &&
+        (!platform || platform === "android")
+      ) {
+        const apk = candidate("android", entryPath);
+        if (apk) candidates.push(apk);
       }
     }
   }
-  return candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return {
+    artifacts: candidates.sort((a, b) => b.mtimeMs - a.mtimeMs),
+    truncated: pending.length > 0,
+  };
 }
 
 function hasAndroidProjectMarker(root: string): boolean {
@@ -710,10 +733,14 @@ export function buildIosProjectForOnboarding(
   // ahead of a just-written file's timestamp on some filesystems — keeps a fresh app from being
   // rejected while still catching a stale one.
   const cachedBefore = new Map(
-    discoverBuiltArtifacts(derivedDataPath, "ios").map((artifact) => [artifact.path, artifact.mtimeMs]),
+    discoverBuiltArtifacts(derivedDataPath, "ios").artifacts.map((artifact) => [
+      artifact.path,
+      artifact.mtimeMs,
+    ]),
   );
   const result = runCommand("xcodebuild", args, { cwd: sourcePath, stdio: "inherit" });
-  const discovered = discoverBuiltArtifacts(derivedDataPath, "ios");
+  const discovery = discoverBuiltArtifacts(derivedDataPath, "ios");
+  const discovered = discovery.artifacts;
   const builtApp =
     result.code === 0
       ? discovered[0]
@@ -724,7 +751,7 @@ export function buildIosProjectForOnboarding(
   if (!builtApp) {
     const command = `xcodebuild ${args.map(shellArg).join(" ")}`;
     throw new Error(
-      `nativeproof onboard: iOS project build did not produce a simulator .app (xcodebuild exited ${result.code}).\nCommand: ${command}\nThe xcodebuild output above has the failure detail. If the project needs custom setup, build it in Xcode and onboard the produced simulator .app path directly.`,
+      `nativeproof onboard: iOS project build did not produce a simulator .app (xcodebuild exited ${result.code}).\nCommand: ${command}\nThe xcodebuild output above has the failure detail. If the project needs custom setup, build it in Xcode and onboard the produced simulator .app path directly.${discovery.truncated ? ` Artifact discovery stopped after ${MAX_ARTIFACT_DISCOVERY_DIRECTORIES} directories; pass the produced simulator .app path directly if it exists deeper in DerivedData.` : ""}`,
     );
   }
 
@@ -787,26 +814,31 @@ export function detectOnboardTarget(
     throw new Error("nativeproof onboard: expected an Android .apk, iOS .app, or app project directory");
   }
 
-  const discovered = discoverBuiltArtifacts(sourcePath, requested);
-  if (discovered.length > 0) {
-    const first = discovered[0];
+  const discovery = discoverBuiltArtifacts(sourcePath, requested);
+  if (discovery.artifacts.length > 0) {
+    const first = discovery.artifacts[0];
     if (!first) throw new Error("nativeproof onboard: no built app artifact found");
     return { platform: first.platform, appPath: first.path, sourcePath };
   }
+  const truncatedHint = discovery.truncated
+    ? ` Artifact discovery stopped after ${MAX_ARTIFACT_DISCOVERY_DIRECTORIES} directories; pass the built artifact path directly if it exists deeper in this tree.`
+    : "";
 
   if ((requested === "android" || !requested) && hasAndroidProjectMarker(sourcePath)) {
     throw new Error(
-      "nativeproof onboard: Android project detected, but no built .apk was found. Build a debug APK (usually `./gradlew assembleDebug`, run where the Gradle wrapper lives — often the android/ directory) or pass the .apk path.",
+      `nativeproof onboard: Android project detected, but no built .apk was found. Build a debug APK (usually \`./gradlew assembleDebug\`, run where the Gradle wrapper lives — often the android/ directory) or pass the .apk path.${truncatedHint}`,
     );
   }
 
   if ((requested === "ios" || !requested) && hasIosProjectMarker(sourcePath)) {
     throw new Error(
-      "nativeproof onboard: iOS project detected, but no built .app was found. Build the app for a simulator or pass the .app path.",
+      `nativeproof onboard: iOS project detected, but no built .app was found. Build the app for a simulator or pass the .app path.${truncatedHint}`,
     );
   }
 
-  throw new Error("nativeproof onboard: could not detect an iOS .app or Android .apk from the provided path");
+  throw new Error(
+    `nativeproof onboard: could not detect an iOS .app or Android .apk from the provided path.${truncatedHint}`,
+  );
 }
 
 function pathForConfig(artifactPath: string, cwd: string): string {

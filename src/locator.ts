@@ -232,12 +232,6 @@ function nodeIsChecked(node: string): boolean {
   const traits = nodeAttribute(node, "traits");
   if (traits && /\b(?:selected|checked)\b/i.test(traits)) return true;
 
-  const label = nodeAttribute(node, "label");
-  if (label) {
-    if (/\bunchecked\b/i.test(label)) return false;
-    if (/\bchecked\b/i.test(label)) return true;
-  }
-
   return false;
 }
 

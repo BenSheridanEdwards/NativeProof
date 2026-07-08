@@ -93,9 +93,12 @@ app-specific navigation/setup hooks.
 ```ts
 import { createNative, defineConfig, expect, wdioDriver } from "nativeproof";
 
+const driver = () => wdioDriver();
+
 export const native = createNative({
-  driver: () => wdioDriver(),
+  driver,
   async navigate(route) {
+    // Keep app-specific routing here: deep links, reset flows, mock-backend state, etc.
     if (route !== "/login") {
       throw new Error(`Configure native.navigate(${JSON.stringify(route)}) in nativeproof.config.ts`);
     }
@@ -111,6 +114,7 @@ export default defineConfig({
     autoInstallDrivers: true,
     autoSelectBootedSimulator: true,
   },
+  mochaTimeout: 240_000,
   projects: [
     {
       name: "ios",
@@ -119,17 +123,11 @@ export default defineConfig({
         "appium:app": "./build/ios/MyApp.app",
       },
     },
-    {
-      name: "android",
-      platform: "android",
-      capabilities: {
-        "appium:app": "./app/build/outputs/apk/debug/app-debug.apk",
-        "appium:deviceName": "Android Emulator",
-      },
-    },
   ],
 });
 ```
+
+`nativeproof init --android` writes the same shape with an Android project and `appium:deviceName`.
 
 ## Test Style
 

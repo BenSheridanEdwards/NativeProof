@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { browser } from "@wdio/globals";
@@ -78,10 +79,12 @@ export async function captureState(prefix: string): Promise<string> {
 
 /**
  * A filesystem-safe evidence prefix for a failed behaviour — `failure-<describe>-<test>`
- * with runs of non-word characters collapsed to `_` and capped at 120 chars. Used by the
- * runner's built-in on-failure capture so a failing spec leaves a screenshot + source pair
- * named after it, with no per-spec wiring.
+ * with runs of non-word characters collapsed to `_`, a short stable suffix to avoid
+ * truncation collisions, and capped at 120 chars. Used by the runner's built-in on-failure
+ * capture so a failing spec leaves a screenshot + source pair with no per-spec wiring.
  */
 export function failureEvidenceName(test: { parent: string; title: string }): string {
-  return `failure-${test.parent}-${test.title}`.replace(/[^\w.-]+/g, "_").slice(0, 120);
+  const raw = `failure-${test.parent}-${test.title}`;
+  const suffix = `-${createHash("sha1").update(raw).digest("hex").slice(0, 8)}`;
+  return `${raw.replace(/[^\w.-]+/g, "_").slice(0, 120 - suffix.length)}${suffix}`;
 }

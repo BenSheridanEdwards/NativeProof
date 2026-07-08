@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, type SpawnOptions, spawn, spawnSync } from "node:child_process";
 import {
   cpSync,
   type Dirent,
@@ -12,6 +12,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -24,6 +25,10 @@ import {
 } from "./config.js";
 import { selectorSuggestions } from "./inspect.js";
 import { runnerEnvFromProcess } from "./runner-env.js";
+
+const packageRoot = fileURLToPath(new URL("..", import.meta.url));
+const packageRequire = createRequire(import.meta.url);
+const tsxLoader = pathToFileURL(packageRequire.resolve("tsx")).href;
 
 /**
  * The `nativeproof` CLI — the single-command entry, in the spirit of `playwright test`.
@@ -252,12 +257,16 @@ function packageTemplate(): string {
         "test:e2e": "nativeproof",
       },
       devDependencies: {
-        nativeproof: "latest",
+        nativeproof: nativeproofVersionRange(),
       },
     },
     null,
     2,
   )}\n`;
+}
+
+function nativeproofVersionRange(): string {
+  return `^${version()}`;
 }
 
 function tsconfigTemplate(): string {
@@ -294,10 +303,6 @@ function ensurePackageJson(raw: string): { contents: string; changed: boolean } 
   }
 
   let changed = false;
-  if (typeof pkg.type !== "string") {
-    pkg.type = "module";
-    changed = true;
-  }
 
   const scripts = isRecord(pkg.scripts) ? pkg.scripts : {};
   if (!isRecord(pkg.scripts)) {
@@ -318,7 +323,7 @@ function ensurePackageJson(raw: string): { contents: string; changed: boolean } 
     changed = true;
   }
   if (!alreadyDependsOnNativeProof) {
-    devDependencies.nativeproof = "latest";
+    devDependencies.nativeproof = nativeproofVersionRange();
     changed = true;
   }
 
@@ -410,6 +415,11 @@ interface CandidateArtifact {
   mtimeMs: number;
 }
 
+interface ArtifactDiscoveryResult {
+  artifacts: CandidateArtifact[];
+  truncated: boolean;
+}
+
 export interface OnboardTarget {
   platform: InitPlatform;
   appPath: string;
@@ -439,19 +449,25 @@ function isFile(file: string): boolean {
   }
 }
 
-function candidate(platform: InitPlatform, artifactPath: string): CandidateArtifact {
-  return { path: artifactPath, platform, mtimeMs: statSync(artifactPath).mtimeMs };
+function candidate(platform: InitPlatform, artifactPath: string): CandidateArtifact | undefined {
+  try {
+    return { path: artifactPath, platform, mtimeMs: statSync(artifactPath).mtimeMs };
+  } catch {
+    return undefined;
+  }
 }
 
 function shouldSkipDiscoveryDirectory(name: string): boolean {
   return name === ".git" || name === "node_modules" || name === "Pods" || name === "DerivedData";
 }
 
-function discoverBuiltArtifacts(root: string, platform: InitPlatform | undefined): CandidateArtifact[] {
+const MAX_ARTIFACT_DISCOVERY_DIRECTORIES = 8000;
+
+function discoverBuiltArtifacts(root: string, platform: InitPlatform | undefined): ArtifactDiscoveryResult {
   const candidates: CandidateArtifact[] = [];
   const pending: string[] = [root];
   let visited = 0;
-  while (pending.length > 0 && visited < 8000) {
+  while (pending.length > 0 && visited < MAX_ARTIFACT_DISCOVERY_DIRECTORIES) {
     const dir = pending.pop();
     if (!dir) continue;
     visited += 1;
@@ -469,18 +485,30 @@ function discoverBuiltArtifacts(root: string, platform: InitPlatform | undefined
       const entryPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (entry.name.endsWith(".app")) {
-          if (!platform || platform === "ios") candidates.push(candidate("ios", entryPath));
+          if ((!platform || platform === "ios") && !entry.name.endsWith("-Runner.app")) {
+            const app = candidate("ios", entryPath);
+            if (app) candidates.push(app);
+          }
           continue;
         }
         pending.push(entryPath);
         continue;
       }
-      if (entry.isFile() && entry.name.endsWith(".apk") && (!platform || platform === "android")) {
-        candidates.push(candidate("android", entryPath));
+      if (
+        entry.isFile() &&
+        entry.name.endsWith(".apk") &&
+        !/-androidTest\.apk$/i.test(entry.name) &&
+        (!platform || platform === "android")
+      ) {
+        const apk = candidate("android", entryPath);
+        if (apk) candidates.push(apk);
       }
     }
   }
-  return candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return {
+    artifacts: candidates.sort((a, b) => b.mtimeMs - a.mtimeMs),
+    truncated: pending.length > 0,
+  };
 }
 
 function hasAndroidProjectMarker(root: string): boolean {
@@ -711,10 +739,14 @@ export function buildIosProjectForOnboarding(
   // ahead of a just-written file's timestamp on some filesystems — keeps a fresh app from being
   // rejected while still catching a stale one.
   const cachedBefore = new Map(
-    discoverBuiltArtifacts(derivedDataPath, "ios").map((artifact) => [artifact.path, artifact.mtimeMs]),
+    discoverBuiltArtifacts(derivedDataPath, "ios").artifacts.map((artifact) => [
+      artifact.path,
+      artifact.mtimeMs,
+    ]),
   );
   const result = runCommand("xcodebuild", args, { cwd: sourcePath, stdio: "inherit" });
-  const discovered = discoverBuiltArtifacts(derivedDataPath, "ios");
+  const discovery = discoverBuiltArtifacts(derivedDataPath, "ios");
+  const discovered = discovery.artifacts;
   const builtApp =
     result.code === 0
       ? discovered[0]
@@ -725,7 +757,7 @@ export function buildIosProjectForOnboarding(
   if (!builtApp) {
     const command = `xcodebuild ${args.map(shellArg).join(" ")}`;
     throw new Error(
-      `nativeproof onboard: iOS project build did not produce a simulator .app (xcodebuild exited ${result.code}).\nCommand: ${command}\nThe xcodebuild output above has the failure detail. If the project needs custom setup, build it in Xcode and onboard the produced simulator .app path directly.`,
+      `nativeproof onboard: iOS project build did not produce a simulator .app (xcodebuild exited ${result.code}).\nCommand: ${command}\nThe xcodebuild output above has the failure detail. If the project needs custom setup, build it in Xcode and onboard the produced simulator .app path directly.${discovery.truncated ? ` Artifact discovery stopped after ${MAX_ARTIFACT_DISCOVERY_DIRECTORIES} directories; pass the produced simulator .app path directly if it exists deeper in DerivedData.` : ""}`,
     );
   }
 
@@ -788,26 +820,31 @@ export function detectOnboardTarget(
     throw new Error("nativeproof onboard: expected an Android .apk, iOS .app, or app project directory");
   }
 
-  const discovered = discoverBuiltArtifacts(sourcePath, requested);
-  if (discovered.length > 0) {
-    const first = discovered[0];
+  const discovery = discoverBuiltArtifacts(sourcePath, requested);
+  if (discovery.artifacts.length > 0) {
+    const first = discovery.artifacts[0];
     if (!first) throw new Error("nativeproof onboard: no built app artifact found");
     return { platform: first.platform, appPath: first.path, sourcePath };
   }
+  const truncatedHint = discovery.truncated
+    ? ` Artifact discovery stopped after ${MAX_ARTIFACT_DISCOVERY_DIRECTORIES} directories; pass the built artifact path directly if it exists deeper in this tree.`
+    : "";
 
   if ((requested === "android" || !requested) && hasAndroidProjectMarker(sourcePath)) {
     throw new Error(
-      "nativeproof onboard: Android project detected, but no built .apk was found. Build a debug APK (usually `./gradlew assembleDebug`, run where the Gradle wrapper lives — often the android/ directory) or pass the .apk path.",
+      `nativeproof onboard: Android project detected, but no built .apk was found. Build a debug APK (usually \`./gradlew assembleDebug\`, run where the Gradle wrapper lives — often the android/ directory) or pass the .apk path.${truncatedHint}`,
     );
   }
 
   if ((requested === "ios" || !requested) && hasIosProjectMarker(sourcePath)) {
     throw new Error(
-      "nativeproof onboard: iOS project detected, but no built .app was found. Build the app for a simulator or pass the .app path.",
+      `nativeproof onboard: iOS project detected, but no built .app was found. Build the app for a simulator or pass the .app path.${truncatedHint}`,
     );
   }
 
-  throw new Error("nativeproof onboard: could not detect an iOS .app or Android .apk from the provided path");
+  throw new Error(
+    `nativeproof onboard: could not detect an iOS .app or Android .apk from the provided path.${truncatedHint}`,
+  );
 }
 
 function pathForConfig(artifactPath: string, cwd: string): string {
@@ -972,9 +1009,29 @@ export function onboardCommand(
   return 0;
 }
 
-function localBin(name: string): string {
-  const bin = path.join(process.cwd(), "node_modules", ".bin", name);
-  return existsSync(bin) ? bin : name;
+export function localBin(
+  name: string,
+  platform: NodeJS.Platform = process.platform,
+  cwd: string = process.cwd(),
+): string {
+  const bin = path.join(cwd, "node_modules", ".bin", name);
+  const ownBin = path.join(packageRoot, "node_modules", ".bin", name);
+  if (platform === "win32") {
+    for (const candidate of [`${bin}.cmd`, `${bin}.exe`, `${ownBin}.cmd`, `${ownBin}.exe`]) {
+      if (existsSync(candidate)) return candidate;
+    }
+    return name;
+  }
+  if (existsSync(bin)) return bin;
+  return existsSync(ownBin) ? ownBin : name;
+}
+
+export function localBinNeedsShell(platform: NodeJS.Platform = process.platform): boolean {
+  return platform === "win32";
+}
+
+function spawnLocalBin(name: string, args: readonly string[], options: SpawnOptions): ChildProcess {
+  return spawn(localBin(name), args, { ...options, shell: options.shell ?? localBinNeedsShell() });
 }
 
 type AppiumEndpoint = Required<Pick<AppiumOptions, "host" | "port" | "path">>;
@@ -990,6 +1047,10 @@ function appiumEndpoint(options: AppiumOptions = {}): AppiumEndpoint {
 function appiumUrl(endpoint: AppiumEndpoint): string {
   const basePath = endpoint.path.endsWith("/") ? endpoint.path : `${endpoint.path}/`;
   return `http://${endpoint.host}:${endpoint.port}${basePath}`;
+}
+
+function isLoopbackHost(host: string): boolean {
+  return host === "localhost" || host === "::1" || host.startsWith("127.");
 }
 
 async function appiumReachable(options: AppiumOptions = {}): Promise<boolean> {
@@ -1043,7 +1104,7 @@ export type AppiumCommandRunner = (
 
 const runAppiumCommand: AppiumCommandRunner = (args, options = {}) =>
   new Promise((resolve, reject) => {
-    const child = spawn(localBin("appium"), args, {
+    const child = spawnLocalBin("appium", args, {
       stdio: options.stdio === "inherit" ? "inherit" : ["ignore", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];
@@ -1098,10 +1159,15 @@ async function ensureAppium(
   if (!startAppium) {
     throw new Error(`Appium is not reachable at ${appiumUrl(endpoint)} (and --no-appium was set)`);
   }
+  if (!isLoopbackHost(endpoint.host)) {
+    throw new Error(
+      `nativeproof: configured Appium at ${appiumUrl(endpoint)} is not reachable. Start it or fix appium.host.`,
+    );
+  }
   await ensureAppiumDriver(platform, appium);
   console.log("nativeproof: starting Appium …");
-  const child = spawn(
-    localBin("appium"),
+  const child = spawnLocalBin(
+    "appium",
     [
       "--address",
       endpoint.host,
@@ -1215,7 +1281,7 @@ export function resolveRunner(_args: CliArgs, cwd: string = process.cwd()): Reso
       configPath: nativeproofConfig,
       extraEnv: {
         NATIVEPROOF_CONFIG: nativeproofConfig,
-        NODE_OPTIONS: `--import tsx ${process.env.NODE_OPTIONS ?? ""}`.trim(),
+        NODE_OPTIONS: [`--import=${tsxLoader}`, process.env.NODE_OPTIONS].filter(Boolean).join(" "),
       },
     };
   }
@@ -1316,7 +1382,7 @@ async function runTests(args: CliArgs): Promise<number> {
   const project = resolveProject(userConfig, runSelection(args));
   const appium = await ensureAppium(userConfig.appium, args.startAppium, project.platform);
   try {
-    const runner = spawn(localBin("wdio"), ["run", wdioConfig], {
+    const runner = spawnLocalBin("wdio", ["run", wdioConfig], {
       stdio: "inherit",
       env: { ...runnerEnv(args), ...extraEnv },
     });
@@ -1328,10 +1394,11 @@ async function runTests(args: CliArgs): Promise<number> {
 
 export async function main(
   argv: readonly string[],
-  options: { programName?: string | undefined } = {},
+  options: { defaultCommand?: DefaultCommand | undefined; programName?: string | undefined } = {},
 ): Promise<number> {
   const args = parseArgs(argv, {
-    defaultCommand: defaultCommandForProgram(options.programName ?? process.argv[1]),
+    defaultCommand:
+      options.defaultCommand ?? defaultCommandForProgram(options.programName ?? process.argv[1]),
   });
   if (args.command === "help") {
     console.log(helpText());

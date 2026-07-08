@@ -8,7 +8,6 @@ import {
   nodesForAttribute,
   nodesForRole,
   parseNodeBounds,
-  smallestClickableAncestorBounds,
   smallestClickableAncestorNode,
   sourceExtent,
 } from "./source.js";
@@ -216,6 +215,10 @@ function nodeAttribute(node: string, attribute: string): string | undefined {
   return value === undefined ? undefined : decodeXmlEntities(value);
 }
 
+function nodeIsVisible(node: string, platform: Platform): boolean {
+  return nodeAttribute(node, platform === "ios" ? "visible" : "displayed") !== "false";
+}
+
 function nodeIsChecked(node: string): boolean {
   const checked = nodeAttribute(node, "checked");
   if (checked !== undefined) return /^(?:true|1)$/i.test(checked);
@@ -228,12 +231,6 @@ function nodeIsChecked(node: string): boolean {
 
   const traits = nodeAttribute(node, "traits");
   if (traits && /\b(?:selected|checked)\b/i.test(traits)) return true;
-
-  const label = nodeAttribute(node, "label");
-  if (label) {
-    if (/\bunchecked\b/i.test(label)) return false;
-    if (/\bchecked\b/i.test(label)) return true;
-  }
 
   return false;
 }
@@ -378,9 +375,13 @@ export class Locator {
     return (await this.matchedNodes()).length;
   }
 
-  /** True if the selector matches a node in the current source. */
+  /** True if the selector matches a node the source does not mark hidden/offscreen. */
   async isVisible(): Promise<boolean> {
-    return this.pick(await this.matchedNodes()) !== null;
+    const source = await this.driver.source();
+    return (
+      this.pick(this.matchedNodesIn(source).filter((node) => nodeIsVisible(node, this.driver.platform))) !==
+      null
+    );
   }
 
   /** Bounds of the matched node in the current source, or null if absent. */
@@ -465,7 +466,11 @@ export class Locator {
 
   /** Wait until the selector is visible; throws on timeout. */
   async waitFor(options: WaitOptions = {}): Promise<void> {
-    const opts: WaitOptions = { ...this.options, ...options, sleep: (ms) => this.driver.pause(ms) };
+    const opts: WaitOptions = {
+      ...this.options,
+      ...options,
+      sleep: options.sleep ?? this.options.sleep ?? ((ms) => this.driver.pause(ms)),
+    };
     const visible = await waitUntil(
       () => this.isVisible(),
       (v) => v,
@@ -494,7 +499,11 @@ export class Locator {
     const maxSwipes = options.maxSwipes ?? 10;
     for (let attempt = 0; attempt <= maxSwipes; attempt += 1) {
       const source = await this.driver.source();
-      if (this.pick(this.matchedNodesIn(source)) !== null) return;
+      if (
+        this.pick(this.matchedNodesIn(source).filter((node) => nodeIsVisible(node, this.driver.platform))) !==
+        null
+      )
+        return;
       if (attempt === maxSwipes) break;
       const extent = sourceExtent(source);
       if (!extent) break;
@@ -527,13 +536,19 @@ export class Locator {
   }
 
   private async resolveTouchTarget(options: TapOptions = {}): Promise<{ node: string; bounds: Bounds }> {
-    const opts: WaitOptions = { ...this.options, ...options, sleep: (ms) => this.driver.pause(ms) };
+    const opts: WaitOptions = {
+      ...this.options,
+      ...options,
+      sleep: options.sleep ?? this.options.sleep ?? ((ms) => this.driver.pause(ms)),
+    };
     const match = await waitUntil(
       async () => {
         // Carry the snapshot the node was matched in, so the clickable ancestor is
         // resolved from the SAME tree — a second fetch paired stale bounds with a new frame.
         const source = await this.driver.source();
-        const node = this.pick(this.matchedNodesIn(source));
+        const node = this.pick(
+          this.matchedNodesIn(source).filter((node) => nodeIsVisible(node, this.driver.platform)),
+        );
         const bounds = node ? parseNodeBounds(node) : null;
         return node && bounds ? { node, bounds, source } : null;
       },
@@ -545,11 +560,9 @@ export class Locator {
         `${describeSelector(this.selector)} was not found to tap within ${opts.timeout ?? DEFAULTS.timeout}ms${await this.suggestionsHint()}`,
       );
     }
-    const bounds = match.bounds;
-    return {
-      node: match.node,
-      bounds: options.clickableAncestor ? smallestClickableAncestorBounds(match.source, bounds) : bounds,
-    };
+    if (!options.clickableAncestor) return { node: match.node, bounds: match.bounds };
+    const node = smallestClickableAncestorNode(match.source, match.bounds) ?? match.node;
+    return { node, bounds: parseNodeBounds(node) ?? match.bounds };
   }
 
   /**
@@ -649,7 +662,11 @@ export class Locator {
   private async setChecked(desired: boolean, options: WaitOptions): Promise<void> {
     if ((await this.isChecked()) === desired) return;
     await this.tap(options);
-    const opts: WaitOptions = { ...this.options, ...options, sleep: (ms) => this.driver.pause(ms) };
+    const opts: WaitOptions = {
+      ...this.options,
+      ...options,
+      sleep: options.sleep ?? this.options.sleep ?? ((ms) => this.driver.pause(ms)),
+    };
     const settled = await waitUntil(
       () => this.isChecked(),
       (value) => value === desired,

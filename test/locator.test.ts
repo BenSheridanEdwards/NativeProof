@@ -190,6 +190,24 @@ test("by.role matches elements by class (Android), with checked state and count"
   assert.equal(await new Locator(driver, by.role("button")).isVisible(), false); // none present
 });
 
+test('by.role("button") does not match Android RadioButton/ToggleButton/ImageButton', async () => {
+  const driver = new FakeDriver(
+    '<node class="android.widget.RadioButton" text="Radio" bounds="[0,0][100,40]" />' +
+      '<node class="android.widget.ToggleButton" text="Toggle" bounds="[0,50][100,90]" />' +
+      '<node class="android.widget.ImageButton" content-desc="Icon" bounds="[0,100][100,140]" />' +
+      '<node class="android.widget.Button" text="Submit" bounds="[0,150][100,190]" />' +
+      '<node class="androidx.appcompat.widget.AppCompatButton" text="Compat" bounds="[0,200][100,240]" />' +
+      '<node class="com.google.android.material.button.MaterialButton" text="Material" bounds="[0,250][100,290]" />',
+  );
+
+  const buttons = new Locator(driver, by.role("button"));
+
+  assert.equal(await buttons.count(), 3);
+  assert.equal(await buttons.nth(0).textContent(), "Submit");
+  assert.equal(await buttons.nth(1).textContent(), "Compat");
+  assert.equal(await buttons.nth(2).textContent(), "Material");
+});
+
 test("by.role with name matches the role and accessible name together", async () => {
   let checked = false;
   const driver: Driver = {
@@ -248,6 +266,19 @@ test("by.role with name tolerates tiny iOS label geometry drift", async () => {
   assert.equal((await SsoProviderSearchField.bounds())?.centerY, 718);
 });
 
+test('by.role("textfield") includes iOS secure text fields', async () => {
+  const driver = new FakeDriver(
+    '<XCUIElementTypeTextField type="XCUIElementTypeTextField" label="Email" x="0" y="0" width="200" height="40" />' +
+      '<XCUIElementTypeSecureTextField type="XCUIElementTypeSecureTextField" label="Password" x="0" y="50" width="200" height="40" />',
+  );
+  driver.platform = "ios";
+
+  const fields = new Locator(driver, by.role("textfield"));
+
+  assert.equal(await fields.count(), 2);
+  assert.equal(await fields.nth(1).textContent(), "Password");
+});
+
 test("by.role with name does not borrow unrelated visible text outside the control bounds", async () => {
   const driver = new FakeDriver(
     '<node class="android.widget.TextView" text="Search" bounds="[400,0][520,80]" />' +
@@ -301,6 +332,15 @@ test("iOS checkbox-like buttons can be checked through semantic checkbox locator
   await expect(AcceptAgreementCheckbox).toBeChecked();
 });
 
+test("unlabeled iOS icon buttons do not resolve as checkboxes", async () => {
+  const driver = new FakeDriver(
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" label="" x="0" y="0" width="44" height="44" />',
+  );
+  driver.platform = "ios";
+
+  assert.equal(await new Locator(driver, by.role("checkbox")).count(), 0);
+});
+
 test("iOS unlabeled square agreement buttons resolve as checkboxes near visible copy", async () => {
   let checked = false;
   const taps: Array<{ x: number; y: number }> = [];
@@ -309,7 +349,7 @@ test("iOS unlabeled square agreement buttons resolve as checkboxes near visible 
     async source() {
       const checkbox = checked
         ? '<XCUIElementTypeButton type="XCUIElementTypeButton" value="1" label="Selected" enabled="true" visible="true" x="43" y="704" width="24" height="25" traits="Selected, Button" />'
-        : '<XCUIElementTypeButton type="XCUIElementTypeButton" enabled="true" visible="true" x="43" y="704" width="24" height="25" />';
+        : '<XCUIElementTypeButton type="XCUIElementTypeButton" value="0" enabled="true" visible="true" x="43" y="704" width="24" height="25" />';
       return (
         checkbox +
         '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" label="I have read and agreed to the" x="78" y="705" width="156" height="15" />' +
@@ -333,6 +373,19 @@ test("iOS unlabeled square agreement buttons resolve as checkboxes near visible 
   await AcceptAgreementCheckbox.check();
   await expect(AcceptAgreementCheckbox).toBeChecked();
   assert.deepEqual(taps, [{ x: 55, y: 717 }]);
+});
+
+test("checked state does not come from label text", async () => {
+  const driver = new FakeDriver(
+    '<XCUIElementTypeSwitch type="XCUIElementTypeSwitch" label="Checked baggage included" x="0" y="0" width="80" height="40" />',
+  );
+  driver.platform = "ios";
+
+  const BaggageSwitch = new Locator(driver, by.role("switch", { name: /baggage/i }));
+
+  assert.equal(await BaggageSwitch.isChecked(), false);
+  assert.equal(await new Locator(driver, by.role("switch", { checked: false })).count(), 1);
+  assert.equal(await new Locator(driver, by.role("switch", { checked: true })).count(), 0);
 });
 
 test("toBeEnabled / toBeDisabled read the enabled attribute", async () => {
@@ -409,6 +462,27 @@ test("tap({ clickableAncestor: true }) taps the clickable parent of a non-clicka
   ]);
 });
 
+test("tap({ clickableAncestor: true }) clicks the iOS control ancestor node", async () => {
+  const source =
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" name="members" label="" x="0" y="0" width="300" height="80">' +
+    '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" label="Members (3)" x="20" y="20" width="100" height="20" /></XCUIElementTypeButton>';
+  const driver = new FakeDriver(source);
+  driver.platform = "ios";
+  const clicked: string[] = [];
+  (driver as unknown as Driver & { clickNode: NonNullable<Driver["clickNode"]> }).clickNode = async (
+    node,
+  ) => {
+    clicked.push(node);
+    return true;
+  };
+
+  await new Locator(driver, by.text("Members (3)")).tap({ clickableAncestor: true });
+
+  assert.equal(clicked.length, 1);
+  assert.match(clicked[0] ?? "", /XCUIElementTypeButton/);
+  assert.deepEqual(driver.taps, []);
+});
+
 test("Locator.press presses and releases the locator centre through the driver", async () => {
   const driver = new FakeDriver('<node text="Hold mic" bounds="[10,20][110,120]" />');
   const loc = new Locator(driver, by.text("Hold mic"));
@@ -473,10 +547,40 @@ test("Locator.isVisible reflects whether the selector matches the source", async
   assert.equal(await new Locator(driver, by.desc("Open menu")).isVisible(), false);
 });
 
+test("Locator.isVisible honors native hidden/offscreen attributes", async () => {
+  const ios = new FakeDriver(
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" label="Checkout" visible="false" x="0" y="0" width="100" height="40" />',
+  );
+  ios.platform = "ios";
+  assert.equal(await new Locator(ios, by.text("Checkout")).isVisible(), false);
+
+  const android = new FakeDriver('<node text="Checkout" displayed="false" bounds="[0,0][100,40]" />');
+  assert.equal(await new Locator(android, by.text("Checkout")).isVisible(), false);
+});
+
 test("Locator.tap taps the matched node's centre via a source-bounds fallback", async () => {
   const driver = new FakeDriver(SETTLED);
   await new Locator(driver, by.desc("Sign out")).tap();
   assert.deepEqual(driver.taps, [{ x: 50, y: 50 }]);
+});
+
+test("Locator.tap refuses an iOS node marked not visible", async () => {
+  const driver = new FakeDriver(
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" label="Checkout" visible="false" x="0" y="0" width="100" height="40" />',
+  );
+  driver.platform = "ios";
+  let clicked = 0;
+  (driver as unknown as Driver & { clickNode: NonNullable<Driver["clickNode"]> }).clickNode = async () => {
+    clicked += 1;
+    return true;
+  };
+
+  await assert.rejects(
+    () => new Locator(driver, by.text("Checkout")).tap({ timeout: 20, interval: 5 }),
+    /was not found to tap within 20ms/,
+  );
+  assert.equal(clicked, 0);
+  assert.deepEqual(driver.taps, []);
 });
 
 test("expect(locator).toShow passes when the locator is present and the text is shown", async () => {
@@ -521,6 +625,50 @@ test("waitFor timeout names the nearest on-screen labels, nearest first", async 
       return true;
     },
   );
+});
+
+test("locator waits preserve a caller-supplied sleep", async () => {
+  const waitSleeps: number[] = [];
+  await new Locator(
+    new FakeDriver("", '<node text="Ready" bounds="[0,0][10,10]" />'),
+    by.text("Ready"),
+  ).waitFor({
+    timeout: 20,
+    interval: 2,
+    sleep: async (ms) => {
+      waitSleeps.push(ms);
+    },
+  });
+  assert.deepEqual(waitSleeps, [2]);
+
+  const tapSleeps: number[] = [];
+  const tapDriver = new FakeDriver("", '<node text="Tap" bounds="[0,0][10,10]" />');
+  await new Locator(tapDriver, by.text("Tap")).tap({
+    timeout: 20,
+    interval: 3,
+    sleep: async (ms) => {
+      tapSleeps.push(ms);
+    },
+  });
+  assert.deepEqual(tapSleeps, [3]);
+  assert.deepEqual(tapDriver.taps, [{ x: 5, y: 5 }]);
+
+  const checkSleeps: number[] = [];
+  const unchecked =
+    '<node class="android.widget.CheckBox" text="Terms" checked="false" bounds="[0,0][10,10]" />';
+  const checked =
+    '<node class="android.widget.CheckBox" text="Terms" checked="true" bounds="[0,0][10,10]" />';
+  await new Locator(
+    new FakeDriver(unchecked, unchecked, unchecked, checked),
+    by.role("checkbox", { name: "Terms" }),
+  ).check({
+    timeout: 20,
+    interval: 4,
+    sleep: async (ms) => {
+      checkSleeps.push(ms);
+    },
+  });
+  assert.deepEqual(checkSleeps, [4]);
 });
 
 test("tap timeout carries the did-you-mean hint", async () => {
@@ -979,4 +1127,20 @@ test("expect(locator) honours the locator's own wait options, call-site override
   pauses.length = 0;
   await assert.rejects(() => expect(loc).toBeVisible({ interval: 3, timeout: 25 }), /assertion not met/);
   assert.deepEqual([...new Set(pauses)], [3]); // a call-site interval overrides the locator's
+
+  pauses.length = 0;
+  const sleeps: number[] = [];
+  await assert.rejects(
+    () =>
+      expect(loc).toBeVisible({
+        interval: 4,
+        timeout: 25,
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
+      }),
+    /assertion not met/,
+  );
+  assert.deepEqual([...new Set(sleeps)], [4]);
+  assert.deepEqual(pauses, []); // custom sleep must not be clobbered by driver.pause
 });

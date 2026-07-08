@@ -10,40 +10,44 @@ import { execFileSync } from "node:child_process";
  * backend socket log — not the tap — is the proof that an action fired.
  */
 
-function adb(args: string[]): string {
-  return execFileSync("adb", args, {
+export function adbArgv(args: string[], serial = process.env.ANDROID_SERIAL): string[] {
+  return serial ? ["-s", serial, ...args] : args;
+}
+
+function adb(args: string[], serial?: string): string {
+  return execFileSync("adb", adbArgv(args, serial), {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
   });
 }
 
-export function adbDump(): string {
-  return adb(["exec-out", "uiautomator", "dump", "/dev/tty"]);
+export function adbDump(serial?: string): string {
+  return adb(["exec-out", "uiautomator", "dump", "/dev/tty"], serial);
 }
 
-export function adbTap(x: number, y: number): void {
+export function adbTap(x: number, y: number, serial?: string): void {
   // Wake the screen first: on a headless/idle emulator the display sleeps and
   // `input tap` is silently dropped while asleep (this caused the Chrome
   // onboarding taps to "not register"). KEYCODE_WAKEUP is a no-op when already on.
   try {
-    adb(["shell", "input", "keyevent", "KEYCODE_WAKEUP"]);
+    adb(["shell", "input", "keyevent", "KEYCODE_WAKEUP"], serial);
   } catch {
     // best-effort
   }
-  adb(["shell", "input", "tap", String(x), String(y)]);
+  adb(["shell", "input", "tap", String(x), String(y)], serial);
 }
 
-export function adbLogcatClear(): void {
+export function adbLogcatClear(serial?: string): void {
   try {
-    adb(["logcat", "-c"]);
+    adb(["logcat", "-c"], serial);
   } catch {
     // Runtime logcat is best-effort supporting evidence only.
   }
 }
 
-export function adbLogcatDump(): string {
+export function adbLogcatDump(serial?: string): string {
   try {
-    return adb(["logcat", "-d", "-v", "time"]);
+    return adb(["logcat", "-d", "-v", "time"], serial);
   } catch {
     return "";
   }
@@ -55,9 +59,9 @@ export function adbLogcatDump(): string {
  * the loop otherwise keeps the session busy and the final `deleteSession` races
  * with `UND_ERR_CLOSED`.
  */
-export function adbForceStop(pkg: string): void {
+export function adbForceStop(pkg: string, serial?: string): void {
   try {
-    adb(["shell", "am", "force-stop", pkg]);
+    adb(["shell", "am", "force-stop", pkg], serial);
   } catch {
     // best-effort
   }
@@ -82,7 +86,7 @@ const BROWSER_PACKAGES = new Set(["com.android.chrome", "org.chromium.chrome", "
  * Clearing a not-yet-installed package fails on some emulator images, so every
  * step is best-effort.
  */
-export function resetAppAndBrowserState(packages: string[]): void {
+export function resetAppAndBrowserState(packages: string[], serial?: string): void {
   for (const pkg of packages) {
     const actions = BROWSER_PACKAGES.has(pkg)
       ? [["shell", "am", "force-stop", pkg]]
@@ -92,7 +96,7 @@ export function resetAppAndBrowserState(packages: string[]): void {
         ];
     for (const action of actions) {
       try {
-        adb(action);
+        adb(action, serial);
       } catch {
         // best-effort
       }

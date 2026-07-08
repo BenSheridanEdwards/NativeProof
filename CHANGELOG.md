@@ -458,8 +458,9 @@ Correctness and robustness fixes; no API changes.
   that emits `bounds` before the selector attribute still resolves.
 - **`parseBounds` accepts negative coordinates** — off-screen / RTL-shifted nodes (`[-5,0]…`) now
   parse instead of becoming untappable.
-- **`--appium-port` is validated** — a non-numeric / out-of-range value throws a clear error instead
-  of producing an opaque `http://host:NaN/…` connection failure.
+- **Historical `--appium-port` flag validation** — in 0.3.1, a non-numeric / out-of-range value
+  threw a clear error instead of producing an opaque `http://host:NaN/…` connection failure.
+  Current CLI versions no longer expose this flag.
 - **`toContain` throws a usage error** on a non-string/array actual instead of silently failing.
 - **Page-source capture failures are logged** — `wdioDriver().source()` and `captureState` warn on a
   `getPageSource` error before degrading to empty, so a dead session isn't mistaken for an empty screen.

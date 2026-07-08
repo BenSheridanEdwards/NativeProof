@@ -222,8 +222,7 @@ function isIosCheckboxButton(node: string): boolean {
     Math.abs(bounds.width - bounds.height) <= 12;
   if (!isSmallSquare) return false;
 
-  if (!nodeHasAccessibleName(node, "ios")) return true;
-  return nodeAccessibleNameMatches(node, "ios", /^(?:0|1|selected|unselected|checked|unchecked)$/i);
+  return attributeValueMatches(node, "value", /^(?:0|1|selected|unselected|checked|unchecked)$/i);
 }
 
 const ROLE_LABEL_BOUNDS_TOLERANCE_PX = 2;
@@ -257,16 +256,18 @@ function nodeContainsNamedDescendantOrSibling(node: string, namedNodes: readonly
 
 /**
  * Element classes/types that back a semantic role, per platform — Android exposes a widget
- * `class`, iOS an XCUITest `type`. Matched as a substring, so framework variants
- * (`SwitchCompat`, `MaterialButton`, Compose's `android.widget.CheckBox`) all resolve.
+ * `class`, iOS an XCUITest `type`. Most Android roles match by substring for framework
+ * variants; `button` matches the final class segment so RadioButton/ToggleButton/ImageButton
+ * do not shift plain button locators.
  */
 const ROLE_PATTERNS: Record<string, { android: readonly string[]; ios: readonly string[] }> = {
   checkbox: { android: ["CheckBox"], ios: ["XCUIElementTypeSwitch"] },
   switch: { android: ["Switch"], ios: ["XCUIElementTypeSwitch"] },
   button: { android: ["Button"], ios: ["XCUIElementTypeButton"] },
-  textfield: { android: ["EditText"], ios: ["XCUIElementTypeTextField"] },
+  textfield: { android: ["EditText"], ios: ["XCUIElementTypeTextField", "XCUIElementTypeSecureTextField"] },
   image: { android: ["ImageView"], ios: ["XCUIElementTypeImage"] },
 };
+const ANDROID_BUTTON_CLASS = /(?:^|\.)(?!(?:RadioButton|ToggleButton|ImageButton)$)[^.]*Button$/;
 
 /** Roles `by.role` / `getByRole(role)` can match without a name. */
 export const KNOWN_ROLES = Object.keys(ROLE_PATTERNS);
@@ -294,7 +295,13 @@ export function nodesForRole(
     .map((m) => m[0])
     .filter((node) => {
       const roleAttributeMatches = rolePatterns.some((pattern) =>
-        attributeValueMatches(node, attribute, new RegExp(escapeRegExp(pattern))),
+        attributeValueMatches(
+          node,
+          attribute,
+          platform === "android" && normalizedRole === "button"
+            ? ANDROID_BUTTON_CLASS
+            : new RegExp(escapeRegExp(pattern)),
+        ),
       );
       if (roleAttributeMatches) return true;
 
@@ -341,13 +348,18 @@ export function boundsForText(source: string, text: string): Bounds | null {
 }
 
 /**
- * The smallest element flagged `clickable="true"` that fully contains the given
- * bounds, or the bounds themselves if none does — turns a non-clickable Compose node
- * into a reliable tap target (e.g. the "Members (3)" list rows).
+ * The smallest element that looks tappable and fully contains the given bounds.
+ * Android marks this directly with `clickable="true"`; iOS exposes tappable controls
+ * through XCUITest element types instead.
  */
 export function smallestClickableAncestorNode(source: string, nodeBounds: Bounds): string | null {
-  const clickable = [...source.matchAll(new RegExp(`<[^>]*${attrPattern("clickable")}true"[^>]*>`, "g"))]
+  const androidClickable = new RegExp(`${attrPattern("clickable")}true"`);
+  const iosClickable = new RegExp(
+    `${attrPattern("type")}XCUIElementType(?:Button|Switch|TextField|SecureTextField|Cell)"`,
+  );
+  const clickable = [...source.matchAll(/<[^>]*>/g)]
     .map((m) => ({ node: m[0], bounds: parseNodeBounds(m[0]) }))
+    .filter(({ node }) => androidClickable.test(node) || iosClickable.test(node))
     .filter((entry): entry is { node: string; bounds: Bounds } => entry.bounds !== null)
     .filter(
       ({ bounds }) =>

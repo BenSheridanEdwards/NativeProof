@@ -20,6 +20,8 @@ import {
   ensureAppiumDriver,
   helpText,
   loadNativeProofConfig,
+  localBin,
+  localBinNeedsShell,
   main,
   type NativeBuildCommandRunner,
   onboard,
@@ -120,6 +122,63 @@ test("resolveRunner ignores raw WebdriverIO configs and requires nativeproof.con
   try {
     writeFileSync(path.join(dir, "wdio.conf.ts"), "export const config = {};\n");
     assert.throws(() => resolveRunner(parseArgs([]), dir), /no nativeproof\.config/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("resolveRunner imports tsx from NativeProof's own dependencies", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-cli-tsx-"));
+  const previousNodeOptions = process.env.NODE_OPTIONS;
+  try {
+    writeFileSync(path.join(dir, "nativeproof.config.ts"), "export default { projects: [] };\n");
+    process.env.NODE_OPTIONS = "--trace-warnings";
+
+    const runner = resolveRunner(parseArgs([]), dir);
+    assert.match(
+      runner.extraEnv.NODE_OPTIONS ?? "",
+      /--import=file:\/\/.*\/node_modules\/tsx\/dist\/loader\.mjs/,
+    );
+    assert.match(runner.extraEnv.NODE_OPTIONS ?? "", /--trace-warnings/);
+    assert.doesNotMatch(runner.extraEnv.NODE_OPTIONS ?? "", /--import tsx(?:\s|$)/);
+  } finally {
+    if (previousNodeOptions === undefined) delete process.env.NODE_OPTIONS;
+    else process.env.NODE_OPTIONS = previousNodeOptions;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("localBin falls back to NativeProof's dependency bins when the consumer has none", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-cli-bin-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(dir);
+    for (const name of ["appium", "wdio"]) {
+      const bin = localBin(name);
+      assert.notEqual(bin, name);
+      assert.ok(path.isAbsolute(bin));
+      assert.ok(existsSync(bin));
+      assert.match(bin, new RegExp(`node_modules[/\\\\]\\.bin[/\\\\]${name}$`));
+    }
+  } finally {
+    process.chdir(previousCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("localBin resolves Windows npm shims and shell execution", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-local-bin-"));
+  try {
+    const binDir = path.join(dir, "node_modules", ".bin");
+    mkdirSync(binDir, { recursive: true });
+    const appiumShim = path.join(binDir, "appium.cmd");
+    writeFileSync(appiumShim, "");
+    writeFileSync(path.join(binDir, "wdio"), "");
+
+    assert.equal(localBin("appium", "win32", dir), appiumShim);
+    assert.equal(localBin("wdio", "win32", dir), "wdio");
+    assert.equal(localBinNeedsShell("win32"), true);
+    assert.equal(localBinNeedsShell("darwin"), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -280,6 +339,43 @@ test("main reports a local Appium process that exits before becoming reachable",
   }
 });
 
+test("main does not start local Appium for an unreachable remote host", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-remote-appium-"));
+  const previousCwd = process.cwd();
+  const previousFetch = globalThis.fetch;
+  try {
+    const binDir = path.join(dir, "node_modules", ".bin");
+    const marker = path.join(dir, "appium-spawned");
+    mkdirSync(binDir, { recursive: true });
+    const appiumBin = path.join(binDir, "appium");
+    writeFileSync(appiumBin, `#!/bin/sh\ntouch "${marker}"\nexit 48\n`);
+    chmodSync(appiumBin, 0o755);
+    writeFileSync(
+      path.join(dir, "nativeproof.config.ts"),
+      [
+        "export default {",
+        '  appium: { autoInstallDrivers: false, host: "10.0.0.5", port: 4723 },',
+        '  projects: [{ name: "android", platform: "android" }],',
+        "};",
+      ].join("\n"),
+    );
+    globalThis.fetch = (async () => {
+      throw new Error("offline");
+    }) as typeof fetch;
+
+    process.chdir(dir);
+    await assert.rejects(
+      () => main(["--android"]),
+      /configured Appium at http:\/\/10\.0\.0\.5:4723\/ is not reachable\. Start it or fix appium\.host/,
+    );
+    assert.equal(existsSync(marker), false);
+  } finally {
+    globalThis.fetch = previousFetch;
+    process.chdir(previousCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("parseArgs surfaces the init command, and help lists it", () => {
   const args = parseArgs(["init", "--ios"]);
   assert.equal(args.command, "init");
@@ -325,6 +421,24 @@ test("nativeproof-init defaults to the init command", () => {
   assert.equal(explicitTest.platform, "ios");
 });
 
+test("localBin resolves Windows npm shims and shell execution", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-local-bin-"));
+  try {
+    const binDir = path.join(dir, "node_modules", ".bin");
+    mkdirSync(binDir, { recursive: true });
+    const appiumShim = path.join(binDir, "appium.cmd");
+    writeFileSync(appiumShim, "");
+    writeFileSync(path.join(binDir, "wdio"), "");
+
+    assert.equal(localBin("appium", "win32", dir), appiumShim);
+    assert.equal(localBin("wdio", "win32", dir), "wdio");
+    assert.equal(localBinNeedsShell("win32"), true);
+    assert.equal(localBinNeedsShell("darwin"), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("main rejects init without an explicit platform", async () => {
   await assert.rejects(() => main(["init"]), /init requires --ios or --android/);
 });
@@ -363,6 +477,10 @@ test("scaffoldFiles are a platform-specific config, package script and readable 
   assert.doesNotMatch(spec.contents, /test\.describe\(/);
   assert.match(pkg.contents, /"type": "module"/);
   assert.match(pkg.contents, /"test:e2e": "nativeproof"/);
+  assert.equal(
+    (JSON.parse(pkg.contents) as { devDependencies?: Record<string, string> }).devDependencies?.nativeproof,
+    `^${version()}`,
+  );
   assert.match(tsconfig.contents, /"moduleResolution": "Bundler"/);
   assert.match(tsconfig.contents, /"@wdio\/globals\/types"/);
 });
@@ -393,7 +511,7 @@ test("scaffold writes missing files and never overwrites existing ones", () => {
   assert.ok(written.get("/proj/package.json")?.includes('"test:e2e": "nativeproof"'));
 });
 
-test("scaffold updates an existing package.json without overwriting its scripts", () => {
+test("scaffold updates an existing package.json without overwriting its scripts or package type", () => {
   const written = new Map<string, string>();
   const present = new Set<string>(["/proj/package.json"]);
   const io: ScaffoldIo = {
@@ -410,10 +528,10 @@ test("scaffold updates an existing package.json without overwriting its scripts"
     scripts?: Record<string, string>;
     devDependencies?: Record<string, string>;
   };
-  assert.equal(pkg.type, "module");
+  assert.equal(pkg.type, undefined);
   assert.equal(pkg.scripts?.test, "vitest");
   assert.equal(pkg.scripts?.["test:e2e"], "nativeproof");
-  assert.equal(pkg.devDependencies?.nativeproof, "latest");
+  assert.equal(pkg.devDependencies?.nativeproof, `^${version()}`);
 });
 
 test("detectOnboardTarget accepts direct Android APK and iOS app paths", () => {
@@ -453,6 +571,55 @@ test("detectOnboardTarget finds built artifacts inside native app repos", () => 
       appPath: iosOutput,
       sourcePath: path.join(dir, "ios"),
     });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("detectOnboardTarget ignores newer test harness artifacts", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-harness-"));
+  try {
+    const androidOutput = path.join(dir, "android", "app", "build", "outputs", "apk", "debug");
+    const iosOutput = path.join(dir, "ios", "build", "Debug-iphonesimulator");
+    mkdirSync(androidOutput, { recursive: true });
+    mkdirSync(path.join(iosOutput, "Example.app"), { recursive: true });
+    mkdirSync(path.join(iosOutput, "ExampleUITests-Runner.app"), { recursive: true });
+    const apk = path.join(androidOutput, "app-debug.apk");
+    const androidTestApk = path.join(androidOutput, "app-debug-androidTest.apk");
+    writeFileSync(apk, "");
+    writeFileSync(androidTestApk, "");
+
+    const oldTime = Date.now() / 1000 - 60;
+    const newTime = Date.now() / 1000;
+    utimesSync(apk, oldTime, oldTime);
+    utimesSync(path.join(iosOutput, "Example.app"), oldTime, oldTime);
+    utimesSync(androidTestApk, newTime, newTime);
+    utimesSync(path.join(iosOutput, "ExampleUITests-Runner.app"), newTime, newTime);
+
+    assert.equal(detectOnboardTarget(path.join(dir, "android"), { platform: "android" }).appPath, apk);
+    assert.equal(
+      detectOnboardTarget(path.join(dir, "ios"), { platform: "ios" }).appPath,
+      path.join(iosOutput, "Example.app"),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("detectOnboardTarget reports when artifact discovery is truncated", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-truncated-"));
+  try {
+    const androidRepo = path.join(dir, "android");
+    mkdirSync(androidRepo, { recursive: true });
+    writeFileSync(path.join(androidRepo, "gradlew"), "");
+    for (let index = 0; index < 8000; index += 1) {
+      mkdirSync(path.join(androidRepo, `dir-${index}`));
+    }
+
+    assert.throws(
+      () => detectOnboardTarget(androidRepo, { platform: "android" }),
+      /Artifact discovery stopped after 8000 directories/,
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -659,7 +826,7 @@ test("onboard scaffolds a missing project with the detected app path", () => {
   }
 });
 
-test("onboard updates an existing nativeproof config and package.json", () => {
+test("onboard updates an existing nativeproof config and package.json without changing package type", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-update-"));
   try {
     const app = path.join(dir, "build", "ios", "Example.app");
@@ -680,10 +847,10 @@ test("onboard updates an existing nativeproof config and package.json", () => {
     };
     assert.match(updatedConfig, /"appium:app": "\.\/build\/ios\/Example\.app"/);
     assert.doesNotMatch(updatedConfig, /"\.\/build\/ios\/MyApp\.app"/);
-    assert.equal(updatedPackage.type, "module");
+    assert.equal(updatedPackage.type, undefined);
     assert.equal(updatedPackage.scripts?.test, "node test.js");
     assert.equal(updatedPackage.scripts?.["test:e2e"], "nativeproof");
-    assert.equal(updatedPackage.devDependencies?.nativeproof, "latest");
+    assert.equal(updatedPackage.devDependencies?.nativeproof, `^${version()}`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

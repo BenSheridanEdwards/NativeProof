@@ -61,19 +61,25 @@ test("packed package exposes the onboarding CLI bins and ESM scaffold", () => {
       bin?: Record<string, string>;
       files?: string[];
       type?: string;
+      version?: string;
     };
 
     assert.equal(packageJson.type, "module");
+    assert.equal(typeof packageJson.version, "string");
     assert.deepEqual(packageJson.files, ["dist", "CHANGELOG.md"]);
     assert.deepEqual(packageJson.bin, {
       nativeproof: "dist/cli.js",
-      "nativeproof-init": "dist/cli.js",
-      "nativeproof-onboard": "dist/cli.js",
+      "nativeproof-init": "dist/nativeproof-init.js",
+      "nativeproof-onboard": "dist/nativeproof-onboard.js",
     });
 
     const cliEntry = path.join(packageRoot, "dist", "cli.js");
+    const initEntry = path.join(packageRoot, "dist", "nativeproof-init.js");
+    const onboardEntry = path.join(packageRoot, "dist", "nativeproof-onboard.js");
     const cliSource = readFileSync(cliEntry, "utf8");
     assert.ok(cliSource.startsWith("#!/usr/bin/env node"), "packed CLI keeps the executable shebang");
+    assert.ok(readFileSync(initEntry, "utf8").startsWith("#!/usr/bin/env node"));
+    assert.ok(readFileSync(onboardEntry, "utf8").startsWith("#!/usr/bin/env node"));
     assert.match(cliSource, /nativeproof-onboard/);
 
     symlinkSync(path.join(process.cwd(), "node_modules"), path.join(packageRoot, "node_modules"), "dir");
@@ -85,7 +91,7 @@ test("packed package exposes the onboarding CLI bins and ESM scaffold", () => {
 
     const iosProject = path.join(tempDir, "fresh-ios-project");
     mkdirSync(iosProject);
-    run(process.execPath, [cliEntry, "init", "--ios"], { cwd: iosProject });
+    run(process.execPath, [initEntry, "--ios"], { cwd: iosProject });
     const iosPackageJson = JSON.parse(readFileSync(path.join(iosProject, "package.json"), "utf8")) as {
       devDependencies?: Record<string, string>;
       scripts?: Record<string, string>;
@@ -93,7 +99,7 @@ test("packed package exposes the onboarding CLI bins and ESM scaffold", () => {
     };
     assert.equal(iosPackageJson.type, "module");
     assert.equal(iosPackageJson.scripts?.["test:e2e"], "nativeproof");
-    assert.equal(iosPackageJson.devDependencies?.nativeproof, "latest");
+    assert.equal(iosPackageJson.devDependencies?.nativeproof, `^${packageJson.version}`);
     assert.match(
       readFileSync(path.join(iosProject, "tests", "example.spec.ts"), "utf8"),
       /native\.tap\("Log in"\)/,
@@ -102,12 +108,19 @@ test("packed package exposes the onboarding CLI bins and ESM scaffold", () => {
     const onboardProject = path.join(tempDir, "fresh-onboard-project");
     mkdirSync(onboardProject);
     writeFileSync(path.join(onboardProject, "Example.apk"), "");
-    run(process.execPath, [cliEntry, "onboard", "./Example.apk"], { cwd: onboardProject });
+    run(process.execPath, [onboardEntry, "./Example.apk"], { cwd: onboardProject });
     assert.match(
       readFileSync(path.join(onboardProject, "nativeproof.config.ts"), "utf8"),
       /"appium:app": "\.\/Example\.apk"/,
     );
-    assert.equal(JSON.parse(readFileSync(path.join(onboardProject, "package.json"), "utf8")).type, "module");
+    const onboardPackageJson = JSON.parse(
+      readFileSync(path.join(onboardProject, "package.json"), "utf8"),
+    ) as {
+      devDependencies?: Record<string, string>;
+      type?: string;
+    };
+    assert.equal(onboardPackageJson.type, "module");
+    assert.equal(onboardPackageJson.devDependencies?.nativeproof, `^${packageJson.version}`);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

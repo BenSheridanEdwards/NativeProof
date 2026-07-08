@@ -494,10 +494,40 @@ test("Locator.isVisible reflects whether the selector matches the source", async
   assert.equal(await new Locator(driver, by.desc("Open menu")).isVisible(), false);
 });
 
+test("Locator.isVisible honors native hidden/offscreen attributes", async () => {
+  const ios = new FakeDriver(
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" label="Checkout" visible="false" x="0" y="0" width="100" height="40" />',
+  );
+  ios.platform = "ios";
+  assert.equal(await new Locator(ios, by.text("Checkout")).isVisible(), false);
+
+  const android = new FakeDriver('<node text="Checkout" displayed="false" bounds="[0,0][100,40]" />');
+  assert.equal(await new Locator(android, by.text("Checkout")).isVisible(), false);
+});
+
 test("Locator.tap taps the matched node's centre via a source-bounds fallback", async () => {
   const driver = new FakeDriver(SETTLED);
   await new Locator(driver, by.desc("Sign out")).tap();
   assert.deepEqual(driver.taps, [{ x: 50, y: 50 }]);
+});
+
+test("Locator.tap refuses an iOS node marked not visible", async () => {
+  const driver = new FakeDriver(
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" label="Checkout" visible="false" x="0" y="0" width="100" height="40" />',
+  );
+  driver.platform = "ios";
+  let clicked = 0;
+  (driver as unknown as Driver & { clickNode: NonNullable<Driver["clickNode"]> }).clickNode = async () => {
+    clicked += 1;
+    return true;
+  };
+
+  await assert.rejects(
+    () => new Locator(driver, by.text("Checkout")).tap({ timeout: 20, interval: 5 }),
+    /was not found to tap within 20ms/,
+  );
+  assert.equal(clicked, 0);
+  assert.deepEqual(driver.taps, []);
 });
 
 test("expect(locator).toShow passes when the locator is present and the text is shown", async () => {

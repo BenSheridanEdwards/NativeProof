@@ -62,8 +62,9 @@ Scrolling, selector discovery, and a hardened locator core.
   worker process.
 - Onboarding config rewrites survive comments containing apostrophes or braces.
 - `--ios` with no iOS project errors listing the available projects instead of silently
-  running the first project; the CLI preflight honors the same `PLATFORM` /
-  `NATIVEPROOF_PROJECT` env vars the runner reads.
+  running the first project; the CLI preflight honors the same `NATIVEPROOF_PLATFORM` /
+  `NATIVEPROOF_PROJECT` env vars the runner reads. Legacy bare `PLATFORM` still works with a
+  warning.
 
 **Changed**
 

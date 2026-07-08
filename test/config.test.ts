@@ -76,6 +76,38 @@ test("buildWdioConfig defaults platformName + automationName per platform, and a
   assert.deepEqual(ios.capabilities, [{ platformName: "iOS", "appium:automationName": "Custom" }]);
 });
 
+test("buildWdioConfig exposes Android appium:udid to adb helpers", () => {
+  const previous = process.env.ANDROID_SERIAL;
+  try {
+    delete process.env.ANDROID_SERIAL;
+    const wdio = buildWdioConfig(
+      {
+        projects: [
+          {
+            name: "android",
+            platform: "android",
+            capabilities: { "appium:udid": "emulator-5556" },
+          },
+        ],
+      },
+      {},
+      "/p",
+    );
+
+    assert.equal(process.env.ANDROID_SERIAL, "emulator-5556");
+    assert.deepEqual(wdio.capabilities, [
+      {
+        platformName: "Android",
+        "appium:automationName": "UiAutomator2",
+        "appium:udid": "emulator-5556",
+      },
+    ]);
+  } finally {
+    if (previous === undefined) delete process.env.ANDROID_SERIAL;
+    else process.env.ANDROID_SERIAL = previous;
+  }
+});
+
 test("bootedIosSimulatorFromSimctl picks the first booted available iOS simulator", () => {
   const raw = JSON.stringify({
     devices: {

@@ -23,13 +23,14 @@ import {
   resolveProject,
 } from "./config.js";
 import { selectorSuggestions } from "./inspect.js";
+import { runnerEnvFromProcess } from "./runner-env.js";
 
 /**
  * The `nativeproof` CLI — the single-command entry, in the spirit of `playwright test`.
  *
  * It resolves `nativeproof.config.ts`, ensures the configured Appium server is up (starting one
- * if needed), and runs the suite with sane env (PLATFORM / SPEC / NATIVEPROOF_PROJECT) — so a
- * consumer types one command instead of remembering env vars and a runner invocation. The
+ * if needed), and runs the suite with sane env (NATIVEPROOF_PLATFORM / NATIVEPROOF_SPEC /
+ * NATIVEPROOF_PROJECT) — so a consumer types one command instead of remembering env vars and a runner invocation. The
  * device/emulator itself is the environment (the mobile analogue of needing a display) and is left
  * to the host.
  */
@@ -155,9 +156,9 @@ export function helpText(): string {
     "Options:",
     "  --ios                      shorthand for --platform ios",
     "  --android                  shorthand for --platform android",
-    "  --platform <android|ios>   platform to run (sets PLATFORM)",
-    "  --project <name>           run a named project from nativeproof.config.ts",
-    "  --spec <glob>              run only matching specs (sets SPEC)",
+    "  --platform <android|ios>   platform to run (sets NATIVEPROOF_PLATFORM)",
+    "  --project <name>           run a named project (sets NATIVEPROOF_PROJECT)",
+    "  --spec <glob>              run only matching specs (sets NATIVEPROOF_SPEC)",
     "  --no-appium                do not auto-start an Appium server",
     "  -h, --help                 show this help",
     "  -v, --version              print the version",
@@ -1140,13 +1141,13 @@ async function ensureAppium(
   throw new Error("nativeproof: Appium did not become reachable within 30s");
 }
 
-function runnerEnv(args: CliArgs): NodeJS.ProcessEnv {
+export function runnerEnv(args: CliArgs, baseEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...baseEnv,
   };
-  if (args.platform) env.PLATFORM = args.platform;
+  if (args.platform) env.NATIVEPROOF_PLATFORM = args.platform;
   if (args.project) env.NATIVEPROOF_PROJECT = args.project;
-  if (args.spec) env.SPEC = args.spec;
+  if (args.spec) env.NATIVEPROOF_SPEC = args.spec;
   return env;
 }
 
@@ -1254,16 +1255,22 @@ function nativeProofConfigFromModule(loaded: unknown): NativeProofConfig | undef
 
 /**
  * The selection the preflight resolves the project with: CLI flags first, then the same
- * env vars the runner itself reads (PLATFORM / NATIVEPROOF_PROJECT). Without the env
- * fallback, `PLATFORM=ios nativeproof` preflighted the android project (wrong Appium
- * driver ensured, macOS guard skipped) and then ran the ios one.
+ * env vars the runner itself reads. Without the env fallback, env-selected runs preflighted
+ * the wrong project before the runner used the env-selected one.
  */
-export function runSelection(args: CliArgs, env: NodeJS.ProcessEnv = process.env): RunnerEnv {
-  const selection: RunnerEnv = {};
-  const platform = args.platform ?? env.PLATFORM;
-  const project = args.project ?? env.NATIVEPROOF_PROJECT;
-  if (platform) selection.platform = platform;
-  if (project) selection.project = project;
+export function runSelection(
+  args: CliArgs,
+  env: NodeJS.ProcessEnv = process.env,
+  warn: (message: string) => void = console.warn,
+): RunnerEnv {
+  const selection = runnerEnvFromProcess(env, {
+    platform: !args.platform,
+    project: !args.project,
+    spec: false,
+    warn,
+  });
+  if (args.platform) selection.platform = args.platform;
+  if (args.project) selection.project = args.project;
   return selection;
 }
 

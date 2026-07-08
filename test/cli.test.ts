@@ -26,6 +26,7 @@ import {
   onboardCommand,
   parseArgs,
   resolveRunner,
+  runnerEnv,
   runSelection,
   type ScaffoldIo,
   scaffold,
@@ -823,11 +824,32 @@ test("updateConfigAppPath survives comments containing apostrophes and braces", 
 
 test("runSelection falls back to the env vars the runner itself reads", () => {
   const args = parseArgs([]);
-  // Flags win; without them, PLATFORM/NATIVEPROOF_PROJECT steer the preflight exactly
-  // like they steer the runner — previously the CLI preflighted projects[0] instead.
-  assert.deepEqual(runSelection(args, { PLATFORM: "ios" }), { platform: "ios" });
-  assert.deepEqual(runSelection(args, { NATIVEPROOF_PROJECT: "beta" }), { project: "beta" });
-  assert.deepEqual(runSelection(parseArgs(["--android"]), { PLATFORM: "ios" }), { platform: "android" });
+  const warnings: string[] = [];
+  const warn = (message: string): void => {
+    warnings.push(message);
+  };
+  // Flags win; without them, the env vars the runner reads steer the preflight too.
+  assert.deepEqual(runSelection(args, { NATIVEPROOF_PLATFORM: "ios" }, warn), { platform: "ios" });
+  assert.deepEqual(runSelection(args, { NATIVEPROOF_PROJECT: "beta" }, warn), { project: "beta" });
+  assert.deepEqual(runSelection(args, { PLATFORM: "ios" }, warn), { platform: "ios" });
+  assert.deepEqual(runSelection(parseArgs(["--android"]), { PLATFORM: "ios" }, warn), {
+    platform: "android",
+  });
+  assert.deepEqual(warnings, [
+    "nativeproof: PLATFORM is deprecated for runner selection; use NATIVEPROOF_PLATFORM instead",
+  ]);
+});
+
+test("runnerEnv hands prefixed selection vars to WebdriverIO", () => {
+  const env = runnerEnv(
+    parseArgs(["--platform", "ios", "--project", "tablet", "--spec", "tests/login.spec.ts"]),
+    { PLATFORM: "android", SPEC: "tests/ambient.spec.ts" },
+  );
+  assert.equal(env.NATIVEPROOF_PLATFORM, "ios");
+  assert.equal(env.NATIVEPROOF_PROJECT, "tablet");
+  assert.equal(env.NATIVEPROOF_SPEC, "tests/login.spec.ts");
+  assert.equal(env.PLATFORM, "android");
+  assert.equal(env.SPEC, "tests/ambient.spec.ts");
 });
 
 test("parseArgs recognises the inspect command and helpText documents it", () => {

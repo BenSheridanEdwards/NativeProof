@@ -4,6 +4,38 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 1.0.0
+
+NativeProof's first stable release locks in the one-command init/onboard flow
+and the runner-native, Playwright-feeling test surface.
+
+**Added**
+
+- Generated projects now include a minimal `tsconfig.json`, so `describe`, `it`,
+  WebdriverIO globals, and the generated config import type-check cleanly on
+  first open.
+
+**Changed**
+
+- Generated `package.json` files now pin `nativeproof` to the generating CLI's
+  caret version range instead of `latest`, so fresh projects do not silently
+  jump majors after 1.0.
+- Runner selection now prefers `NATIVEPROOF_PLATFORM` and `NATIVEPROOF_SPEC`,
+  with warnings when legacy bare `PLATFORM` / `SPEC` environment variables are
+  used.
+- The README's generated-config and mocking docs now match the actual scaffold,
+  including mock traffic assertion timing and WebSocket close-code semantics.
+
+**Fixed**
+
+- `waitUntil` now retries transient producer errors until timeout instead of
+  aborting polling on the first thrown source/read.
+- Failure evidence filenames include a stable suffix, preventing truncated
+  failing-test names from overwriting each other's `.png` / `.xml` artifacts.
+- `nativeproof inspect` skips transient input values when suggesting
+  `getByText(...)` locators, so typed emails/search queries do not become
+  brittle first-read selectors.
+
 ## 0.13.1
 
 **Fixed**

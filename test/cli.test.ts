@@ -383,6 +383,24 @@ test("nativeproof-init defaults to the init command", () => {
   assert.equal(explicitTest.platform, "ios");
 });
 
+test("localBin resolves Windows npm shims and shell execution", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-local-bin-"));
+  try {
+    const binDir = path.join(dir, "node_modules", ".bin");
+    mkdirSync(binDir, { recursive: true });
+    const appiumShim = path.join(binDir, "appium.cmd");
+    writeFileSync(appiumShim, "");
+    writeFileSync(path.join(binDir, "wdio"), "");
+
+    assert.equal(localBin("appium", "win32", dir), appiumShim);
+    assert.equal(localBin("wdio", "win32", dir), "wdio");
+    assert.equal(localBinNeedsShell("win32"), true);
+    assert.equal(localBinNeedsShell("darwin"), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("main rejects init without an explicit platform", async () => {
   await assert.rejects(() => main(["init"]), /init requires --ios or --android/);
 });
@@ -511,6 +529,55 @@ test("detectOnboardTarget finds built artifacts inside native app repos", () => 
       appPath: iosOutput,
       sourcePath: path.join(dir, "ios"),
     });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("detectOnboardTarget ignores newer test harness artifacts", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-harness-"));
+  try {
+    const androidOutput = path.join(dir, "android", "app", "build", "outputs", "apk", "debug");
+    const iosOutput = path.join(dir, "ios", "build", "Debug-iphonesimulator");
+    mkdirSync(androidOutput, { recursive: true });
+    mkdirSync(path.join(iosOutput, "Example.app"), { recursive: true });
+    mkdirSync(path.join(iosOutput, "ExampleUITests-Runner.app"), { recursive: true });
+    const apk = path.join(androidOutput, "app-debug.apk");
+    const androidTestApk = path.join(androidOutput, "app-debug-androidTest.apk");
+    writeFileSync(apk, "");
+    writeFileSync(androidTestApk, "");
+
+    const oldTime = Date.now() / 1000 - 60;
+    const newTime = Date.now() / 1000;
+    utimesSync(apk, oldTime, oldTime);
+    utimesSync(path.join(iosOutput, "Example.app"), oldTime, oldTime);
+    utimesSync(androidTestApk, newTime, newTime);
+    utimesSync(path.join(iosOutput, "ExampleUITests-Runner.app"), newTime, newTime);
+
+    assert.equal(detectOnboardTarget(path.join(dir, "android"), { platform: "android" }).appPath, apk);
+    assert.equal(
+      detectOnboardTarget(path.join(dir, "ios"), { platform: "ios" }).appPath,
+      path.join(iosOutput, "Example.app"),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("detectOnboardTarget reports when artifact discovery is truncated", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-onboard-truncated-"));
+  try {
+    const androidRepo = path.join(dir, "android");
+    mkdirSync(androidRepo, { recursive: true });
+    writeFileSync(path.join(androidRepo, "gradlew"), "");
+    for (let index = 0; index < 8000; index += 1) {
+      mkdirSync(path.join(androidRepo, `dir-${index}`));
+    }
+
+    assert.throws(
+      () => detectOnboardTarget(androidRepo, { platform: "android" }),
+      /Artifact discovery stopped after 8000 directories/,
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

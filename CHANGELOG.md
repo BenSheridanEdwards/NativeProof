@@ -62,8 +62,9 @@ Scrolling, selector discovery, and a hardened locator core.
   worker process.
 - Onboarding config rewrites survive comments containing apostrophes or braces.
 - `--ios` with no iOS project errors listing the available projects instead of silently
-  running the first project; the CLI preflight honors the same `PLATFORM` /
-  `NATIVEPROOF_PROJECT` env vars the runner reads.
+  running the first project; the CLI preflight honors the same `NATIVEPROOF_PLATFORM` /
+  `NATIVEPROOF_PROJECT` env vars the runner reads. Legacy bare `PLATFORM` still works with a
+  warning.
 
 **Changed**
 
@@ -457,8 +458,9 @@ Correctness and robustness fixes; no API changes.
   that emits `bounds` before the selector attribute still resolves.
 - **`parseBounds` accepts negative coordinates** — off-screen / RTL-shifted nodes (`[-5,0]…`) now
   parse instead of becoming untappable.
-- **`--appium-port` is validated** — a non-numeric / out-of-range value throws a clear error instead
-  of producing an opaque `http://host:NaN/…` connection failure.
+- **Historical `--appium-port` flag validation** — in 0.3.1, a non-numeric / out-of-range value
+  threw a clear error instead of producing an opaque `http://host:NaN/…` connection failure.
+  Current CLI versions no longer expose this flag.
 - **`toContain` throws a usage error** on a non-string/array actual instead of silently failing.
 - **Page-source capture failures are logged** — `wdioDriver().source()` and `captureState` warn on a
   `getPageSource` error before degrading to empty, so a dead session isn't mistaken for an empty screen.

@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { buildWdioConfig, type NativeProofConfig, type RunnerEnv } from "./config.js";
+import { runnerEnvFromProcess } from "./runner-env.js";
 
 /**
  * The bridge the `nativeproof` CLI hands to WebdriverIO: it loads the user's
@@ -18,10 +19,6 @@ if (!userConfig) {
   throw new Error(`${configPath} must \`export default defineConfig(...)\``);
 }
 
-const env: RunnerEnv = {};
-const { PLATFORM, NATIVEPROOF_PROJECT, SPEC } = process.env;
-if (PLATFORM) env.platform = PLATFORM;
-if (NATIVEPROOF_PROJECT) env.project = NATIVEPROOF_PROJECT;
-if (SPEC) env.spec = SPEC;
+const env: RunnerEnv = runnerEnvFromProcess();
 
 export const config = buildWdioConfig(userConfig, env);

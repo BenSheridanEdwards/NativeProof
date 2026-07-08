@@ -35,8 +35,9 @@ function fakeDriver(source: string): {
 
 test("createNative exposes direct text interactions and locators", async () => {
   const { driver, taps, cleared, typed } = fakeDriver(
-    '<node text="Email" bounds="[0,0][100,40]" enabled="true" />' +
-      '<node text="Log in" bounds="[10,50][110,90]" clickable="true" enabled="true" />',
+    '<node class="android.widget.TextView" text="Email" bounds="[0,0][100,40]" enabled="true" />' +
+      '<node class="android.widget.EditText" text="" bounds="[0,42][200,82]" enabled="true" />' +
+      '<node text="Log in" bounds="[10,92][110,132]" clickable="true" enabled="true" />',
   );
   const visited: string[] = [];
   const native = createNative({
@@ -54,10 +55,38 @@ test("createNative exposes direct text interactions and locators", async () => {
   assert.deepEqual(cleared, ["focused"]);
   assert.deepEqual(typed, ["test@example.com"]);
   assert.deepEqual(taps, [
-    [50, 20],
-    [60, 70],
+    [100, 62],
+    [60, 112],
   ]);
   assert.equal(await native.getByText("Log in").isVisible(), true);
+});
+
+test("native.fill targets the textfield nearest a visible label", async () => {
+  const setValues: Array<{ node: string; text: string }> = [];
+  const native = createNative({
+    driver: () => ({
+      platform: "android",
+      source: async () =>
+        '<node class="android.widget.TextView" text="Email" bounds="[0,0][100,40]" enabled="true" />' +
+        '<node class="android.widget.EditText" text="" bounds="[0,42][200,82]" enabled="true" />',
+      pause: async () => {},
+      tapAt: async () => {
+        throw new Error("native.fill should use setValueOnNode for the associated textfield");
+      },
+      setValueOnNode: async (node, text) => {
+        setValues.push({ node, text });
+        return /android\.widget\.EditText/.test(node);
+      },
+    }),
+  });
+
+  await native.fill("Email", "test@example.com");
+
+  assert.equal(setValues.length, 1);
+  const [setValue] = setValues;
+  assert.ok(setValue);
+  assert.match(setValue.node, /android\.widget\.EditText/);
+  assert.equal(setValue.text, "test@example.com");
 });
 
 test("createNative keeps app routing explicit in nativeproof.config.ts", async () => {

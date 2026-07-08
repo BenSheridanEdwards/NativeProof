@@ -260,12 +260,16 @@ test("buildWdioConfig adds a built-in evidence-on-failure afterTest hook", async
   await afterTest({ title: "t", parent: "p" }, {}, { passed: false });
 });
 
-test("failureEvidenceName builds a filesystem-safe, capped prefix", () => {
-  assert.equal(
+test("failureEvidenceName builds a filesystem-safe, capped and unique prefix", () => {
+  assert.match(
     failureEvidenceName({ parent: "Room · onboarding", title: "Accept is inert!" }),
-    "failure-Room_onboarding-Accept_is_inert_",
+    /^failure-Room_onboarding-Accept_is_inert_-[a-f0-9]{8}$/,
   );
-  assert.ok(failureEvidenceName({ parent: "x".repeat(200), title: "y" }).length <= 120);
+  const first = failureEvidenceName({ parent: "x".repeat(200), title: "one" });
+  const second = failureEvidenceName({ parent: "x".repeat(200), title: "two" });
+  assert.ok(first.length <= 120);
+  assert.ok(second.length <= 120);
+  assert.notEqual(first, second);
 });
 
 test("findConfigFile locates nativeproof.config.* via the injected exists check", () => {

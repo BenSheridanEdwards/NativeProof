@@ -466,7 +466,11 @@ export class Locator {
 
   /** Wait until the selector is visible; throws on timeout. */
   async waitFor(options: WaitOptions = {}): Promise<void> {
-    const opts: WaitOptions = { ...this.options, ...options, sleep: (ms) => this.driver.pause(ms) };
+    const opts: WaitOptions = {
+      ...this.options,
+      ...options,
+      sleep: options.sleep ?? this.options.sleep ?? ((ms) => this.driver.pause(ms)),
+    };
     const visible = await waitUntil(
       () => this.isVisible(),
       (v) => v,
@@ -532,7 +536,11 @@ export class Locator {
   }
 
   private async resolveTouchTarget(options: TapOptions = {}): Promise<{ node: string; bounds: Bounds }> {
-    const opts: WaitOptions = { ...this.options, ...options, sleep: (ms) => this.driver.pause(ms) };
+    const opts: WaitOptions = {
+      ...this.options,
+      ...options,
+      sleep: options.sleep ?? this.options.sleep ?? ((ms) => this.driver.pause(ms)),
+    };
     const match = await waitUntil(
       async () => {
         // Carry the snapshot the node was matched in, so the clickable ancestor is
@@ -654,7 +662,11 @@ export class Locator {
   private async setChecked(desired: boolean, options: WaitOptions): Promise<void> {
     if ((await this.isChecked()) === desired) return;
     await this.tap(options);
-    const opts: WaitOptions = { ...this.options, ...options, sleep: (ms) => this.driver.pause(ms) };
+    const opts: WaitOptions = {
+      ...this.options,
+      ...options,
+      sleep: options.sleep ?? this.options.sleep ?? ((ms) => this.driver.pause(ms)),
+    };
     const settled = await waitUntil(
       () => this.isChecked(),
       (value) => value === desired,

@@ -338,6 +338,43 @@ test("main reports a local Appium process that exits before becoming reachable",
   }
 });
 
+test("main does not start local Appium for an unreachable remote host", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-remote-appium-"));
+  const previousCwd = process.cwd();
+  const previousFetch = globalThis.fetch;
+  try {
+    const binDir = path.join(dir, "node_modules", ".bin");
+    const marker = path.join(dir, "appium-spawned");
+    mkdirSync(binDir, { recursive: true });
+    const appiumBin = path.join(binDir, "appium");
+    writeFileSync(appiumBin, `#!/bin/sh\ntouch "${marker}"\nexit 48\n`);
+    chmodSync(appiumBin, 0o755);
+    writeFileSync(
+      path.join(dir, "nativeproof.config.ts"),
+      [
+        "export default {",
+        '  appium: { autoInstallDrivers: false, host: "10.0.0.5", port: 4723 },',
+        '  projects: [{ name: "android", platform: "android" }],',
+        "};",
+      ].join("\n"),
+    );
+    globalThis.fetch = (async () => {
+      throw new Error("offline");
+    }) as typeof fetch;
+
+    process.chdir(dir);
+    await assert.rejects(
+      () => main(["--android"]),
+      /configured Appium at http:\/\/10\.0\.0\.5:4723\/ is not reachable\. Start it or fix appium\.host/,
+    );
+    assert.equal(existsSync(marker), false);
+  } finally {
+    globalThis.fetch = previousFetch;
+    process.chdir(previousCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("parseArgs surfaces the init command, and help lists it", () => {
   const args = parseArgs(["init", "--ios"]);
   assert.equal(args.command, "init");

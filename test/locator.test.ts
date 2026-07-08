@@ -190,6 +190,24 @@ test("by.role matches elements by class (Android), with checked state and count"
   assert.equal(await new Locator(driver, by.role("button")).isVisible(), false); // none present
 });
 
+test('by.role("button") does not match Android RadioButton/ToggleButton/ImageButton', async () => {
+  const driver = new FakeDriver(
+    '<node class="android.widget.RadioButton" text="Radio" bounds="[0,0][100,40]" />' +
+      '<node class="android.widget.ToggleButton" text="Toggle" bounds="[0,50][100,90]" />' +
+      '<node class="android.widget.ImageButton" content-desc="Icon" bounds="[0,100][100,140]" />' +
+      '<node class="android.widget.Button" text="Submit" bounds="[0,150][100,190]" />' +
+      '<node class="androidx.appcompat.widget.AppCompatButton" text="Compat" bounds="[0,200][100,240]" />' +
+      '<node class="com.google.android.material.button.MaterialButton" text="Material" bounds="[0,250][100,290]" />',
+  );
+
+  const buttons = new Locator(driver, by.role("button"));
+
+  assert.equal(await buttons.count(), 3);
+  assert.equal(await buttons.nth(0).textContent(), "Submit");
+  assert.equal(await buttons.nth(1).textContent(), "Compat");
+  assert.equal(await buttons.nth(2).textContent(), "Material");
+});
+
 test("by.role with name matches the role and accessible name together", async () => {
   let checked = false;
   const driver: Driver = {
@@ -246,6 +264,19 @@ test("by.role with name tolerates tiny iOS label geometry drift", async () => {
 
   assert.equal(await SsoProviderSearchField.isVisible(), true);
   assert.equal((await SsoProviderSearchField.bounds())?.centerY, 718);
+});
+
+test('by.role("textfield") includes iOS secure text fields', async () => {
+  const driver = new FakeDriver(
+    '<XCUIElementTypeTextField type="XCUIElementTypeTextField" label="Email" x="0" y="0" width="200" height="40" />' +
+      '<XCUIElementTypeSecureTextField type="XCUIElementTypeSecureTextField" label="Password" x="0" y="50" width="200" height="40" />',
+  );
+  driver.platform = "ios";
+
+  const fields = new Locator(driver, by.role("textfield"));
+
+  assert.equal(await fields.count(), 2);
+  assert.equal(await fields.nth(1).textContent(), "Password");
 });
 
 test("by.role with name does not borrow unrelated visible text outside the control bounds", async () => {

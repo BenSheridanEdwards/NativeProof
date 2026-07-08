@@ -257,16 +257,18 @@ function nodeContainsNamedDescendantOrSibling(node: string, namedNodes: readonly
 
 /**
  * Element classes/types that back a semantic role, per platform — Android exposes a widget
- * `class`, iOS an XCUITest `type`. Matched as a substring, so framework variants
- * (`SwitchCompat`, `MaterialButton`, Compose's `android.widget.CheckBox`) all resolve.
+ * `class`, iOS an XCUITest `type`. Most Android roles match by substring for framework
+ * variants; `button` matches the final class segment so RadioButton/ToggleButton/ImageButton
+ * do not shift plain button locators.
  */
 const ROLE_PATTERNS: Record<string, { android: readonly string[]; ios: readonly string[] }> = {
   checkbox: { android: ["CheckBox"], ios: ["XCUIElementTypeSwitch"] },
   switch: { android: ["Switch"], ios: ["XCUIElementTypeSwitch"] },
   button: { android: ["Button"], ios: ["XCUIElementTypeButton"] },
-  textfield: { android: ["EditText"], ios: ["XCUIElementTypeTextField"] },
+  textfield: { android: ["EditText"], ios: ["XCUIElementTypeTextField", "XCUIElementTypeSecureTextField"] },
   image: { android: ["ImageView"], ios: ["XCUIElementTypeImage"] },
 };
+const ANDROID_BUTTON_CLASS = /(?:^|\.)(?!(?:RadioButton|ToggleButton|ImageButton)$)[^.]*Button$/;
 
 /** Roles `by.role` / `getByRole(role)` can match without a name. */
 export const KNOWN_ROLES = Object.keys(ROLE_PATTERNS);
@@ -294,7 +296,13 @@ export function nodesForRole(
     .map((m) => m[0])
     .filter((node) => {
       const roleAttributeMatches = rolePatterns.some((pattern) =>
-        attributeValueMatches(node, attribute, new RegExp(escapeRegExp(pattern))),
+        attributeValueMatches(
+          node,
+          attribute,
+          platform === "android" && normalizedRole === "button"
+            ? ANDROID_BUTTON_CLASS
+            : new RegExp(escapeRegExp(pattern)),
+        ),
       );
       if (roleAttributeMatches) return true;
 

@@ -21,6 +21,7 @@ import {
   helpText,
   loadNativeProofConfig,
   localBin,
+  localBinNeedsShell,
   main,
   type NativeBuildCommandRunner,
   onboard,
@@ -160,6 +161,24 @@ test("localBin falls back to NativeProof's dependency bins when the consumer has
     }
   } finally {
     process.chdir(previousCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("localBin resolves Windows npm shims and shell execution", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-local-bin-"));
+  try {
+    const binDir = path.join(dir, "node_modules", ".bin");
+    mkdirSync(binDir, { recursive: true });
+    const appiumShim = path.join(binDir, "appium.cmd");
+    writeFileSync(appiumShim, "");
+    writeFileSync(path.join(binDir, "wdio"), "");
+
+    assert.equal(localBin("appium", "win32", dir), appiumShim);
+    assert.equal(localBin("wdio", "win32", dir), "wdio");
+    assert.equal(localBinNeedsShell("win32"), true);
+    assert.equal(localBinNeedsShell("darwin"), false);
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });

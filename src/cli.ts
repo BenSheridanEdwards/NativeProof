@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, type SpawnOptions, spawn, spawnSync } from "node:child_process";
 import {
   cpSync,
   type Dirent,
@@ -976,11 +976,29 @@ export function onboardCommand(
   return 0;
 }
 
-export function localBin(name: string): string {
-  const bin = path.join(process.cwd(), "node_modules", ".bin", name);
-  if (existsSync(bin)) return bin;
+export function localBin(
+  name: string,
+  platform: NodeJS.Platform = process.platform,
+  cwd: string = process.cwd(),
+): string {
+  const bin = path.join(cwd, "node_modules", ".bin", name);
   const ownBin = path.join(packageRoot, "node_modules", ".bin", name);
+  if (platform === "win32") {
+    for (const candidate of [`${bin}.cmd`, `${bin}.exe`, `${ownBin}.cmd`, `${ownBin}.exe`]) {
+      if (existsSync(candidate)) return candidate;
+    }
+    return name;
+  }
+  if (existsSync(bin)) return bin;
   return existsSync(ownBin) ? ownBin : name;
+}
+
+export function localBinNeedsShell(platform: NodeJS.Platform = process.platform): boolean {
+  return platform === "win32";
+}
+
+function spawnLocalBin(name: string, args: readonly string[], options: SpawnOptions): ChildProcess {
+  return spawn(localBin(name), args, { ...options, shell: options.shell ?? localBinNeedsShell() });
 }
 
 type AppiumEndpoint = Required<Pick<AppiumOptions, "host" | "port" | "path">>;
@@ -1049,7 +1067,7 @@ export type AppiumCommandRunner = (
 
 const runAppiumCommand: AppiumCommandRunner = (args, options = {}) =>
   new Promise((resolve, reject) => {
-    const child = spawn(localBin("appium"), args, {
+    const child = spawnLocalBin("appium", args, {
       stdio: options.stdio === "inherit" ? "inherit" : ["ignore", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];
@@ -1106,8 +1124,8 @@ async function ensureAppium(
   }
   await ensureAppiumDriver(platform, appium);
   console.log("nativeproof: starting Appium …");
-  const child = spawn(
-    localBin("appium"),
+  const child = spawnLocalBin(
+    "appium",
     [
       "--address",
       endpoint.host,
@@ -1316,7 +1334,7 @@ async function runTests(args: CliArgs): Promise<number> {
   const project = resolveProject(userConfig, runSelection(args));
   const appium = await ensureAppium(userConfig.appium, args.startAppium, project.platform);
   try {
-    const runner = spawn(localBin("wdio"), ["run", wdioConfig], {
+    const runner = spawnLocalBin("wdio", ["run", wdioConfig], {
       stdio: "inherit",
       env: { ...runnerEnv(args), ...extraEnv },
     });

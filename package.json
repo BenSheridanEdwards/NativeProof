@@ -29,8 +29,8 @@
   },
   "bin": {
     "nativeproof": "dist/cli.js",
-    "nativeproof-init": "dist/cli.js",
-    "nativeproof-onboard": "dist/cli.js"
+    "nativeproof-init": "dist/nativeproof-init.js",
+    "nativeproof-onboard": "dist/nativeproof-onboard.js"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

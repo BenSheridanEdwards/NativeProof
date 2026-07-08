@@ -237,9 +237,11 @@ function nodeIsChecked(node: string): boolean {
 
 /**
  * Poll `produce` until `done(value)` holds or the timeout elapses, returning the
- * last value either way (callers decide what an unmet condition means). The interval
- * is awaited via `options.sleep` — a real timer by default, the driver's `pause` when
- * a locator drives it — so a fake clock can control test timing. No device required.
+ * last value either way (callers decide what an unmet condition means). Transient
+ * producer errors are retried until timeout; if no attempt produces a value, the last
+ * error is rethrown. The interval is awaited via `options.sleep` — a real timer by
+ * default, the driver's `pause` when a locator drives it — so a fake clock can control
+ * test timing. No device required.
  */
 export async function waitUntil<T>(
   produce: () => Promise<T>,
@@ -250,12 +252,25 @@ export async function waitUntil<T>(
   const interval = options.interval ?? DEFAULTS.interval;
   const sleep = options.sleep ?? realSleep;
   const deadline = Date.now() + timeout;
-  let value = await produce();
-  while (!done(value) && Date.now() < deadline) {
+  let value: T | undefined;
+  let hasValue = false;
+  let lastError: unknown;
+
+  while (true) {
+    try {
+      value = await produce();
+      hasValue = true;
+      if (done(value)) return value;
+    } catch (error) {
+      lastError = error;
+    }
+
+    if (Date.now() >= deadline) break;
     await sleep(interval);
-    value = await produce();
   }
-  return value;
+
+  if (hasValue) return value as T;
+  throw lastError;
 }
 
 export class Locator {

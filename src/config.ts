@@ -265,6 +265,11 @@ export function buildWdioConfig(
   cwd: string = process.cwd(),
 ): Record<string, unknown> {
   const project = resolveProject(config, env);
+  const capabilities = projectCapabilities(config, project);
+  const androidSerial = capabilities["appium:udid"];
+  if (project.platform === "android" && typeof androidSerial === "string" && androidSerial) {
+    process.env.ANDROID_SERIAL = androidSerial;
+  }
   setArtifactDir(config.artifacts?.dir);
   const wdio: Record<string, unknown> = {
     runner: "local",
@@ -273,7 +278,7 @@ export function buildWdioConfig(
     path: config.appium?.path ?? "/",
     specs: resolveSpecs(config, project, env, cwd),
     maxInstances: 1,
-    capabilities: [projectCapabilities(config, project)],
+    capabilities: [capabilities],
     framework: "mocha",
     reporters: ["spec"],
     mochaOpts: { ui: "bdd", timeout: config.mochaTimeout ?? 240_000 },

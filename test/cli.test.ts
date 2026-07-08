@@ -476,6 +476,10 @@ test("scaffoldFiles are a platform-specific config, package script and readable 
   assert.doesNotMatch(spec.contents, /test\.describe\(/);
   assert.match(pkg.contents, /"type": "module"/);
   assert.match(pkg.contents, /"test:e2e": "nativeproof"/);
+  assert.equal(
+    (JSON.parse(pkg.contents) as { devDependencies?: Record<string, string> }).devDependencies?.nativeproof,
+    `^${version()}`,
+  );
   assert.match(tsconfig.contents, /"moduleResolution": "Bundler"/);
   assert.match(tsconfig.contents, /"@wdio\/globals\/types"/);
 });
@@ -526,7 +530,7 @@ test("scaffold updates an existing package.json without overwriting its scripts 
   assert.equal(pkg.type, undefined);
   assert.equal(pkg.scripts?.test, "vitest");
   assert.equal(pkg.scripts?.["test:e2e"], "nativeproof");
-  assert.equal(pkg.devDependencies?.nativeproof, "latest");
+  assert.equal(pkg.devDependencies?.nativeproof, `^${version()}`);
 });
 
 test("detectOnboardTarget accepts direct Android APK and iOS app paths", () => {
@@ -845,7 +849,7 @@ test("onboard updates an existing nativeproof config and package.json without ch
     assert.equal(updatedPackage.type, undefined);
     assert.equal(updatedPackage.scripts?.test, "node test.js");
     assert.equal(updatedPackage.scripts?.["test:e2e"], "nativeproof");
-    assert.equal(updatedPackage.devDependencies?.nativeproof, "latest");
+    assert.equal(updatedPackage.devDependencies?.nativeproof, `^${version()}`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

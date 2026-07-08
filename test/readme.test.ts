@@ -26,3 +26,15 @@ test("mocking docs do not promote top-level fixed-port mock startup in config", 
   assert.doesNotMatch(readme, /export\s+const\s+mock\s*=\s*await\s+startMockServer\(\{\s*port:/);
   assert.match(readme, /do not start a fixed-port mock server at\s+config top level/);
 });
+
+test("mocking docs explain traffic assertion and websocket reject semantics", () => {
+  const mocking = section("Mocking And Backend Setup");
+
+  assert.match(mocking, /expect\(mock\)\.not\.toHaveSent/);
+  assert.match(mocking, /append-only log/);
+  assert.match(mocking, /only after the action that could send the frame has finished/);
+  assert.match(mocking, /HTTP status/);
+  assert.match(mocking, /WebSocket close code/);
+  assert.match(mocking, /3000.*4999/);
+  assert.match(mocking, /close as `4000`/);
+});

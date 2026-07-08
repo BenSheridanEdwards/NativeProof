@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Driver, Platform } from "../src/driver.js";
 import { expect } from "../src/expect.js";
-import { by, Locator } from "../src/locator.js";
+import { by, Locator, waitUntil } from "../src/locator.js";
 
 /**
  * Locator + expect coverage driven by an in-memory fake device — no emulator, no
@@ -669,6 +669,44 @@ test("locator waits preserve a caller-supplied sleep", async () => {
     },
   });
   assert.deepEqual(checkSleeps, [4]);
+});
+
+test("waitUntil retries transient producer errors", async () => {
+  let attempts = 0;
+  const sleeps: number[] = [];
+
+  const value = await waitUntil(
+    async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("transient source failure");
+      return attempts;
+    },
+    (candidate) => candidate === 2,
+    {
+      timeout: 50,
+      interval: 5,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+    },
+  );
+
+  assert.equal(value, 2);
+  assert.deepEqual(sleeps, [5]);
+});
+
+test("waitUntil rethrows when every producer attempt fails", async () => {
+  await assert.rejects(
+    () =>
+      waitUntil(
+        async () => {
+          throw new Error("still failing");
+        },
+        () => true,
+        { timeout: 0 },
+      ),
+    /still failing/,
+  );
 });
 
 test("tap timeout carries the did-you-mean hint", async () => {

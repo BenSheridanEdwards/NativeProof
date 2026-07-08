@@ -1,5 +1,5 @@
-import { createServer, type Server } from "node:http";
-import { type WebSocket, WebSocketServer } from "ws";
+import { createServer, type IncomingMessage, type Server } from "node:http";
+import { WebSocket, WebSocketServer } from "ws";
 import type { FrameDirection, MockBackend, MockFrame, MockRoute } from "./mock.js";
 
 /**
@@ -47,6 +47,20 @@ function frameType(frame: Record<string, unknown>, fallback: string): string {
   return typeof frame.type === "string" ? frame.type : fallback;
 }
 
+async function requestBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  let raw = "";
+  for await (const chunk of req) raw += chunk.toString();
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : { body: parsed };
+  } catch {
+    return { body: raw };
+  }
+}
+
 /** Valid WebSocket application close codes are 3000-4999; anything else falls back to 4000. */
 function wsCloseCode(code: number): number {
   return code >= 3000 && code <= 4999 ? code : 4000;
@@ -87,9 +101,9 @@ export async function startMockServer(options: MockServerOptions = {}): Promise<
     }
   };
 
-  const http: Server = createServer((req, res) => {
+  const http: Server = createServer(async (req, res) => {
     const path = pathOf(req.url);
-    record(path, "sent", "request", { method: req.method ?? "GET" });
+    record(path, "sent", "request", { ...(await requestBody(req)), method: req.method ?? "GET" });
     const action = routes.get(path);
     if (action?.kind === "reject") {
       res.statusCode = action.code;
@@ -183,12 +197,15 @@ export async function startMockServer(options: MockServerOptions = {}): Promise<
       };
     },
     send(path: string, frame: Record<string, unknown>): void {
-      for (const entry of sockets) {
-        if (entry.path === path) {
-          record(path, "received", frameType(frame, "message"), frame);
-          entry.socket.send(JSON.stringify(frame));
-        }
+      const openSockets = [...sockets].filter(
+        (entry) => entry.path === path && entry.socket.readyState === WebSocket.OPEN,
+      );
+      if (openSockets.length === 0) {
+        throw new Error(`mock.send(${JSON.stringify(path)}): no open WebSocket for this path`);
       }
+      const payload = JSON.stringify(frame);
+      for (const entry of openSockets) entry.socket.send(payload);
+      record(path, "received", frameType(frame, "message"), frame);
     },
     async stop(): Promise<void> {
       for (const entry of sockets) entry.socket.terminate();

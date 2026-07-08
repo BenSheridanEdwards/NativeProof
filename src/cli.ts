@@ -12,6 +12,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -23,6 +24,10 @@ import {
   resolveProject,
 } from "./config.js";
 import { selectorSuggestions } from "./inspect.js";
+
+const packageRoot = fileURLToPath(new URL("..", import.meta.url));
+const packageRequire = createRequire(import.meta.url);
+const tsxLoader = pathToFileURL(packageRequire.resolve("tsx")).href;
 
 /**
  * The `nativeproof` CLI — the single-command entry, in the spirit of `playwright test`.
@@ -1009,13 +1014,15 @@ export function localBin(
   cwd: string = process.cwd(),
 ): string {
   const bin = path.join(cwd, "node_modules", ".bin", name);
+  const ownBin = path.join(packageRoot, "node_modules", ".bin", name);
   if (platform === "win32") {
-    for (const candidate of [`${bin}.cmd`, `${bin}.exe`]) {
+    for (const candidate of [`${bin}.cmd`, `${bin}.exe`, `${ownBin}.cmd`, `${ownBin}.exe`]) {
       if (existsSync(candidate)) return candidate;
     }
     return name;
   }
-  return existsSync(bin) ? bin : name;
+  if (existsSync(bin)) return bin;
+  return existsSync(ownBin) ? ownBin : name;
 }
 
 export function localBinNeedsShell(platform: NodeJS.Platform = process.platform): boolean {
@@ -1264,7 +1271,7 @@ export function resolveRunner(_args: CliArgs, cwd: string = process.cwd()): Reso
       configPath: nativeproofConfig,
       extraEnv: {
         NATIVEPROOF_CONFIG: nativeproofConfig,
-        NODE_OPTIONS: `--import tsx ${process.env.NODE_OPTIONS ?? ""}`.trim(),
+        NODE_OPTIONS: [`--import=${tsxLoader}`, process.env.NODE_OPTIONS].filter(Boolean).join(" "),
       },
     };
   }

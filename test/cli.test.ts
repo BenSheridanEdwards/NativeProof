@@ -126,6 +126,63 @@ test("resolveRunner ignores raw WebdriverIO configs and requires nativeproof.con
   }
 });
 
+test("resolveRunner imports tsx from NativeProof's own dependencies", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-cli-tsx-"));
+  const previousNodeOptions = process.env.NODE_OPTIONS;
+  try {
+    writeFileSync(path.join(dir, "nativeproof.config.ts"), "export default { projects: [] };\n");
+    process.env.NODE_OPTIONS = "--trace-warnings";
+
+    const runner = resolveRunner(parseArgs([]), dir);
+    assert.match(
+      runner.extraEnv.NODE_OPTIONS ?? "",
+      /--import=file:\/\/.*\/node_modules\/tsx\/dist\/loader\.mjs/,
+    );
+    assert.match(runner.extraEnv.NODE_OPTIONS ?? "", /--trace-warnings/);
+    assert.doesNotMatch(runner.extraEnv.NODE_OPTIONS ?? "", /--import tsx(?:\s|$)/);
+  } finally {
+    if (previousNodeOptions === undefined) delete process.env.NODE_OPTIONS;
+    else process.env.NODE_OPTIONS = previousNodeOptions;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("localBin falls back to NativeProof's dependency bins when the consumer has none", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-cli-bin-"));
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(dir);
+    for (const name of ["appium", "wdio"]) {
+      const bin = localBin(name);
+      assert.notEqual(bin, name);
+      assert.ok(path.isAbsolute(bin));
+      assert.ok(existsSync(bin));
+      assert.match(bin, new RegExp(`node_modules[/\\\\]\\.bin[/\\\\]${name}$`));
+    }
+  } finally {
+    process.chdir(previousCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("localBin resolves Windows npm shims and shell execution", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-local-bin-"));
+  try {
+    const binDir = path.join(dir, "node_modules", ".bin");
+    mkdirSync(binDir, { recursive: true });
+    const appiumShim = path.join(binDir, "appium.cmd");
+    writeFileSync(appiumShim, "");
+    writeFileSync(path.join(binDir, "wdio"), "");
+
+    assert.equal(localBin("appium", "win32", dir), appiumShim);
+    assert.equal(localBin("wdio", "win32", dir), "wdio");
+    assert.equal(localBinNeedsShell("win32"), true);
+    assert.equal(localBinNeedsShell("darwin"), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("loadNativeProofConfig imports a TypeScript config", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-cli-"));
   try {

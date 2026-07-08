@@ -341,13 +341,18 @@ export function boundsForText(source: string, text: string): Bounds | null {
 }
 
 /**
- * The smallest element flagged `clickable="true"` that fully contains the given
- * bounds, or the bounds themselves if none does — turns a non-clickable Compose node
- * into a reliable tap target (e.g. the "Members (3)" list rows).
+ * The smallest element that looks tappable and fully contains the given bounds.
+ * Android marks this directly with `clickable="true"`; iOS exposes tappable controls
+ * through XCUITest element types instead.
  */
 export function smallestClickableAncestorNode(source: string, nodeBounds: Bounds): string | null {
-  const clickable = [...source.matchAll(new RegExp(`<[^>]*${attrPattern("clickable")}true"[^>]*>`, "g"))]
+  const androidClickable = new RegExp(`${attrPattern("clickable")}true"`);
+  const iosClickable = new RegExp(
+    `${attrPattern("type")}XCUIElementType(?:Button|Switch|TextField|SecureTextField|Cell)"`,
+  );
+  const clickable = [...source.matchAll(/<[^>]*>/g)]
     .map((m) => ({ node: m[0], bounds: parseNodeBounds(m[0]) }))
+    .filter(({ node }) => androidClickable.test(node) || iosClickable.test(node))
     .filter((entry): entry is { node: string; bounds: Bounds } => entry.bounds !== null)
     .filter(
       ({ bounds }) =>

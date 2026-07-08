@@ -8,7 +8,6 @@ import {
   nodesForAttribute,
   nodesForRole,
   parseNodeBounds,
-  smallestClickableAncestorBounds,
   smallestClickableAncestorNode,
   sourceExtent,
 } from "./source.js";
@@ -545,11 +544,9 @@ export class Locator {
         `${describeSelector(this.selector)} was not found to tap within ${opts.timeout ?? DEFAULTS.timeout}ms${await this.suggestionsHint()}`,
       );
     }
-    const bounds = match.bounds;
-    return {
-      node: match.node,
-      bounds: options.clickableAncestor ? smallestClickableAncestorBounds(match.source, bounds) : bounds,
-    };
+    if (!options.clickableAncestor) return { node: match.node, bounds: match.bounds };
+    const node = smallestClickableAncestorNode(match.source, match.bounds) ?? match.node;
+    return { node, bounds: parseNodeBounds(node) ?? match.bounds };
   }
 
   /**

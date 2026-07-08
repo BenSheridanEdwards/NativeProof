@@ -251,12 +251,16 @@ function packageTemplate(): string {
         "test:e2e": "nativeproof",
       },
       devDependencies: {
-        nativeproof: "latest",
+        nativeproof: nativeproofVersionRange(),
       },
     },
     null,
     2,
   )}\n`;
+}
+
+function nativeproofVersionRange(): string {
+  return `^${version()}`;
 }
 
 function tsconfigTemplate(): string {
@@ -317,7 +321,7 @@ function ensurePackageJson(raw: string): { contents: string; changed: boolean } 
     changed = true;
   }
   if (!alreadyDependsOnNativeProof) {
-    devDependencies.nativeproof = "latest";
+    devDependencies.nativeproof = nativeproofVersionRange();
     changed = true;
   }
 

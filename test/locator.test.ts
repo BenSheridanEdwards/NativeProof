@@ -409,6 +409,27 @@ test("tap({ clickableAncestor: true }) taps the clickable parent of a non-clicka
   ]);
 });
 
+test("tap({ clickableAncestor: true }) clicks the iOS control ancestor node", async () => {
+  const source =
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" name="members" label="" x="0" y="0" width="300" height="80">' +
+    '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" label="Members (3)" x="20" y="20" width="100" height="20" /></XCUIElementTypeButton>';
+  const driver = new FakeDriver(source);
+  driver.platform = "ios";
+  const clicked: string[] = [];
+  (driver as unknown as Driver & { clickNode: NonNullable<Driver["clickNode"]> }).clickNode = async (
+    node,
+  ) => {
+    clicked.push(node);
+    return true;
+  };
+
+  await new Locator(driver, by.text("Members (3)")).tap({ clickableAncestor: true });
+
+  assert.equal(clicked.length, 1);
+  assert.match(clicked[0] ?? "", /XCUIElementTypeButton/);
+  assert.deepEqual(driver.taps, []);
+});
+
 test("Locator.press presses and releases the locator centre through the driver", async () => {
   const driver = new FakeDriver('<node text="Hold mic" bounds="[10,20][110,120]" />');
   const loc = new Locator(driver, by.text("Hold mic"));

@@ -19,18 +19,25 @@ test("android sources suggest roles first, then visible text, then test ids", ()
   ]);
 });
 
-test("ios sources read values, skip placeholders, and drop names that mirror labels", () => {
+test("inspect skips transient input values but keeps labels and test ids", () => {
   const source =
     '<XCUIElementTypeButton type="XCUIElementTypeButton" name="Log in" label="Log in" x="0" y="0" width="100" height="40" />' +
     '<XCUIElementTypeTextField type="XCUIElementTypeTextField" name="session-field" label="" placeholderValue="Session ID" value="abc123" x="0" y="50" width="100" height="40" />';
   const suggestions = selectorSuggestions(source, "ios");
   assert.deepEqual(suggestions, [
     'native.getByRole("button", { name: "Log in" })',
-    'native.getByRole("textfield", { name: "abc123" })',
+    'native.getByRole("textfield")',
     'native.getByText("Log in")',
-    'native.getByText("abc123")',
     'native.getByTestId("session-field")',
   ]);
+
+  assert.deepEqual(
+    selectorSuggestions(
+      '<node class="android.widget.EditText" text="me@example.com" resource-id="com.app:id/email" bounds="[0,0][100,40]" />',
+      "android",
+    ),
+    ['native.getByRole("textfield")', 'native.getByTestId("com.app:id/email")'],
+  );
 });
 
 test("suggestions skip empty and over-long values and deduplicate", () => {

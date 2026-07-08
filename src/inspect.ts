@@ -16,6 +16,29 @@ function attributeValues(node: string, attribute: string): string[] {
     .filter((value) => value !== "" && value.length <= MAX_VALUE_LENGTH);
 }
 
+function isInputNode(node: string, platform: Platform): boolean {
+  return platform === "ios"
+    ? /\btype="XCUIElementType(?:TextField|SecureTextField|SearchField|TextView)"/.test(node)
+    : /(?:EditText|AutoCompleteTextView|SearchView)/.test(node);
+}
+
+function accessibleNameValues(node: string, platform: Platform): string[] {
+  const labelAttribute = platform === "ios" ? "label" : "content-desc";
+  const stateAttribute = platform === "ios" ? "value" : "text";
+  return [
+    ...attributeValues(node, labelAttribute),
+    ...(isInputNode(node, platform) ? [] : attributeValues(node, stateAttribute)),
+  ];
+}
+
+function textValuesForNode(node: string, platform: Platform): string[] {
+  const stateAttribute = platform === "ios" ? "value" : "text";
+  const attributes = platform === "ios" ? ["label", "value"] : ["text", "content-desc"];
+  return attributes.flatMap((attribute) =>
+    isInputNode(node, platform) && attribute === stateAttribute ? [] : attributeValues(node, attribute),
+  );
+}
+
 /**
  * Candidate `native.*` locators for everything the current screen exposes, in the order a
  * reader should prefer them: semantic roles (with accessible names), then visible text —
@@ -26,10 +49,7 @@ export function selectorSuggestions(source: string, platform: Platform): string[
 
   for (const role of KNOWN_ROLES) {
     for (const node of nodesForRole(source, role, platform)) {
-      const [name] = [
-        ...attributeValues(node, platform === "ios" ? "label" : "content-desc"),
-        ...attributeValues(node, platform === "ios" ? "value" : "text"),
-      ];
+      const [name] = accessibleNameValues(node, platform);
       suggestions.add(
         name
           ? `native.getByRole(${JSON.stringify(role)}, { name: ${JSON.stringify(name)} })`
@@ -39,16 +59,13 @@ export function selectorSuggestions(source: string, platform: Platform): string[
   }
 
   const nodes = [...source.matchAll(/<[^>]*>/g)].map((match) => match[0]);
-  const textAttributes = platform === "ios" ? ["label", "value"] : ["text", "content-desc"];
   for (const node of nodes) {
-    for (const attribute of textAttributes) {
-      for (const text of attributeValues(node, attribute)) {
-        suggestions.add(`native.getByText(${JSON.stringify(text)})`);
-      }
+    for (const text of textValuesForNode(node, platform)) {
+      suggestions.add(`native.getByText(${JSON.stringify(text)})`);
     }
   }
   for (const node of nodes) {
-    const labels = new Set(textAttributes.flatMap((attribute) => attributeValues(node, attribute)));
+    const labels = new Set(textValuesForNode(node, platform));
     for (const id of attributeValues(node, platform === "ios" ? "name" : "resource-id")) {
       // An iOS `name` that just mirrors the label adds nothing over getByText.
       if (platform === "ios" && labels.has(id)) continue;

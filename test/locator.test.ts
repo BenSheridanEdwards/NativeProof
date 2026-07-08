@@ -332,6 +332,15 @@ test("iOS checkbox-like buttons can be checked through semantic checkbox locator
   await expect(AcceptAgreementCheckbox).toBeChecked();
 });
 
+test("unlabeled iOS icon buttons do not resolve as checkboxes", async () => {
+  const driver = new FakeDriver(
+    '<XCUIElementTypeButton type="XCUIElementTypeButton" label="" x="0" y="0" width="44" height="44" />',
+  );
+  driver.platform = "ios";
+
+  assert.equal(await new Locator(driver, by.role("checkbox")).count(), 0);
+});
+
 test("iOS unlabeled square agreement buttons resolve as checkboxes near visible copy", async () => {
   let checked = false;
   const taps: Array<{ x: number; y: number }> = [];
@@ -340,7 +349,7 @@ test("iOS unlabeled square agreement buttons resolve as checkboxes near visible 
     async source() {
       const checkbox = checked
         ? '<XCUIElementTypeButton type="XCUIElementTypeButton" value="1" label="Selected" enabled="true" visible="true" x="43" y="704" width="24" height="25" traits="Selected, Button" />'
-        : '<XCUIElementTypeButton type="XCUIElementTypeButton" enabled="true" visible="true" x="43" y="704" width="24" height="25" />';
+        : '<XCUIElementTypeButton type="XCUIElementTypeButton" value="0" enabled="true" visible="true" x="43" y="704" width="24" height="25" />';
       return (
         checkbox +
         '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" label="I have read and agreed to the" x="78" y="705" width="156" height="15" />' +
@@ -364,6 +373,19 @@ test("iOS unlabeled square agreement buttons resolve as checkboxes near visible 
   await AcceptAgreementCheckbox.check();
   await expect(AcceptAgreementCheckbox).toBeChecked();
   assert.deepEqual(taps, [{ x: 55, y: 717 }]);
+});
+
+test("checked state does not come from label text", async () => {
+  const driver = new FakeDriver(
+    '<XCUIElementTypeSwitch type="XCUIElementTypeSwitch" label="Checked baggage included" x="0" y="0" width="80" height="40" />',
+  );
+  driver.platform = "ios";
+
+  const BaggageSwitch = new Locator(driver, by.role("switch", { name: /baggage/i }));
+
+  assert.equal(await BaggageSwitch.isChecked(), false);
+  assert.equal(await new Locator(driver, by.role("switch", { checked: false })).count(), 1);
+  assert.equal(await new Locator(driver, by.role("switch", { checked: true })).count(), 0);
 });
 
 test("toBeEnabled / toBeDisabled read the enabled attribute", async () => {

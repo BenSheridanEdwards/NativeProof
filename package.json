@@ -1,6 +1,6 @@
 {
   "name": "nativeproof",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "license": "MIT",
   "type": "module",
   "description": "Playwright-feeling native mobile E2E for Appium/WebdriverIO with runner-native tests, locators, expect, fixtures, and evidence.",
@@ -51,7 +51,7 @@
     "lint": "biome lint .",
     "format": "biome format --write .",
     "check": "biome check . && tsc --noEmit",
-    "test": "node --import tsx --test 'test/**/*.test.ts'",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
     "prepare": "npm run build && husky",
     "prepublishOnly": "npm run check && npm test"
   },

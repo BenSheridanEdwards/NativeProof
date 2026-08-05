@@ -1,31 +1,26 @@
 import assert from "node:assert/strict";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  utimesSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 import {
   appiumDriverListHasDriver,
   appiumDriverNameForPlatform,
   defaultCommandForProgram,
   detectOnboardTarget,
+  ensureAppium,
   ensureAppiumDriver,
   helpText,
   loadNativeProofConfig,
   main,
   type NativeBuildCommandRunner,
+  nodeCliCommand,
   onboard,
   onboardCommand,
   parseArgs,
   resolveRunner,
+  runAppiumCommand,
   runSelection,
   type ScaffoldIo,
   scaffold,
@@ -197,6 +192,68 @@ test("package carries the runtime reporter dependency used by generated WDIO con
   assert.equal(typeof pkg.dependencies?.["@wdio/spec-reporter"], "string");
 });
 
+test("Node CLI commands resolve WDIO and Appium JavaScript entrypoints", () => {
+  const wdio = nodeCliCommand("wdio");
+  const appium = nodeCliCommand("appium");
+
+  assert.equal(wdio.command, process.execPath);
+  assert.equal(appium.command, process.execPath);
+  assert.match(wdio.argsPrefix[0] ?? "", /node_modules[\\/]@wdio[\\/]cli[\\/]bin[\\/]wdio\.js$/);
+  assert.match(appium.argsPrefix[0] ?? "", /node_modules[\\/]appium[\\/]index\.js$/);
+  assert.equal(existsSync(wdio.argsPrefix[0] ?? ""), true);
+  assert.equal(existsSync(appium.argsPrefix[0] ?? ""), true);
+  assert.doesNotMatch(wdio.argsPrefix[0] ?? "", /node_modules[\\/]\.bin[\\/]/);
+  assert.doesNotMatch(appium.argsPrefix[0] ?? "", /node_modules[\\/]\.bin[\\/]/);
+});
+
+test("Node CLI commands preserve entrypoint paths containing spaces", () => {
+  const packageEntry = path.join(
+    tmpdir(),
+    "native proof project",
+    "node_modules",
+    "@wdio",
+    "cli",
+    "build",
+    "index.js",
+  );
+  const command = nodeCliCommand("wdio", () => pathToFileURL(packageEntry).href);
+
+  assert.deepEqual(command, {
+    command: process.execPath,
+    argsPrefix: [path.join(path.dirname(packageEntry), "..", "bin", "wdio.js")],
+  });
+});
+
+test("Appium commands preserve arguments and propagate exit output through Node", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "native proof appium command-"));
+  try {
+    const appiumEntry = path.join(dir, "appium command.js");
+    writeFileSync(
+      appiumEntry,
+      'console.log(JSON.stringify(process.argv.slice(2))); console.error("appium stderr"); process.exit(7);\n',
+    );
+
+    const result = await runAppiumCommand(["driver", "list", "path with spaces"], {}, () => ({
+      command: process.execPath,
+      argsPrefix: [appiumEntry],
+    }));
+
+    assert.equal(result.code, 7);
+    assert.deepEqual(JSON.parse(result.stdout.trim()), ["driver", "list", "path with spaces"]);
+    assert.match(result.stderr, /appium stderr/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("all CLI launch sites use Node-based package entrypoints", () => {
+  const source = readFileSync(path.join(process.cwd(), "src", "cli.ts"), "utf8");
+
+  assert.equal(source.match(/nodeCliCommand\("wdio"\)/g)?.length, 1);
+  assert.equal(source.match(/resolveCommand\("appium"\)/g)?.length, 2);
+  assert.doesNotMatch(source, /localBin\(|["']\.bin["']|shell:\s*true/);
+});
+
 test("Appium driver helpers map platforms and parse installed-driver output", () => {
   assert.equal(appiumDriverNameForPlatform("android"), "uiautomator2");
   assert.equal(appiumDriverNameForPlatform("ios"), "xcuitest");
@@ -249,32 +306,21 @@ test("ensureAppiumDriver skips install when the platform driver already exists",
   assert.deepEqual(calls, [["driver", "list", "--installed", "--json"]]);
 });
 
-test("main reports a local Appium process that exits before becoming reachable", async () => {
+test("ensureAppium reports a Node-launched server that exits before becoming reachable", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-appium-exit-"));
-  const previousCwd = process.cwd();
   try {
-    const binDir = path.join(dir, "node_modules", ".bin");
-    mkdirSync(binDir, { recursive: true });
-    const appiumBin = path.join(binDir, "appium");
-    writeFileSync(appiumBin, "#!/bin/sh\nexit 48\n");
-    chmodSync(appiumBin, 0o755);
-    writeFileSync(
-      path.join(dir, "nativeproof.config.ts"),
-      [
-        "export default {",
-        "  appium: { autoInstallDrivers: false, port: 65534 },",
-        '  projects: [{ name: "android", platform: "android" }],',
-        "};",
-      ].join("\n"),
-    );
+    const appiumEntry = path.join(dir, "appium server.js");
+    writeFileSync(appiumEntry, "process.exit(48);\n");
 
-    process.chdir(dir);
     await assert.rejects(
-      () => main(["--android"]),
+      () =>
+        ensureAppium({ autoInstallDrivers: false, port: 65534 }, true, "android", () => ({
+          command: process.execPath,
+          argsPrefix: [appiumEntry],
+        })),
       /Appium exited before becoming reachable at http:\/\/127\.0\.0\.1:65534\/ \(exit code 48\)/,
     );
   } finally {
-    process.chdir(previousCwd);
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -375,7 +421,8 @@ test("scaffoldFiles can pin the onboarded app path in config", () => {
 
 test("scaffold writes missing files and never overwrites existing ones", () => {
   const written = new Map<string, string>();
-  const present = new Set<string>(["/proj/nativeproof.config.ts"]); // config already exists
+  const projectDir = path.resolve("proj");
+  const present = new Set<string>([path.join(projectDir, "nativeproof.config.ts")]); // config already exists
   const io: ScaffoldIo = {
     exists: (file) => present.has(file),
     read: () => {
@@ -383,28 +430,29 @@ test("scaffold writes missing files and never overwrites existing ones", () => {
     },
     write: (file, contents) => written.set(file, contents),
   };
-  const { created, skipped, updated } = scaffold("/proj", { platform: "android" }, io);
+  const { created, skipped, updated } = scaffold(projectDir, { platform: "android" }, io);
   assert.deepEqual(created, ["tests/example.spec.ts", "package.json", "tsconfig.json"]);
   assert.deepEqual(skipped, ["nativeproof.config.ts"]); // existing one left intact
   assert.deepEqual(updated, []);
-  assert.equal(written.has("/proj/nativeproof.config.ts"), false);
-  assert.ok(written.get("/proj/tests/example.spec.ts")?.includes('describe("login"'));
-  assert.ok(written.get("/proj/package.json")?.includes('"test:e2e": "nativeproof"'));
+  assert.equal(written.has(path.join(projectDir, "nativeproof.config.ts")), false);
+  assert.ok(written.get(path.join(projectDir, "tests/example.spec.ts"))?.includes('describe("login"'));
+  assert.ok(written.get(path.join(projectDir, "package.json"))?.includes('"test:e2e": "nativeproof"'));
 });
 
 test("scaffold updates an existing package.json without overwriting its scripts", () => {
   const written = new Map<string, string>();
-  const present = new Set<string>(["/proj/package.json"]);
+  const projectDir = path.resolve("proj");
+  const present = new Set<string>([path.join(projectDir, "package.json")]);
   const io: ScaffoldIo = {
     exists: (file) => present.has(file),
     read: () => JSON.stringify({ name: "app", scripts: { test: "vitest" } }),
     write: (file, contents) => written.set(file, contents),
   };
-  const { created, skipped, updated } = scaffold("/proj", { platform: "android" }, io);
+  const { created, skipped, updated } = scaffold(projectDir, { platform: "android" }, io);
   assert.deepEqual(created, ["nativeproof.config.ts", "tests/example.spec.ts", "tsconfig.json"]);
   assert.deepEqual(skipped, []);
   assert.deepEqual(updated, ["package.json"]);
-  const pkg = JSON.parse(written.get("/proj/package.json") ?? "{}") as {
+  const pkg = JSON.parse(written.get(path.join(projectDir, "package.json")) ?? "{}") as {
     type?: string;
     scripts?: Record<string, string>;
     devDependencies?: Record<string, string>;

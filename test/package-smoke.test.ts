@@ -1,14 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -40,7 +32,9 @@ function run(command: string, args: readonly string[], options: { cwd: string })
 test("packed package exposes the onboarding CLI bins and ESM scaffold", () => {
   const tempDir = mkdtempSync(path.join(tmpdir(), "nativeproof-pack-"));
   try {
-    const packOutput = run("npm", ["pack", "--pack-destination", tempDir, "--json"], {
+    const npmExecPath = process.env.npm_execpath;
+    assert.ok(npmExecPath, "npm test exposes npm's JavaScript CLI entrypoint");
+    const packOutput = run(process.execPath, [npmExecPath, "pack", "--pack-destination", tempDir, "--json"], {
       cwd: process.cwd(),
     });
     const [packedPackage] = JSON.parse(packOutput) as [{ filename: string; files: Array<{ path: string }> }];
@@ -55,8 +49,14 @@ test("packed package exposes the onboarding CLI bins and ESM scaffold", () => {
     assert.ok(packedFiles.has("dist/cli.js"), "packed package includes the CLI entrypoint");
     assert.ok(packedFiles.has("dist/index.js"), "packed package includes the public module entrypoint");
 
-    run("tar", ["-xzf", tarball, "-C", tempDir], { cwd: process.cwd() });
-    const packageRoot = path.join(tempDir, "package");
+    const consumerRoot = path.join(tempDir, "consumer");
+    mkdirSync(consumerRoot);
+    writeFileSync(path.join(consumerRoot, "package.json"), '{"name":"consumer","private":true}');
+    run(process.execPath, [npmExecPath, "install", tarball, "--ignore-scripts", "--no-audit", "--no-fund"], {
+      cwd: consumerRoot,
+    });
+
+    const packageRoot = path.join(consumerRoot, "node_modules", "nativeproof");
     const packageJson = JSON.parse(readFileSync(path.join(packageRoot, "package.json"), "utf8")) as {
       bin?: Record<string, string>;
       files?: string[];
@@ -71,13 +71,13 @@ test("packed package exposes the onboarding CLI bins and ESM scaffold", () => {
       "nativeproof-onboard": "dist/cli.js",
     });
 
-    const cliEntry = path.join(packageRoot, "dist", "cli.js");
-    const cliSource = readFileSync(cliEntry, "utf8");
+    const packedCliEntry = path.join(packageRoot, "dist", "cli.js");
+    const cliSource = readFileSync(packedCliEntry, "utf8");
     assert.ok(cliSource.startsWith("#!/usr/bin/env node"), "packed CLI keeps the executable shebang");
     assert.match(cliSource, /nativeproof-onboard/);
 
-    symlinkSync(path.join(process.cwd(), "node_modules"), path.join(packageRoot, "node_modules"), "dir");
-    const helpText = run(process.execPath, [cliEntry, "--help"], { cwd: packageRoot });
+    const cliEntry = path.join(packageRoot, "dist", "cli.js");
+    const helpText = run(process.execPath, [cliEntry, "--help"], { cwd: consumerRoot });
     assert.match(helpText, /nativeproof init --ios/);
     assert.match(helpText, /nativeproof init --android/);
     assert.match(helpText, /nativeproof onboard <path>/);

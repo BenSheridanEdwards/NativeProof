@@ -971,9 +971,25 @@ export function onboardCommand(
   return 0;
 }
 
-function localBin(name: string): string {
-  const bin = path.join(process.cwd(), "node_modules", ".bin", name);
-  return existsSync(bin) ? bin : name;
+export type NodeCliName = "wdio" | "appium";
+
+export interface NodeCliCommand {
+  command: string;
+  argsPrefix: readonly string[];
+}
+
+type ModuleResolver = (specifier: string) => string;
+type NodeCliCommandResolver = (name: NodeCliName) => NodeCliCommand;
+
+/** Resolve package-owned JavaScript entrypoints instead of platform-specific npm bin shims. */
+export function nodeCliCommand(
+  name: NodeCliName,
+  resolveModule: ModuleResolver = (specifier) => import.meta.resolve(specifier),
+): NodeCliCommand {
+  const packageEntry = resolveModule(name === "wdio" ? "@wdio/cli" : "appium");
+  const cliEntry =
+    name === "wdio" ? fileURLToPath(new URL("../bin/wdio.js", packageEntry)) : fileURLToPath(packageEntry);
+  return { command: process.execPath, argsPrefix: [cliEntry] };
 }
 
 type AppiumEndpoint = Required<Pick<AppiumOptions, "host" | "port" | "path">>;
@@ -1040,9 +1056,14 @@ export type AppiumCommandRunner = (
   options?: { stdio?: "pipe" | "inherit" },
 ) => Promise<AppiumCommandResult>;
 
-const runAppiumCommand: AppiumCommandRunner = (args, options = {}) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(localBin("appium"), args, {
+export function runAppiumCommand(
+  args: readonly string[],
+  options: { stdio?: "pipe" | "inherit" } = {},
+  resolveCommand: NodeCliCommandResolver = nodeCliCommand,
+): Promise<AppiumCommandResult> {
+  return new Promise((resolve, reject) => {
+    const command = resolveCommand("appium");
+    const child = spawn(command.command, [...command.argsPrefix, ...args], {
       stdio: options.stdio === "inherit" ? "inherit" : ["ignore", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];
@@ -1058,6 +1079,7 @@ const runAppiumCommand: AppiumCommandRunner = (args, options = {}) =>
       });
     });
   });
+}
 
 export async function ensureAppiumDriver(
   platform: InitPlatform,
@@ -1087,10 +1109,11 @@ export async function ensureAppiumDriver(
   return true;
 }
 
-async function ensureAppium(
+export async function ensureAppium(
   appium: AppiumOptions | undefined,
   startAppium: boolean,
   platform: InitPlatform,
+  resolveCommand: NodeCliCommandResolver = nodeCliCommand,
 ): Promise<ChildProcess | null> {
   const endpoint = appiumEndpoint(appium);
   if (await appiumReachable(endpoint)) return null;
@@ -1099,9 +1122,11 @@ async function ensureAppium(
   }
   await ensureAppiumDriver(platform, appium);
   console.log("nativeproof: starting Appium …");
+  const command = resolveCommand("appium");
   const child = spawn(
-    localBin("appium"),
+    command.command,
     [
+      ...command.argsPrefix,
       "--address",
       endpoint.host,
       "--port",
@@ -1309,7 +1334,8 @@ async function runTests(args: CliArgs): Promise<number> {
   const project = resolveProject(userConfig, runSelection(args));
   const appium = await ensureAppium(userConfig.appium, args.startAppium, project.platform);
   try {
-    const runner = spawn(localBin("wdio"), ["run", wdioConfig], {
+    const command = nodeCliCommand("wdio");
+    const runner = spawn(command.command, [...command.argsPrefix, "run", wdioConfig], {
       stdio: "inherit",
       env: { ...runnerEnv(args), ...extraEnv },
     });

@@ -4,6 +4,14 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## 0.13.2
+
+**Fixed**
+
+- Windows now launches WebdriverIO and NativeProof-managed Appium commands through Node package
+  entrypoints, avoiding `spawn ... node_modules\\.bin\\wdio ENOENT` failures from extensionless npm
+  shims.
+
 ## 0.13.1
 
 **Fixed**

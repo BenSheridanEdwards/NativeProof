@@ -25,6 +25,8 @@ const ios = {
   capabilities: { platformName: "iOS", "appium:app": "A.app", "appium:deviceName": "iPhone 15" },
 };
 const projects = [android, ios];
+const projectRoot = path.resolve("proj");
+const shortProjectRoot = path.resolve("p");
 
 test("defineConfig returns the config unchanged (typed identity)", () => {
   const app = {} as App<ScreenFactories>;
@@ -43,7 +45,7 @@ test("resolveProject picks by name, then platform, then the first project", () =
 });
 
 test("buildWdioConfig synthesises a WebdriverIO config with absolute specs for the platform", () => {
-  const wdio = buildWdioConfig({ projects, testDir: "e2e" }, { platform: "ios" }, "/proj");
+  const wdio = buildWdioConfig({ projects, testDir: "e2e" }, { platform: "ios" }, projectRoot);
   assert.equal(wdio.framework, "mocha");
   // The project's caps, with the platform's automationName defaulted in (XCUITest for iOS).
   assert.deepEqual(wdio.capabilities, [
@@ -54,7 +56,7 @@ test("buildWdioConfig synthesises a WebdriverIO config with absolute specs for t
       "appium:deviceName": "iPhone 15",
     },
   ]);
-  assert.deepEqual(wdio.specs, ["/proj/e2e/**/*.spec.ts"]);
+  assert.deepEqual(wdio.specs, [path.join(projectRoot, "e2e", "**", "*.spec.ts")]);
   assert.equal(wdio.path, "/");
 });
 
@@ -123,9 +125,9 @@ test("buildWdioConfig honours a spec override and Appium settings from config", 
   const wdio = buildWdioConfig(
     { projects, appium: { host: "1.2.3.4", port: 4444, path: "/" } },
     { spec: "tests/x.spec.ts" },
-    "/proj",
+    projectRoot,
   );
-  assert.deepEqual(wdio.specs, ["/proj/tests/x.spec.ts"]);
+  assert.deepEqual(wdio.specs, [path.join(projectRoot, "tests", "x.spec.ts")]);
   assert.equal(wdio.hostname, "1.2.3.4");
   assert.equal(wdio.port, 4444);
   assert.equal(wdio.path, "/");
@@ -144,24 +146,33 @@ test("buildWdioConfig uses a project's own specs (per-platform sets), and --spec
       specs: ["e2e/shared/**/*.spec.ts", "e2e/ios/**/*.spec.ts"],
     },
   ];
-  const android = buildWdioConfig({ projects: perProject }, { project: "android" }, "/p");
-  assert.deepEqual(android.specs, ["/p/e2e/shared/**/*.spec.ts", "/p/e2e/android/**/*.spec.ts"]);
-  const ios = buildWdioConfig({ projects: perProject }, { project: "ios" }, "/p");
-  assert.deepEqual(ios.specs, ["/p/e2e/shared/**/*.spec.ts", "/p/e2e/ios/**/*.spec.ts"]);
+  const android = buildWdioConfig({ projects: perProject }, { project: "android" }, shortProjectRoot);
+  assert.deepEqual(android.specs, [
+    path.join(shortProjectRoot, "e2e", "shared", "**", "*.spec.ts"),
+    path.join(shortProjectRoot, "e2e", "android", "**", "*.spec.ts"),
+  ]);
+  const ios = buildWdioConfig({ projects: perProject }, { project: "ios" }, shortProjectRoot);
+  assert.deepEqual(ios.specs, [
+    path.join(shortProjectRoot, "e2e", "shared", "**", "*.spec.ts"),
+    path.join(shortProjectRoot, "e2e", "ios", "**", "*.spec.ts"),
+  ]);
   // A --spec override (comma-separated) wins over the project's specs.
   const override = buildWdioConfig(
     { projects: perProject },
     { project: "android", spec: "a.spec.ts, b.spec.ts" },
-    "/p",
+    shortProjectRoot,
   );
-  assert.deepEqual(override.specs, ["/p/a.spec.ts", "/p/b.spec.ts"]);
+  assert.deepEqual(override.specs, [
+    path.join(shortProjectRoot, "a.spec.ts"),
+    path.join(shortProjectRoot, "b.spec.ts"),
+  ]);
   // A project with no specs falls back to testDir/testMatch.
   const fallback = buildWdioConfig(
     { projects: [{ name: "x", platform: "android" as const }], testDir: "e2e" },
     {},
-    "/p",
+    shortProjectRoot,
   );
-  assert.deepEqual(fallback.specs, ["/p/e2e/**/*.spec.ts"]);
+  assert.deepEqual(fallback.specs, [path.join(shortProjectRoot, "e2e", "**", "*.spec.ts")]);
 });
 
 test("buildWdioConfig forwards wdio tuning options only when set", () => {
@@ -238,9 +249,9 @@ test("failureEvidenceName builds a filesystem-safe, capped prefix", () => {
 
 test("findConfigFile locates nativeproof.config.* via the injected exists check", () => {
   const exists = (file: string) => file.endsWith("nativeproof.config.ts");
-  assert.match(findConfigFile("/proj", exists) ?? "", /\/proj\/nativeproof\.config\.ts$/);
+  assert.equal(findConfigFile(projectRoot, exists), path.join(projectRoot, "nativeproof.config.ts"));
   assert.equal(
-    findConfigFile("/proj", () => false),
+    findConfigFile(projectRoot, () => false),
     null,
   );
 });

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { scaffoldFiles } from "../src/cli.js";
 
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 
@@ -13,11 +14,21 @@ function section(title: string): string {
 
 test("What Init Creates sample matches the generated config shape", () => {
   const init = section("What Init Creates");
+  const generatedConfig = scaffoldFiles({ platform: "ios" }).find(
+    (file) => file.path === "nativeproof.config.ts",
+  );
+  assert.ok(generatedConfig, "expected the iOS scaffold config");
 
   assert.match(init, /tsconfig\.json/);
+  assert.match(init, /\.gitignore/);
+  assert.match(init, /TypeScript/);
   assert.match(init, /const driver = \(\) => wdioDriver\(\);/);
   assert.match(init, /driver,/);
   assert.match(init, /mochaTimeout: 240_000/);
+  for (const retryLine of ["specFileRetries: 1", "specFileRetriesDelay: 2"]) {
+    assert.match(generatedConfig.contents, new RegExp(retryLine));
+    assert.match(init, new RegExp(retryLine));
+  }
   assert.match(init, /name: "ios"/);
   assert.doesNotMatch(init, /name: "android"/);
 });

@@ -22,6 +22,8 @@ export default defineConfig({
     autoSelectBootedSimulator: true,
   },
   mochaTimeout: 240_000,
+  specFileRetries: 1,
+  specFileRetriesDelay: 2,
   projects: [
     {
       name: "android",

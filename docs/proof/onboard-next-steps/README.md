@@ -24,15 +24,26 @@ node --import tsx -e "await import('./nativeproof.config.ts'); console.log('conf
 Key output:
 
 ```text
-0.10.14
+1.0.0
 nativeproof: created nativeproof.config.ts
 nativeproof: created tests/example.spec.ts
-nativeproof: updated package.json
+nativeproof: created package.json
+nativeproof: created tsconfig.json
+nativeproof: created .gitignore
+
+Next:
+  1. npm install
+  2. set the app path + native.navigate(...) in nativeproof.config.ts
+  3. npm run test:e2e
+
 nativeproof: updated nativeproof.config.ts
 nativeproof: package.json already exists — skipped
 nativeproof: onboarded android app at ./app-debug.apk
 
-Next: make tests/example.spec.ts and native.navigate(...) match your app, then run `npm run test:e2e` or `nativeproof --android`.
+Next:
+  1. npm install   (if you have not already)
+  2. make tests/example.spec.ts and native.navigate(...) match your app
+  3. npm run test:e2e  or  nativeproof --android
 config import ok
 verified corrected onboard next-step text
 ```

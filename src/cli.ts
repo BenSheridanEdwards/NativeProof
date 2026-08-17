@@ -229,6 +229,8 @@ export default defineConfig({
     autoSelectBootedSimulator: true,
   },
   mochaTimeout: 240_000,
+  specFileRetries: 1,
+  specFileRetriesDelay: 2,
   projects: [
 ${projects},
   ],
@@ -257,7 +259,10 @@ function packageTemplate(): string {
         "test:e2e": "nativeproof",
       },
       devDependencies: {
+        // Keep in sync with nativeproof's supported TypeScript major when bumping intentionally.
+        "@types/node": "^24.10.1",
         nativeproof: nativeproofVersionRange(),
+        typescript: "^5.9.3",
       },
     },
     null,
@@ -267,6 +272,10 @@ function packageTemplate(): string {
 
 function nativeproofVersionRange(): string {
   return `^${version()}`;
+}
+
+function gitignoreTemplate(): string {
+  return ["node_modules/", ".e2e-artifacts/", "*.log", ".DS_Store", ""].join("\n");
 }
 
 function tsconfigTemplate(): string {
@@ -342,6 +351,7 @@ export function scaffoldFiles(options: ScaffoldOptions): ScaffoldFile[] {
     { path: "tests/example.spec.ts", contents: SPEC_TEMPLATE },
     { path: "package.json", contents: packageTemplate() },
     { path: "tsconfig.json", contents: tsconfigTemplate() },
+    { path: ".gitignore", contents: gitignoreTemplate() },
   ];
 }
 
@@ -394,6 +404,26 @@ export function scaffold(cwd: string, options: ScaffoldOptions, io: ScaffoldIo =
   return { created, skipped, updated };
 }
 
+export function nextStepsAfterInit(): string {
+  return [
+    "",
+    "Next:",
+    "  1. npm install",
+    "  2. set the app path + native.navigate(...) in nativeproof.config.ts",
+    "  3. npm run test:e2e",
+  ].join("\n");
+}
+
+export function nextStepsAfterOnboard(platform: InitPlatform): string {
+  return [
+    "",
+    "Next:",
+    "  1. npm install   (if you have not already)",
+    "  2. make tests/example.spec.ts and native.navigate(...) match your app",
+    `  3. npm run test:e2e  or  nativeproof --${platform}`,
+  ].join("\n");
+}
+
 export function init(cwd: string = process.cwd(), options: ScaffoldOptions): number {
   const { created, skipped, updated } = scaffold(cwd, options);
   for (const file of created) console.log(`nativeproof: created ${file}`);
@@ -402,9 +432,7 @@ export function init(cwd: string = process.cwd(), options: ScaffoldOptions): num
   if (created.length === 0 && updated.length === 0) {
     console.log("nativeproof: nothing to scaffold (all files already exist)");
   } else {
-    console.log(
-      `\nNext: set the app path + native.navigate(...) in nativeproof.config.ts, then run \`npm run test:e2e\`.`,
-    );
+    console.log(nextStepsAfterInit());
   }
   return 0;
 }
@@ -1003,9 +1031,7 @@ export function onboardCommand(
   for (const file of updated) console.log(`nativeproof: updated ${file}`);
   for (const file of skipped) console.log(`nativeproof: ${file} already exists — skipped`);
   console.log(`nativeproof: onboarded ${target.platform} app at ${target.appPath}`);
-  console.log(
-    `\nNext: make tests/example.spec.ts and native.navigate(...) match your app, then run \`npm run test:e2e\` or \`nativeproof --${target.platform}\`.`,
-  );
+  console.log(nextStepsAfterOnboard(target.platform));
   return 0;
 }
 

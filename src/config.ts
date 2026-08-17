@@ -159,6 +159,12 @@ export interface RunnerConfig {
   connectionRetryTimeout?: number;
   /** Connection retry count (wdio default 3). */
   connectionRetryCount?: number;
+  /** Retry a failed spec file in a fresh Appium session (wdio default 0). */
+  specFileRetries?: number;
+  /** Delay in seconds before retrying a failed spec file (wdio default 0). */
+  specFileRetriesDelay?: number;
+  /** Defer failed spec retries until the remaining spec files finish (wdio default true). */
+  specFileRetriesDeferred?: boolean;
   /** Default auto-wait timeout in ms for `waitUntil`/`waitFor*` (wdio default 5000). */
   waitforTimeout?: number;
   /** Stop the run after N failures; 0 = never bail (wdio default 0). */
@@ -300,6 +306,10 @@ export function buildWdioConfig(
   if (config.connectionRetryTimeout !== undefined)
     wdio.connectionRetryTimeout = config.connectionRetryTimeout;
   if (config.connectionRetryCount !== undefined) wdio.connectionRetryCount = config.connectionRetryCount;
+  if (config.specFileRetries !== undefined) wdio.specFileRetries = config.specFileRetries;
+  if (config.specFileRetriesDelay !== undefined) wdio.specFileRetriesDelay = config.specFileRetriesDelay;
+  if (config.specFileRetriesDeferred !== undefined)
+    wdio.specFileRetriesDeferred = config.specFileRetriesDeferred;
   if (config.waitforTimeout !== undefined) wdio.waitforTimeout = config.waitforTimeout;
   if (config.bail !== undefined) wdio.bail = config.bail;
   if (config.logLevel !== undefined) wdio.logLevel = config.logLevel;

@@ -24,6 +24,8 @@ import {
   localBinNeedsShell,
   main,
   type NativeBuildCommandRunner,
+  nextStepsAfterInit,
+  nextStepsAfterOnboard,
   onboard,
   onboardCommand,
   parseArgs,
@@ -453,10 +455,12 @@ test("scaffoldFiles are a platform-specific config, package script and readable 
   const spec = files.find((f) => f.path === "tests/example.spec.ts");
   const pkg = files.find((f) => f.path === "package.json");
   const tsconfig = files.find((f) => f.path === "tsconfig.json");
+  const gitignore = files.find((f) => f.path === ".gitignore");
   assert.ok(config, "writes nativeproof.config.ts");
   assert.ok(spec, "writes a sample spec");
   assert.ok(pkg, "writes package.json with an npm script");
   assert.ok(tsconfig, "writes tsconfig.json for editor/typechecker defaults");
+  assert.ok(gitignore, "writes .gitignore for node_modules and artifacts");
   // The config owns app/device control and exports the direct native surface specs use.
   assert.match(config.contents, /createNative\(/);
   assert.match(config.contents, /export const native/);
@@ -466,6 +470,8 @@ test("scaffoldFiles are a platform-specific config, package script and readable 
   assert.match(config.contents, /artifacts: \{ dir: "\.e2e-artifacts" \}/);
   assert.match(config.contents, /autoInstallDrivers: true/);
   assert.match(config.contents, /autoSelectBootedSimulator: true/);
+  assert.match(config.contents, /specFileRetries: 1/);
+  assert.match(config.contents, /specFileRetriesDelay: 2/);
   assert.match(config.contents, /"appium:app": "\.\/build\/ios\/MyApp\.app"/);
   assert.doesNotMatch(config.contents, /"appium:deviceName": "iPhone 15"/);
   assert.doesNotMatch(config.contents, /process\.env\.NATIVEPROOF/);
@@ -477,12 +483,14 @@ test("scaffoldFiles are a platform-specific config, package script and readable 
   assert.doesNotMatch(spec.contents, /test\.describe\(/);
   assert.match(pkg.contents, /"type": "module"/);
   assert.match(pkg.contents, /"test:e2e": "nativeproof"/);
-  assert.equal(
-    (JSON.parse(pkg.contents) as { devDependencies?: Record<string, string> }).devDependencies?.nativeproof,
-    `^${version()}`,
-  );
+  const pkgJson = JSON.parse(pkg.contents) as { devDependencies?: Record<string, string> };
+  assert.equal(pkgJson.devDependencies?.nativeproof, `^${version()}`);
+  assert.equal(typeof pkgJson.devDependencies?.typescript, "string");
+  assert.equal(typeof pkgJson.devDependencies?.["@types/node"], "string");
   assert.match(tsconfig.contents, /"moduleResolution": "Bundler"/);
   assert.match(tsconfig.contents, /"@wdio\/globals\/types"/);
+  assert.match(gitignore.contents, /^node_modules\/$/m);
+  assert.match(gitignore.contents, /^\.e2e-artifacts\/$/m);
 });
 
 test("scaffoldFiles can pin the onboarded app path in config", () => {
@@ -490,6 +498,15 @@ test("scaffoldFiles can pin the onboarded app path in config", () => {
   const config = files.find((f) => f.path === "nativeproof.config.ts");
   assert.ok(config, "writes nativeproof.config.ts");
   assert.match(config.contents, /"appium:app": "\/apps\/Example\.apk"/);
+});
+
+test("fresh-project next steps require install before configuration and execution", () => {
+  const initSteps = nextStepsAfterInit();
+  const onboardSteps = nextStepsAfterOnboard("android");
+  assert.ok(initSteps.indexOf("npm install") < initSteps.indexOf("native.navigate"));
+  assert.ok(initSteps.indexOf("native.navigate") < initSteps.indexOf("npm run test:e2e"));
+  assert.ok(onboardSteps.indexOf("npm install") < onboardSteps.indexOf("tests/example.spec.ts"));
+  assert.match(onboardSteps, /nativeproof --android/);
 });
 
 test("scaffold writes missing files and never overwrites existing ones", () => {
@@ -503,12 +520,13 @@ test("scaffold writes missing files and never overwrites existing ones", () => {
     write: (file, contents) => written.set(file, contents),
   };
   const { created, skipped, updated } = scaffold("/proj", { platform: "android" }, io);
-  assert.deepEqual(created, ["tests/example.spec.ts", "package.json", "tsconfig.json"]);
+  assert.deepEqual(created, ["tests/example.spec.ts", "package.json", "tsconfig.json", ".gitignore"]);
   assert.deepEqual(skipped, ["nativeproof.config.ts"]); // existing one left intact
   assert.deepEqual(updated, []);
   assert.equal(written.has("/proj/nativeproof.config.ts"), false);
   assert.ok(written.get("/proj/tests/example.spec.ts")?.includes('describe("login"'));
   assert.ok(written.get("/proj/package.json")?.includes('"test:e2e": "nativeproof"'));
+  assert.ok(written.get("/proj/.gitignore")?.includes("node_modules/"));
 });
 
 test("scaffold updates an existing package.json without overwriting its scripts or package type", () => {
@@ -520,7 +538,12 @@ test("scaffold updates an existing package.json without overwriting its scripts 
     write: (file, contents) => written.set(file, contents),
   };
   const { created, skipped, updated } = scaffold("/proj", { platform: "android" }, io);
-  assert.deepEqual(created, ["nativeproof.config.ts", "tests/example.spec.ts", "tsconfig.json"]);
+  assert.deepEqual(created, [
+    "nativeproof.config.ts",
+    "tests/example.spec.ts",
+    "tsconfig.json",
+    ".gitignore",
+  ]);
   assert.deepEqual(skipped, []);
   assert.deepEqual(updated, ["package.json"]);
   const pkg = JSON.parse(written.get("/proj/package.json") ?? "{}") as {
@@ -815,6 +838,7 @@ test("onboard scaffolds a missing project with the detected app path", () => {
       "tests/example.spec.ts",
       "package.json",
       "tsconfig.json",
+      ".gitignore",
     ]);
     assert.match(
       readFileSync(path.join(dir, "nativeproof.config.ts"), "utf8"),

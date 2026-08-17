@@ -4,6 +4,18 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+**Added**
+
+- Runner configuration now exposes WebdriverIO's per-spec retry controls, allowing a failed mobile spec to restart in a fresh Appium session without a consumer-owned WDIO wrapper.
+- Generated projects include a practical `.gitignore`, TypeScript and Node types, and install-first next steps.
+
+**Changed**
+
+- CI covers the supported Node 20 floor, Node 22 and Node 24, and the package smoke test installs and exercises the packed consumer surface.
+- Runtime dependencies are refreshed to the latest versions allowed by the declared ranges.
+
 ## 1.0.0
 
 NativeProof's first stable release locks in the one-command init/onboard flow

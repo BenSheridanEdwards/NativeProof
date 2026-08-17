@@ -201,6 +201,9 @@ test("buildWdioConfig forwards wdio tuning options only when set", () => {
   for (const key of [
     "connectionRetryTimeout",
     "connectionRetryCount",
+    "specFileRetries",
+    "specFileRetriesDelay",
+    "specFileRetriesDeferred",
     "waitforTimeout",
     "bail",
     "logLevel",
@@ -212,6 +215,9 @@ test("buildWdioConfig forwards wdio tuning options only when set", () => {
       projects: [{ name: "a", platform: "android" as const }],
       connectionRetryTimeout: 300_000,
       connectionRetryCount: 1,
+      specFileRetries: 2,
+      specFileRetriesDelay: 3,
+      specFileRetriesDeferred: true,
       waitforTimeout: 15_000,
       bail: 0, // 0 is meaningful (never bail) and must still be forwarded
       logLevel: "warn",
@@ -221,6 +227,9 @@ test("buildWdioConfig forwards wdio tuning options only when set", () => {
   );
   assert.equal(tuned.connectionRetryTimeout, 300_000);
   assert.equal(tuned.connectionRetryCount, 1);
+  assert.equal(tuned.specFileRetries, 2);
+  assert.equal(tuned.specFileRetriesDelay, 3);
+  assert.equal(tuned.specFileRetriesDeferred, true);
   assert.equal(tuned.waitforTimeout, 15_000);
   assert.equal(tuned.bail, 0);
   assert.equal(tuned.logLevel, "warn");

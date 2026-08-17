@@ -27,7 +27,7 @@ npm i -D nativeproof
 
 Requirements:
 
-- Node.js 20+
+- Node.js 20.19+, 22.12+, or 24+
 - Android: Android SDK, platform tools, emulator, JDK 17
 - iOS: macOS, Xcode, Command Line Tools
 - A booted emulator/simulator, unless your config points at an existing Appium/device-farm target
@@ -43,7 +43,7 @@ From an iOS source checkout with a top-level `.xcodeproj` or `.xcworkspace`:
 ```bash
 npx nativeproof init --ios
 npx nativeproof onboard /path/to/ios-app-repo
-# wire native.navigate(...) in nativeproof.config.ts and edit tests/example.spec.ts
+# npm install, then wire native.navigate(...) in nativeproof.config.ts and edit tests/example.spec.ts
 npx nativeproof --ios
 ```
 
@@ -60,7 +60,7 @@ From a simulator `.app` your app pipeline already built:
 ```bash
 npx nativeproof init --ios
 npx nativeproof onboard /path/to/MyApp.app
-# wire native.navigate(...) in nativeproof.config.ts and edit tests/example.spec.ts
+# npm install, then wire native.navigate(...) in nativeproof.config.ts and edit tests/example.spec.ts
 npx nativeproof --ios
 ```
 
@@ -71,7 +71,7 @@ From a debug or E2E `.apk`:
 ```bash
 npx nativeproof init --android
 npx nativeproof onboard /path/to/app-debug.apk
-# wire native.navigate(...) in nativeproof.config.ts and edit tests/example.spec.ts
+# npm install, then wire native.navigate(...) in nativeproof.config.ts and edit tests/example.spec.ts
 npx nativeproof --android
 ```
 
@@ -85,7 +85,12 @@ nativeproof.config.ts
 tests/example.spec.ts
 package.json
 tsconfig.json
+.gitignore
 ```
+
+`package.json` pins `nativeproof`, TypeScript, and `@types/node` so a fresh project can
+`npm install` and typecheck immediately. `.gitignore` covers `node_modules/` and
+`.e2e-artifacts/`.
 
 `nativeproof.config.ts` owns the app path, device selection, Appium settings, artifacts, and
 app-specific navigation/setup hooks.
@@ -115,6 +120,9 @@ export default defineConfig({
     autoSelectBootedSimulator: true,
   },
   mochaTimeout: 240_000,
+  // A retry starts a fresh Appium session, which is safer than continuing a dead WDA/UIAutomator2 session.
+  specFileRetries: 1,
+  specFileRetriesDelay: 2,
   projects: [
     {
       name: "ios",
@@ -369,3 +377,8 @@ await captureState("after-login"); // screenshot + page-source pair in the artif
 ## License
 
 MIT
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for clone/install, local gates, and packed-tarball
+verification of generated projects.

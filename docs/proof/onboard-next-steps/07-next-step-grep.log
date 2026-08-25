@@ -3,4 +3,6 @@ verified init says npm install first
 verified onboard says npm install when needed
 verified scaffold includes specFileRetries
 verified scaffold includes specFileRetriesDelay
+verified scaffold includes retry session comment
 verified scaffold includes .gitignore
+verified generated config imports cleanly

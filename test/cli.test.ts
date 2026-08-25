@@ -461,6 +461,9 @@ test("scaffoldFiles are a platform-specific config, package script and readable 
   assert.ok(pkg, "writes package.json with an npm script");
   assert.ok(tsconfig, "writes tsconfig.json for editor/typechecker defaults");
   assert.ok(gitignore, "writes .gitignore for node_modules and artifacts");
+  if (!config || !spec || !pkg || !tsconfig || !gitignore) {
+    assert.fail("scaffoldFiles missing expected outputs");
+  }
   // The config owns app/device control and exports the direct native surface specs use.
   assert.match(config.contents, /createNative\(/);
   assert.match(config.contents, /export const native/);
@@ -472,6 +475,10 @@ test("scaffoldFiles are a platform-specific config, package script and readable 
   assert.match(config.contents, /autoSelectBootedSimulator: true/);
   assert.match(config.contents, /specFileRetries: 1/);
   assert.match(config.contents, /specFileRetriesDelay: 2/);
+  assert.match(
+    config.contents,
+    /A retry starts a fresh Appium session, which is safer than continuing a dead WDA\/UIAutomator2 session\./,
+  );
   assert.match(config.contents, /"appium:app": "\.\/build\/ios\/MyApp\.app"/);
   assert.doesNotMatch(config.contents, /"appium:deviceName": "iPhone 15"/);
   assert.doesNotMatch(config.contents, /process\.env\.NATIVEPROOF/);
@@ -503,6 +510,39 @@ test("scaffoldFiles can pin the onboarded app path in config", () => {
 test("fresh-project next steps require install before configuration and execution", () => {
   const initSteps = nextStepsAfterInit();
   const onboardSteps = nextStepsAfterOnboard("android");
+  const onboardIosSteps = nextStepsAfterOnboard("ios");
+
+  assert.equal(
+    initSteps,
+    [
+      "",
+      "Next:",
+      "  1. npm install",
+      "  2. set the app path + native.navigate(...) in nativeproof.config.ts",
+      "  3. npm run test:e2e",
+    ].join("\n"),
+  );
+  assert.equal(
+    onboardSteps,
+    [
+      "",
+      "Next:",
+      "  1. npm install   (if you have not already)",
+      "  2. make tests/example.spec.ts and native.navigate(...) match your app",
+      "  3. npm run test:e2e  or  nativeproof --android",
+    ].join("\n"),
+  );
+  assert.equal(
+    onboardIosSteps,
+    [
+      "",
+      "Next:",
+      "  1. npm install   (if you have not already)",
+      "  2. make tests/example.spec.ts and native.navigate(...) match your app",
+      "  3. npm run test:e2e  or  nativeproof --ios",
+    ].join("\n"),
+  );
+
   assert.ok(initSteps.indexOf("npm install") < initSteps.indexOf("native.navigate"));
   assert.ok(initSteps.indexOf("native.navigate") < initSteps.indexOf("npm run test:e2e"));
   assert.ok(onboardSteps.indexOf("npm install") < onboardSteps.indexOf("tests/example.spec.ts"));

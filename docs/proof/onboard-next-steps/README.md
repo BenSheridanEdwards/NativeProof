@@ -27,9 +27,9 @@ Key output:
 1.0.0
 nativeproof: created nativeproof.config.ts
 nativeproof: created tests/example.spec.ts
-nativeproof: created package.json
 nativeproof: created tsconfig.json
 nativeproof: created .gitignore
+nativeproof: updated package.json
 
 Next:
   1. npm install
@@ -45,7 +45,14 @@ Next:
   2. make tests/example.spec.ts and native.navigate(...) match your app
   3. npm run test:e2e  or  nativeproof --android
 config import ok
-verified corrected onboard next-step text
+verified version is 1.0.0
+verified init says npm install first
+verified onboard says npm install when needed
+verified scaffold includes specFileRetries
+verified scaffold includes specFileRetriesDelay
+verified scaffold includes retry session comment
+verified scaffold includes .gitignore
+verified generated config imports cleanly
 ```
 
 Artifacts:

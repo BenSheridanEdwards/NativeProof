@@ -6,7 +6,6 @@
 > nativeproof@1.0.0 build
 > tsc -p tsconfig.build.json
 
-nativeproof-1.0.0.tgz
 npm notice
 npm notice 📦  nativeproof@1.0.0
 npm notice Tarball Contents
@@ -18,7 +17,7 @@ npm notice 3.7kB dist/adb.js
 npm notice 5.5kB dist/app.d.ts
 npm notice 1.8kB dist/app.js
 npm notice 6.5kB dist/cli.d.ts
-npm notice 47.2kB dist/cli.js
+npm notice 47.3kB dist/cli.js
 npm notice 6.5kB dist/config.d.ts
 npm notice 9.2kB dist/config.js
 npm notice 3.1kB dist/driver.d.ts
@@ -69,8 +68,9 @@ npm notice name: nativeproof
 npm notice version: 1.0.0
 npm notice filename: nativeproof-1.0.0.tgz
 npm notice package size: 78.5 kB
-npm notice unpacked size: 261.5 kB
-npm notice shasum: 215e0082d6f865c705140562fe554ef37d73e40c
-npm notice integrity: sha512-3aoXEaSQNXN//[...]RnGmCkqsWEIfA==
+npm notice unpacked size: 261.6 kB
+npm notice shasum: 5ebed141c40fa9699f07ef261dcb148f092858fe
+npm notice integrity: sha512-APSqn/3RPEHAq[...]FlruMjxgjlXUg==
 npm notice total files: 54
 npm notice
+nativeproof-1.0.0.tgz

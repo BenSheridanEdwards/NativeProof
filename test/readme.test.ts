@@ -12,12 +12,28 @@ function section(title: string): string {
   return readme.slice(start, next === -1 ? undefined : next);
 }
 
+function normalizeGeneratedSource(source: string): string {
+  return source.replace(/\r\n/g, "\n").trimEnd();
+}
+
+function extractFirstTsFence(markdown: string): string {
+  const open = markdown.indexOf("```ts\n");
+  assert.notEqual(open, -1, "expected a ```ts fenced sample");
+  const bodyStart = open + "```ts\n".length;
+  const close = markdown.indexOf("\n```", bodyStart);
+  assert.notEqual(close, -1, "expected closing fence for ```ts sample");
+  return normalizeGeneratedSource(markdown.slice(bodyStart, close));
+}
+
 test("What Init Creates sample matches the generated config shape", () => {
   const init = section("What Init Creates");
   const generatedConfig = scaffoldFiles({ platform: "ios" }).find(
     (file) => file.path === "nativeproof.config.ts",
   );
-  assert.ok(generatedConfig, "expected the iOS scaffold config");
+  if (!generatedConfig) {
+    assert.fail("expected the iOS scaffold config");
+  }
+  const generatedContents = generatedConfig.contents;
 
   assert.match(init, /tsconfig\.json/);
   assert.match(init, /\.gitignore/);
@@ -25,12 +41,24 @@ test("What Init Creates sample matches the generated config shape", () => {
   assert.match(init, /const driver = \(\) => wdioDriver\(\);/);
   assert.match(init, /driver,/);
   assert.match(init, /mochaTimeout: 240_000/);
-  for (const retryLine of ["specFileRetries: 1", "specFileRetriesDelay: 2"]) {
-    assert.match(generatedConfig.contents, new RegExp(retryLine));
+  for (const retryLine of [
+    "specFileRetries: 1",
+    "specFileRetriesDelay: 2",
+    "A retry starts a fresh Appium session",
+  ]) {
+    assert.match(generatedContents, new RegExp(retryLine));
     assert.match(init, new RegExp(retryLine));
   }
   assert.match(init, /name: "ios"/);
   assert.doesNotMatch(init, /name: "android"/);
+
+  // Full-file parity: README sample must equal scaffold output (not just share tokens).
+  // Loose token checks alone false-greened when README claimed retries the scaffold omitted.
+  assert.equal(
+    extractFirstTsFence(init),
+    normalizeGeneratedSource(generatedContents),
+    'README What Init Creates ```ts sample must equal scaffoldFiles({ platform: "ios" }) config',
+  );
 });
 
 test("mocking docs do not promote top-level fixed-port mock startup in config", () => {

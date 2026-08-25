@@ -229,6 +229,7 @@ export default defineConfig({
     autoSelectBootedSimulator: true,
   },
   mochaTimeout: 240_000,
+  // A retry starts a fresh Appium session, which is safer than continuing a dead WDA/UIAutomator2 session.
   specFileRetries: 1,
   specFileRetriesDelay: 2,
   projects: [

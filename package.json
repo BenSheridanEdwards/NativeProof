@@ -61,7 +61,7 @@
     "@wdio/local-runner": "^9.29.1",
     "@wdio/mocha-framework": "^9.29.1",
     "@wdio/spec-reporter": "^9.29.1",
-    "appium": "^3.5.2",
+    "appium": "^3.7.0",
     "tsx": "^4.22.4",
     "webdriverio": "^9.21.1",
     "ws": "^8.18.3"
@@ -78,6 +78,18 @@
     "node": ">=20"
   },
   "overrides": {
-    "serialize-javascript": "^7.0.6"
+    "serialize-javascript": "^7.0.6",
+    "@puppeteer/browsers": "^3.2.1",
+    "body-parser": "^2.3.0",
+    "brace-expansion@1": "^1.1.18",
+    "brace-expansion@2": "^2.1.4",
+    "brace-expansion@5": "^5.0.9",
+    "deepmerge-ts": "^8.0.2",
+    "fast-uri": "^3.1.6",
+    "ip-address": "^10.7.0",
+    "js-yaml": "^4.3.2",
+    "shell-quote": "^1.10.0",
+    "undici@6": "^6.28.0",
+    "undici@7": "^7.29.0"
   }
 }

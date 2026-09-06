@@ -17,7 +17,10 @@ stdlib or native platform features before adding abstractions or dependencies.
 
 Before opening, updating, or marking a PR ready, read
 `.agents/DEFINITION_OF_DONE.md` and
-`.agents/skills/pr-inline-screenshot-proof/SKILL.md`.
+`.agents/skills/pr-inline-screenshot-proof/SKILL.md`. For a non-trivial PR,
+also read `.claude/skills/show-me/NATIVEPROOF.md` with the upstream show-me
+skill and choose the smallest source-verified view that removes review
+ambiguity.
 
 - Screenshot proof must be committed to the branch and embedded inline in the PR
   body with `![alt](...png?raw=1)`.

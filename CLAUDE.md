@@ -21,6 +21,9 @@ Read the matching skill in `.agents/skills/` before these tasks:
 - `device-lane-proof` — device/Appium behaviour changes and on-device screenshot proof.
 - `release-changelog` — version bumps, CHANGELOG entries, cutting a release.
 - `pr-inline-screenshot-proof` — embedding proof inline in any PR body.
+- `show-me` — for a non-trivial PR, read
+  `.claude/skills/show-me/NATIVEPROOF.md` with the upstream skill and choose the
+  smallest source-verified view that removes review ambiguity.
 
 ## PR Proof Law
 

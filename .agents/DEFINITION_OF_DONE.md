@@ -24,6 +24,9 @@ A NativeProof change is done only when the local proof matches the claim.
 - Include exact commands run and whether they passed.
 - Include generated-project or device proof when the change affects those paths.
 - Do not mark a PR ready while GitHub checks are queued or running.
+- For a non-trivial PR, include the smallest source-verified view that removes
+  review ambiguity. A view explains evidence. It never replaces tests,
+  screenshots, reports, source links, warnings, or uncertainty.
 
 ## Inline PR Proof Law
 

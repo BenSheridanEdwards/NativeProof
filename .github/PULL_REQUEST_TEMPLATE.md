@@ -8,6 +8,12 @@
 - [ ] `npm test`
 - [ ] Generated project/device proof, or N/A:
 
+## Reviewer view
+
+- Smallest source-verified view for a non-trivial PR, or `Not applicable` with
+  the reason for a trivial PR:
+- Source files, symbols, states, or commands that verify the view:
+
 ## Risk
 
 - 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -282,24 +282,93 @@ test("CLI grep overrides config grep without replacing other Mocha options", () 
   });
 });
 
-test("composeAfterTest captures failures before the consumer hook and keeps capture best-effort", async () => {
+test("composeAfterTest reports exact saved failure evidence before the consumer hook", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-failure-evidence-"));
   const events: string[] = [];
+  try {
+    const pngPath = path.join(dir, "failure.png");
+    const xmlPath = path.join(dir, "failure.xml");
+    const records: unknown[] = [];
+    const hook = composeAfterTest(
+      async () => {
+        events.push("consumer");
+      },
+      async () => {
+        events.push("capture");
+        writeFileSync(pngPath, "png");
+        writeFileSync(xmlPath, "<source />");
+        return { pngPath, xmlPath };
+      },
+      {
+        project: "ios",
+        onFailureEvidence(record) {
+          events.push("evidence");
+          records.push(record);
+        },
+      },
+    );
+
+    await hook(
+      {
+        title: "fails",
+        parent: "suite",
+        file: "/proj/tests/login.spec.ts",
+        fullName: "suite fails",
+      },
+      {},
+      { passed: false, retries: { attempts: 1 } },
+    );
+    assert.deepEqual(events, ["capture", "evidence", "consumer"]);
+    assert.deepEqual(records, [
+      {
+        project: "ios",
+        file: "/proj/tests/login.spec.ts",
+        fullName: "suite fails",
+        attempt: 1,
+        pngPath,
+        xmlPath,
+      },
+    ]);
+    assert.equal(existsSync(pngPath), true);
+    assert.equal(existsSync(xmlPath), true);
+
+    events.length = 0;
+    await hook({ title: "passes", parent: "suite" }, {}, { passed: true });
+    assert.deepEqual(events, ["consumer"]);
+    assert.equal(records.length, 1, "passing tests emit no failure-evidence callback");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("composeAfterTest reports no fictitious paths when capture fails and preserves the failure", async () => {
+  const events: string[] = [];
+  const result = { passed: false, retries: { attempts: 0 } };
+  let consumerResult: unknown;
   const hook = composeAfterTest(
-    async () => {
+    async (_test, _context, receivedResult) => {
       events.push("consumer");
+      consumerResult = receivedResult;
     },
     async () => {
       events.push("capture");
       throw new Error("device disconnected during evidence capture");
     },
+    {
+      project: "android",
+      onFailureEvidence() {
+        events.push("evidence");
+      },
+    },
   );
 
-  await hook({ title: "fails", parent: "suite" }, {}, { passed: false });
+  await hook(
+    { title: "fails", parent: "suite", file: "/proj/fail.spec.ts", fullName: "suite fails" },
+    {},
+    result,
+  );
   assert.deepEqual(events, ["capture", "consumer"]);
-
-  events.length = 0;
-  await hook({ title: "passes", parent: "suite" }, {}, { passed: true });
-  assert.deepEqual(events, ["consumer"]);
+  assert.equal(consumerResult, result);
 });
 
 test("buildWdioConfig lets nativeproof.config.ts own the artifact directory", async () => {
@@ -336,7 +405,7 @@ test("buildWdioConfig adds a built-in evidence-on-failure afterTest hook", async
   await afterTest({ title: "t", parent: "p" }, {}, { passed: false });
 });
 
-test("failureEvidenceName builds a filesystem-safe, capped and unique prefix", () => {
+test("failureEvidenceName is safe, capped and unique across file, project and retry identity", () => {
   assert.match(
     failureEvidenceName({ parent: "Room · onboarding", title: "Accept is inert!" }),
     /^failure-Room_onboarding-Accept_is_inert_-[a-f0-9]{8}$/,
@@ -346,6 +415,22 @@ test("failureEvidenceName builds a filesystem-safe, capped and unique prefix", (
   assert.ok(first.length <= 120);
   assert.ok(second.length <= 120);
   assert.notEqual(first, second);
+
+  const testIdentity = {
+    parent: "Login",
+    title: "rejects bad password",
+    fullName: "Login rejects bad password",
+    file: "/proj/tests/login.spec.ts",
+    project: "android",
+    attempt: 0,
+  };
+  const identities = [
+    testIdentity,
+    { ...testIdentity, file: "/proj/tests/admin-login.spec.ts" },
+    { ...testIdentity, project: "ios" },
+    { ...testIdentity, attempt: 1 },
+  ];
+  assert.equal(new Set(identities.map(failureEvidenceName)).size, identities.length);
 });
 
 test("findConfigFile locates nativeproof.config.* via the injected exists check", () => {

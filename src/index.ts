@@ -20,6 +20,8 @@ export { defineApp } from "./app.js";
 export type {
   AppiumOptions,
   DeviceProject,
+  FailureEvidence,
+  FailureEvidenceCallback,
   NativeProofConfig,
   RunnerAfterTestHook,
   RunnerConfig,

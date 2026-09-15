@@ -65,16 +65,26 @@ export async function captureScreenshot(filename: string): Promise<string> {
   return target;
 }
 
-/** Capture a screenshot + redacted source pair under one prefix; returns the source. */
-export async function captureState(prefix: string): Promise<string> {
+export interface CapturedStatePaths {
+  pngPath: string;
+  xmlPath: string;
+}
+
+/** @internal Capture a screenshot + redacted source pair and return only paths written successfully. */
+export async function captureStatePaths(prefix: string): Promise<CapturedStatePaths & { source: string }> {
   const source = await browser.getPageSource().catch((err: unknown) => {
     // A failed capture must not look like a clean empty screen in the evidence trail.
     console.warn(`[nativeproof] getPageSource failed during captureState("${prefix}"): ${err}`);
     return "";
   });
-  await captureScreenshot(`${prefix}.png`);
-  await captureText(`${prefix}.xml`, source);
-  return source;
+  const pngPath = await captureScreenshot(`${prefix}.png`);
+  const xmlPath = await captureText(`${prefix}.xml`, source);
+  return { source, pngPath, xmlPath };
+}
+
+/** Capture a screenshot + redacted source pair under one prefix; returns the source. */
+export async function captureState(prefix: string): Promise<string> {
+  return (await captureStatePaths(prefix)).source;
 }
 
 /**
@@ -83,8 +93,23 @@ export async function captureState(prefix: string): Promise<string> {
  * truncation collisions, and capped at 120 chars. Used by the runner's built-in on-failure
  * capture so a failing spec leaves a screenshot + source pair with no per-spec wiring.
  */
-export function failureEvidenceName(test: { parent: string; title: string }): string {
+export function failureEvidenceName(test: {
+  parent: string;
+  title: string;
+  project?: string;
+  file?: string;
+  fullName?: string;
+  attempt?: number;
+}): string {
   const raw = `failure-${test.parent}-${test.title}`;
-  const suffix = `-${createHash("sha1").update(raw).digest("hex").slice(0, 8)}`;
+  const identity = [
+    test.project ?? "",
+    test.file ?? "",
+    test.fullName ?? "",
+    String(test.attempt ?? 0),
+    test.parent,
+    test.title,
+  ].join("\0");
+  const suffix = `-${createHash("sha1").update(identity).digest("hex").slice(0, 8)}`;
   return `${raw.replace(/[^\w.-]+/g, "_").slice(0, 120 - suffix.length)}${suffix}`;
 }

@@ -282,9 +282,37 @@ test("CLI grep overrides config grep without replacing other Mocha options", () 
   });
 });
 
+test("an explicit empty CLI grep clears config grep without replacing other Mocha options", () => {
+  const wdio = buildWdioConfig(
+    {
+      projects,
+      mochaOpts: { grep: "@regression", retries: 2, timeout: 20_000 },
+    },
+    { grep: "" },
+    "/p",
+  );
+
+  assert.deepEqual(wdio.mochaOpts, {
+    ui: "bdd",
+    timeout: 20_000,
+    grep: "",
+    retries: 2,
+  });
+});
+
 test("composeAfterTest reports exact saved failure evidence before the consumer hook", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-failure-evidence-"));
   const events: string[] = [];
+  const runnerTest = {
+    type: "test",
+    title: "fails",
+    parent: "suite",
+    fullTitle: "suite fails",
+    fullName: "suite fails",
+    pending: false,
+    file: "/proj/tests/login.spec.ts",
+    ctx: {},
+  };
   try {
     const pngPath = path.join(dir, "failure.png");
     const xmlPath = path.join(dir, "failure.xml");
@@ -309,14 +337,15 @@ test("composeAfterTest reports exact saved failure evidence before the consumer 
     );
 
     await hook(
-      {
-        title: "fails",
-        parent: "suite",
-        file: "/proj/tests/login.spec.ts",
-        fullName: "suite fails",
-      },
+      runnerTest,
       {},
-      { passed: false, retries: { attempts: 1 } },
+      {
+        passed: false,
+        duration: 1,
+        retries: { limit: 1, attempts: 1 },
+        exception: "failure",
+        status: "failed",
+      },
     );
     assert.deepEqual(events, ["capture", "evidence", "consumer"]);
     assert.deepEqual(records, [
@@ -333,7 +362,17 @@ test("composeAfterTest reports exact saved failure evidence before the consumer 
     assert.equal(existsSync(xmlPath), true);
 
     events.length = 0;
-    await hook({ title: "passes", parent: "suite" }, {}, { passed: true });
+    await hook(
+      { ...runnerTest, title: "passes", fullTitle: "suite passes", fullName: "suite passes" },
+      {},
+      {
+        passed: true,
+        duration: 1,
+        retries: { limit: 1, attempts: 0 },
+        exception: "",
+        status: "passed",
+      },
+    );
     assert.deepEqual(events, ["consumer"]);
     assert.equal(records.length, 1, "passing tests emit no failure-evidence callback");
   } finally {
@@ -343,7 +382,23 @@ test("composeAfterTest reports exact saved failure evidence before the consumer 
 
 test("composeAfterTest reports no fictitious paths when capture fails and preserves the failure", async () => {
   const events: string[] = [];
-  const result = { passed: false, retries: { attempts: 0 } };
+  const runnerTest = {
+    type: "test",
+    title: "fails",
+    parent: "suite",
+    fullTitle: "suite fails",
+    fullName: "suite fails",
+    pending: false,
+    file: "/proj/fail.spec.ts",
+    ctx: {},
+  };
+  const result = {
+    passed: false,
+    duration: 1,
+    retries: { limit: 0, attempts: 0 },
+    exception: "failure",
+    status: "failed",
+  };
   let consumerResult: unknown;
   const hook = composeAfterTest(
     async (_test, _context, receivedResult) => {
@@ -362,11 +417,7 @@ test("composeAfterTest reports no fictitious paths when capture fails and preser
     },
   );
 
-  await hook(
-    { title: "fails", parent: "suite", file: "/proj/fail.spec.ts", fullName: "suite fails" },
-    {},
-    result,
-  );
+  await hook(runnerTest, {}, result);
   assert.deepEqual(events, ["capture", "consumer"]);
   assert.equal(consumerResult, result);
 });

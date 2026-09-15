@@ -1220,7 +1220,7 @@ export function runnerEnv(args: CliArgs, baseEnv: NodeJS.ProcessEnv = process.en
   if (args.platform) env.NATIVEPROOF_PLATFORM = args.platform;
   if (args.project) env.NATIVEPROOF_PROJECT = args.project;
   if (args.spec) env.NATIVEPROOF_SPEC = args.spec;
-  if (args.grep) env.NATIVEPROOF_GREP = args.grep;
+  if (args.grep !== undefined) env.NATIVEPROOF_GREP = args.grep;
   return env;
 }
 

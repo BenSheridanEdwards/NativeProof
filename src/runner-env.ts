@@ -43,6 +43,6 @@ export function runnerEnvFromProcess(
     if (spec) selection.spec = spec;
   }
   const grep = env.NATIVEPROOF_GREP;
-  if (grep) selection.grep = grep;
+  if (grep !== undefined) selection.grep = grep;
   return selection;
 }

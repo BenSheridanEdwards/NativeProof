@@ -44,3 +44,7 @@ test("runner env warns when legacy bare vars are used", () => {
     "nativeproof: SPEC is deprecated for runner selection; use NATIVEPROOF_SPEC instead",
   ]);
 });
+
+test("runner env preserves a defined empty grep override", () => {
+  assert.deepEqual(runnerEnvFromProcess({ NATIVEPROOF_GREP: "" }), { grep: "" });
+});

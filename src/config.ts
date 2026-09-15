@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import type { Frameworks, Reporters, Services } from "@wdio/types";
 import type { App } from "./app.js";
 import { captureState, failureEvidenceName, setArtifactDir } from "./evidence.js";
 
@@ -136,6 +137,39 @@ function hostDeviceDefaults(config: RunnerConfig, project: DeviceProject): Recor
     : {};
 }
 
+/** Runner-native Mocha options forwarded without inventing a NativeProof test DSL. */
+export interface RunnerMochaOptions {
+  require?: string[];
+  compilers?: string[];
+  allowUncaught?: boolean;
+  asyncOnly?: boolean;
+  bail?: boolean;
+  checkLeaks?: boolean;
+  delay?: boolean;
+  fgrep?: string;
+  forbidOnly?: boolean;
+  forbidPending?: boolean;
+  fullTrace?: boolean;
+  global?: string[];
+  grep?: RegExp | string;
+  invert?: boolean;
+  retries?: number;
+  timeout?: number | string;
+  ui?: "bdd" | "tdd" | "qunit" | "exports";
+}
+
+/** A built-in or installed WebdriverIO reporter, optionally with reporter-native options. */
+export type RunnerReporter = Reporters.ReporterEntry;
+
+/** WebdriverIO's complete runner test payload. */
+export type RunnerTest = Frameworks.Test;
+
+/** WebdriverIO's complete runner result payload, including retries, duration, status, and error. */
+export type RunnerTestResult = Frameworks.TestResult;
+
+/** Consumer hook composed after NativeProof's built-in failure evidence capture. */
+export type RunnerAfterTestHook = NonNullable<Services.HookFunctions["afterTest"]>;
+
 /** The device/run config the CLI turns into a WebdriverIO run. */
 export interface RunnerConfig {
   /** Directory holding the specs (default "tests"). */
@@ -150,6 +184,18 @@ export interface RunnerConfig {
   };
   /** Per-test timeout in ms (default 240000). */
   mochaTimeout?: number;
+  /** Runner-native Mocha configuration. CLI `--grep` overrides only `mochaOpts.grep`. */
+  mochaOpts?: RunnerMochaOptions;
+  /** Number of retries for a failed spec file. */
+  specFileRetries?: number;
+  /** Delay in seconds before retrying a failed spec file. */
+  specFileRetriesDelay?: number;
+  /** Defer failed spec retries until the end of the queue. */
+  specFileRetriesDeferred?: boolean;
+  /** WebdriverIO reporters. Defaults to NativeProof's spec reporter. */
+  reporters?: RunnerReporter[];
+  /** Consumer lifecycle hook; failure capture still runs first. */
+  afterTest?: RunnerAfterTestHook;
   /**
    * WebdriverIO pass-throughs for tuning real-device runs. Each is forwarded only when set, so
    * WebdriverIO's own defaults apply otherwise. Slow software-GPU emulators in particular often
@@ -185,6 +231,7 @@ export interface RunnerEnv {
   platform?: string;
   project?: string;
   spec?: string;
+  grep?: string;
 }
 
 /** Pick the project by explicit name, else by platform (loudly failing on no match), else the first one. */
@@ -256,6 +303,21 @@ export function projectCapabilities(config: RunnerConfig, project: DeviceProject
   };
 }
 
+type FailureCapture = (prefix: string) => Promise<unknown>;
+
+/** @internal Compose public hooks without allowing them to replace default evidence capture. */
+export function composeAfterTest(
+  consumerHook?: RunnerAfterTestHook,
+  captureFailure: FailureCapture = captureState,
+): RunnerAfterTestHook {
+  return async (test, context, result) => {
+    if (!result.passed) {
+      await captureFailure(failureEvidenceName(test)).catch(() => {});
+    }
+    await consumerHook?.(test, context, result);
+  };
+}
+
 /**
  * Translate an NativeProof config into a WebdriverIO `config` object.
  */
@@ -280,20 +342,18 @@ export function buildWdioConfig(
     maxInstances: 1,
     capabilities: [capabilities],
     framework: "mocha",
-    reporters: ["spec"],
-    mochaOpts: { ui: "bdd", timeout: config.mochaTimeout ?? 240_000 },
+    reporters: config.reporters ?? ["spec"],
+    mochaOpts: {
+      ui: "bdd",
+      timeout: config.mochaTimeout ?? 240_000,
+      ...config.mochaOpts,
+      ...(env.grep !== undefined ? { grep: env.grep } : {}),
+    },
     // Evidence on failure, out of the box: on a failed behaviour, snapshot a screenshot +
     // redacted page source into the artifact dir, named after the spec. Best-effort — a
     // capture error never masks the real failure — and consumers get it without writing
     // their own afterTest hook.
-    afterTest: async (
-      test: { title: string; parent: string },
-      _context: unknown,
-      result: { passed: boolean },
-    ): Promise<void> => {
-      if (result.passed) return;
-      await captureState(failureEvidenceName(test)).catch(() => {});
-    },
+    afterTest: composeAfterTest(config.afterTest),
   };
   // Optional WebdriverIO tuning — forwarded only when the consumer set it, so wdio's defaults apply
   // otherwise (real emulators/simulators often need longer connection/wait timeouts than the defaults).
@@ -303,6 +363,10 @@ export function buildWdioConfig(
   if (config.waitforTimeout !== undefined) wdio.waitforTimeout = config.waitforTimeout;
   if (config.bail !== undefined) wdio.bail = config.bail;
   if (config.logLevel !== undefined) wdio.logLevel = config.logLevel;
+  if (config.specFileRetries !== undefined) wdio.specFileRetries = config.specFileRetries;
+  if (config.specFileRetriesDelay !== undefined) wdio.specFileRetriesDelay = config.specFileRetriesDelay;
+  if (config.specFileRetriesDeferred !== undefined)
+    wdio.specFileRetriesDeferred = config.specFileRetriesDeferred;
   return wdio;
 }
 

@@ -7,6 +7,7 @@ import type { App, ScreenFactories } from "../src/app.js";
 import {
   bootedIosSimulatorFromSimctl,
   buildWdioConfig,
+  composeAfterTest,
   defineConfig,
   findConfigFile,
   resolveProject,
@@ -224,6 +225,129 @@ test("buildWdioConfig forwards wdio tuning options only when set", () => {
   assert.equal(tuned.waitforTimeout, 15_000);
   assert.equal(tuned.bail, 0);
   assert.equal(tuned.logLevel, "warn");
+});
+
+test("buildWdioConfig forwards runner-native retries, reporters and Mocha options", () => {
+  const afterTest = async (): Promise<void> => {};
+  const wdio = buildWdioConfig(
+    {
+      projects,
+      specFileRetries: 2,
+      specFileRetriesDelay: 5,
+      specFileRetriesDeferred: false,
+      reporters: ["spec", ["junit", { outputDir: "reports" }]],
+      mochaOpts: {
+        grep: "@smoke",
+        invert: true,
+        retries: 1,
+        require: ["./tests/setup.ts"],
+        timeout: 30_000,
+      },
+      afterTest,
+    },
+    {},
+    "/p",
+  );
+
+  assert.equal(wdio.specFileRetries, 2);
+  assert.equal(wdio.specFileRetriesDelay, 5);
+  assert.equal(wdio.specFileRetriesDeferred, false);
+  assert.deepEqual(wdio.reporters, ["spec", ["junit", { outputDir: "reports" }]]);
+  assert.deepEqual(wdio.mochaOpts, {
+    ui: "bdd",
+    timeout: 30_000,
+    grep: "@smoke",
+    invert: true,
+    retries: 1,
+    require: ["./tests/setup.ts"],
+  });
+  assert.notEqual(wdio.afterTest, afterTest, "the user hook is composed instead of replacing capture");
+});
+
+test("CLI grep overrides config grep without replacing other Mocha options", () => {
+  const wdio = buildWdioConfig(
+    {
+      projects,
+      mochaOpts: { grep: "@regression", retries: 2, timeout: 20_000 },
+    },
+    { grep: "@smoke" },
+    "/p",
+  );
+
+  assert.deepEqual(wdio.mochaOpts, {
+    ui: "bdd",
+    timeout: 20_000,
+    grep: "@smoke",
+    retries: 2,
+  });
+});
+
+test("an explicit empty CLI grep clears config grep without replacing other Mocha options", () => {
+  const wdio = buildWdioConfig(
+    {
+      projects,
+      mochaOpts: { grep: "@regression", retries: 2, timeout: 20_000 },
+    },
+    { grep: "" },
+    "/p",
+  );
+
+  assert.deepEqual(wdio.mochaOpts, {
+    ui: "bdd",
+    timeout: 20_000,
+    grep: "",
+    retries: 2,
+  });
+});
+
+test("composeAfterTest captures failures before the consumer hook and keeps capture best-effort", async () => {
+  const events: string[] = [];
+  const runnerTest = {
+    type: "test",
+    title: "fails",
+    parent: "suite",
+    fullTitle: "suite fails",
+    fullName: "suite fails",
+    pending: false,
+    file: "tests/failure.spec.ts",
+    ctx: {},
+  };
+  const hook = composeAfterTest(
+    async () => {
+      events.push("consumer");
+    },
+    async () => {
+      events.push("capture");
+      throw new Error("device disconnected during evidence capture");
+    },
+  );
+
+  await hook(
+    runnerTest,
+    {},
+    {
+      passed: false,
+      duration: 1,
+      retries: { limit: 0, attempts: 0 },
+      exception: "failure",
+      status: "failed",
+    },
+  );
+  assert.deepEqual(events, ["capture", "consumer"]);
+
+  events.length = 0;
+  await hook(
+    { ...runnerTest, title: "passes", fullTitle: "suite passes", fullName: "suite passes" },
+    {},
+    {
+      passed: true,
+      duration: 1,
+      retries: { limit: 0, attempts: 0 },
+      exception: "",
+      status: "passed",
+    },
+  );
+  assert.deepEqual(events, ["consumer"]);
 });
 
 test("buildWdioConfig lets nativeproof.config.ts own the artifact directory", async () => {

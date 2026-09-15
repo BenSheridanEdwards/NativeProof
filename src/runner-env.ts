@@ -42,5 +42,7 @@ export function runnerEnvFromProcess(
     const spec = envValue(env, "NATIVEPROOF_SPEC", "SPEC", warn);
     if (spec) selection.spec = spec;
   }
+  const grep = env.NATIVEPROOF_GREP;
+  if (grep !== undefined) selection.grep = grep;
   return selection;
 }

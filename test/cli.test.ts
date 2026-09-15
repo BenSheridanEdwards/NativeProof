@@ -52,7 +52,7 @@ test("parseArgs defaults to the test command with sensible defaults", () => {
   assert.equal(args.initPlatform, undefined);
 });
 
-test("parseArgs reads platform, project, spec and --no-appium", () => {
+test("parseArgs reads platform, project, spec, grep and --no-appium", () => {
   const args = parseArgs([
     "test",
     "--platform",
@@ -61,12 +61,15 @@ test("parseArgs reads platform, project, spec and --no-appium", () => {
     "tablet",
     "--spec",
     "a.spec.ts",
+    "--grep",
+    "@smoke",
     "--no-appium",
   ]);
   assert.equal(args.platform, "ios");
   assert.equal(args.initPlatform, "ios");
   assert.equal(args.project, "tablet");
   assert.equal(args.spec, "a.spec.ts");
+  assert.equal(args.grep, "@smoke");
   assert.equal(args.startAppium, false);
 });
 
@@ -246,15 +249,27 @@ test("loadNativeProofConfig errors when the config has no default export", async
 
 test("helpText names the native E2E layer and version is semver", () => {
   assert.match(helpText(), /Playwright-feeling native mobile E2E/);
+  assert.match(helpText(), /--grep <pattern>/);
   assert.match(version(), /^\d+\.\d+\.\d+$/);
 });
 
-test("package carries the runtime reporter dependency used by generated WDIO config", () => {
+test("runnerEnv forwards grep through a NativeProof-prefixed variable", () => {
+  const env = runnerEnv(parseArgs(["--grep", "@smoke"]), {});
+  assert.equal(env.NATIVEPROOF_GREP, "@smoke");
+});
+
+test("runnerEnv lets an explicit empty --grep clear an inherited filter", () => {
+  const env = runnerEnv(parseArgs(["--grep", ""]), { NATIVEPROOF_GREP: "@inherited" });
+  assert.equal(env.NATIVEPROOF_GREP, "");
+});
+
+test("package carries the runtime reporter and public WDIO type dependencies", () => {
   const pkg = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8")) as {
     dependencies?: Record<string, string>;
   };
 
   assert.equal(typeof pkg.dependencies?.["@wdio/spec-reporter"], "string");
+  assert.equal(typeof pkg.dependencies?.["@wdio/types"], "string");
 });
 
 test("Appium driver helpers map platforms and parse installed-driver output", () => {

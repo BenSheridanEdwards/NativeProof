@@ -35,7 +35,7 @@ const tsxLoader = pathToFileURL(packageRequire.resolve("tsx")).href;
  *
  * It resolves `nativeproof.config.ts`, ensures the configured Appium server is up (starting one
  * if needed), and runs the suite with sane env (NATIVEPROOF_PLATFORM / NATIVEPROOF_SPEC /
- * NATIVEPROOF_PROJECT) — so a consumer types one command instead of remembering env vars and a runner invocation. The
+ * NATIVEPROOF_PROJECT / NATIVEPROOF_GREP) — so a consumer types one command instead of remembering env vars and a runner invocation. The
  * device/emulator itself is the environment (the mobile analogue of needing a display) and is left
  * to the host.
  */
@@ -47,6 +47,7 @@ export interface CliArgs {
   onboardPath: string | undefined;
   project: string | undefined;
   spec: string | undefined;
+  grep: string | undefined;
   startAppium: boolean;
 }
 
@@ -57,6 +58,7 @@ const DEFAULTS: CliArgs = {
   onboardPath: undefined,
   project: undefined,
   spec: undefined,
+  grep: undefined,
   startAppium: true,
 };
 
@@ -116,6 +118,9 @@ export function parseArgs(
     } else if (arg === "--spec") {
       i += 1;
       args.spec = valueFor(argv, i, "--spec");
+    } else if (arg === "--grep") {
+      i += 1;
+      args.grep = valueFor(argv, i, "--grep");
     } else if (arg === "--platform") {
       i += 1;
       const platform = valueFor(argv, i, "--platform");
@@ -164,6 +169,7 @@ export function helpText(): string {
     "  --platform <android|ios>   platform to run (sets NATIVEPROOF_PLATFORM)",
     "  --project <name>           run a named project (sets NATIVEPROOF_PROJECT)",
     "  --spec <glob>              run only matching specs (sets NATIVEPROOF_SPEC)",
+    "  --grep <pattern>           run tests matching Mocha grep (sets NATIVEPROOF_GREP)",
     "  --no-appium                do not auto-start an Appium server",
     "  -h, --help                 show this help",
     "  -v, --version              print the version",
@@ -1214,6 +1220,7 @@ export function runnerEnv(args: CliArgs, baseEnv: NodeJS.ProcessEnv = process.en
   if (args.platform) env.NATIVEPROOF_PLATFORM = args.platform;
   if (args.project) env.NATIVEPROOF_PROJECT = args.project;
   if (args.spec) env.NATIVEPROOF_SPEC = args.spec;
+  if (args.grep !== undefined) env.NATIVEPROOF_GREP = args.grep;
   return env;
 }
 

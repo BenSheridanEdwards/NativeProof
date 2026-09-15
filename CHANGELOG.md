@@ -32,6 +32,10 @@ and the runner-native, Playwright-feeling test surface.
   aborting polling on the first thrown source/read.
 - Failure evidence filenames include a stable suffix, preventing truncated
   failing-test names from overwriting each other's `.png` / `.xml` artifacts.
+- Public `captureState(prefix)` keeps its best-effort source-read fallback: it warns,
+  writes an empty XML snapshot alongside the screenshot, and resolves with `""`.
+  Internal `captureStatePaths` remains strict so source-read failures cannot emit a
+  misleading complete `onFailureEvidence` record.
 - `nativeproof inspect` skips transient input values when suggesting
   `getByText(...)` locators, so typed emails/search queries do not become
   brittle first-read selectors.

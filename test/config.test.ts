@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { _setGlobal } from "@wdio/globals";
 import type { App, ScreenFactories } from "../src/app.js";
 import {
   bootedIosSimulatorFromSimctl,
@@ -13,7 +14,13 @@ import {
   resolveProject,
   splitSpecGlobs,
 } from "../src/config.js";
-import { captureStatePaths, captureText, failureEvidenceName, setArtifactDir } from "../src/evidence.js";
+import {
+  captureState,
+  captureStatePaths,
+  captureText,
+  failureEvidenceName,
+  setArtifactDir,
+} from "../src/evidence.js";
 
 const android = {
   name: "android",
@@ -478,6 +485,65 @@ test("source-read rejection emits no complete evidence record and preserves the 
 
   assert.deepEqual(events, ["source", "consumer"]);
   assert.equal(consumerResult, result);
+});
+
+test("public captureState warns and writes best-effort evidence when source capture fails", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-public-capture-state-"));
+  const warnings: unknown[][] = [];
+  const previousWarn = console.warn;
+  try {
+    setArtifactDir(dir);
+    _setGlobal("browser", {
+      async getPageSource() {
+        throw new Error("page source unavailable");
+      },
+      async saveScreenshot(target: string) {
+        writeFileSync(target, "png");
+      },
+    });
+    console.warn = (...args: unknown[]) => warnings.push(args);
+
+    assert.equal(await captureState("legacy-source-failure"), "");
+    assert.equal(readFileSync(path.join(dir, "legacy-source-failure.png"), "utf8"), "png");
+    assert.equal(readFileSync(path.join(dir, "legacy-source-failure.xml"), "utf8"), "");
+    assert.deepEqual(warnings, [
+      [
+        '[nativeproof] getPageSource failed during captureState("legacy-source-failure"): Error: page source unavailable',
+      ],
+    ]);
+  } finally {
+    console.warn = previousWarn;
+    _setGlobal("browser", undefined);
+    setArtifactDir(undefined);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("public captureState does not misclassify screenshot failures as source failures", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-public-capture-state-"));
+  const screenshotError = new Error("screenshot unavailable");
+  const warnings: unknown[][] = [];
+  const previousWarn = console.warn;
+  try {
+    setArtifactDir(dir);
+    _setGlobal("browser", {
+      async getPageSource() {
+        return "<source />";
+      },
+      async saveScreenshot() {
+        throw screenshotError;
+      },
+    });
+    console.warn = (...args: unknown[]) => warnings.push(args);
+
+    await assert.rejects(() => captureState("screenshot-failure"), screenshotError);
+    assert.deepEqual(warnings, []);
+  } finally {
+    console.warn = previousWarn;
+    _setGlobal("browser", undefined);
+    setArtifactDir(undefined);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("buildWdioConfig lets nativeproof.config.ts own the artifact directory", async () => {

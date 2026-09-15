@@ -82,6 +82,19 @@ const defaultCaptureStateDependencies: CaptureStateDependencies = {
   captureText,
 };
 
+async function captureStateWithDependencies(
+  prefix: string,
+  dependencies: CaptureStateDependencies,
+  onSourceFailure?: (error: unknown) => string,
+): Promise<CapturedStatePaths & { source: string }> {
+  const source = onSourceFailure
+    ? await dependencies.getPageSource().catch(onSourceFailure)
+    : await dependencies.getPageSource();
+  const pngPath = await dependencies.captureScreenshot(`${prefix}.png`);
+  const xmlPath = await dependencies.captureText(`${prefix}.xml`, source);
+  return { source, pngPath, xmlPath };
+}
+
 /** @internal Capture a screenshot + redacted source pair and return only paths written successfully. */
 export async function captureStatePaths(
   prefix: string,
@@ -90,15 +103,17 @@ export async function captureStatePaths(
   // Reject the whole pair when source capture fails: an empty XML file would make a partial
   // capture look complete to structured evidence consumers. composeAfterTest keeps this
   // best-effort and preserves the original test failure + consumer hook invocation.
-  const source = await dependencies.getPageSource();
-  const pngPath = await dependencies.captureScreenshot(`${prefix}.png`);
-  const xmlPath = await dependencies.captureText(`${prefix}.xml`, source);
-  return { source, pngPath, xmlPath };
+  return captureStateWithDependencies(prefix, dependencies);
 }
 
 /** Capture a screenshot + redacted source pair under one prefix; returns the source. */
 export async function captureState(prefix: string): Promise<string> {
-  return (await captureStatePaths(prefix)).source;
+  return (
+    await captureStateWithDependencies(prefix, defaultCaptureStateDependencies, (error) => {
+      console.warn(`[nativeproof] getPageSource failed during captureState("${prefix}"): ${error}`);
+      return "";
+    })
+  ).source;
 }
 
 /**

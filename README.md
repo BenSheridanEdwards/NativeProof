@@ -332,6 +332,10 @@ export default defineConfig({
   },
   specFileRetries: 2, // retry a failed spec file
   reporters: ["spec", ["junit", { outputDir: "reports" }]],
+  async onFailureEvidence({ project, file, fullName, attempt, pngPath, xmlPath }) {
+    // Attach or index the exact files NativeProof successfully saved for this attempt.
+    console.log({ project, file, fullName, attempt, pngPath, xmlPath });
+  },
   async afterTest(test, _context, result) {
     // NativeProof still captures its default failure evidence before this hook runs.
     console.log(`${test.parent} > ${test.title}: ${result.passed ? "passed" : "failed"}`);

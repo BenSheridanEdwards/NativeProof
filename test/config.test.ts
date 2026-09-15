@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { _setGlobal } from "@wdio/globals";
 import type { App, ScreenFactories } from "../src/app.js";
 import {
   bootedIosSimulatorFromSimctl,
@@ -13,7 +14,13 @@ import {
   resolveProject,
   splitSpecGlobs,
 } from "../src/config.js";
-import { captureText, failureEvidenceName, setArtifactDir } from "../src/evidence.js";
+import {
+  captureState,
+  captureStatePaths,
+  captureText,
+  failureEvidenceName,
+  setArtifactDir,
+} from "../src/evidence.js";
 
 const android = {
   name: "android",
@@ -300,7 +307,8 @@ test("an explicit empty CLI grep clears config grep without replacing other Moch
   });
 });
 
-test("composeAfterTest captures failures before the consumer hook and keeps capture best-effort", async () => {
+test("composeAfterTest reports exact saved failure evidence before the consumer hook", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-failure-evidence-"));
   const events: string[] = [];
   const runnerTest = {
     type: "test",
@@ -309,45 +317,233 @@ test("composeAfterTest captures failures before the consumer hook and keeps capt
     fullTitle: "suite fails",
     fullName: "suite fails",
     pending: false,
-    file: "tests/failure.spec.ts",
+    file: "/proj/tests/login.spec.ts",
     ctx: {},
   };
+  try {
+    const pngPath = path.join(dir, "failure.png");
+    const xmlPath = path.join(dir, "failure.xml");
+    const records: unknown[] = [];
+    const hook = composeAfterTest(
+      async () => {
+        events.push("consumer");
+      },
+      async () => {
+        events.push("capture");
+        writeFileSync(pngPath, "png");
+        writeFileSync(xmlPath, "<source />");
+        return { pngPath, xmlPath };
+      },
+      {
+        project: "ios",
+        onFailureEvidence(record) {
+          events.push("evidence");
+          records.push(record);
+        },
+      },
+    );
+
+    await hook(
+      runnerTest,
+      {},
+      {
+        passed: false,
+        duration: 1,
+        retries: { limit: 1, attempts: 1 },
+        exception: "failure",
+        status: "failed",
+      },
+    );
+    assert.deepEqual(events, ["capture", "evidence", "consumer"]);
+    assert.deepEqual(records, [
+      {
+        project: "ios",
+        file: "/proj/tests/login.spec.ts",
+        fullName: "suite fails",
+        attempt: 1,
+        pngPath,
+        xmlPath,
+      },
+    ]);
+    assert.equal(existsSync(pngPath), true);
+    assert.equal(existsSync(xmlPath), true);
+
+    events.length = 0;
+    await hook(
+      { ...runnerTest, title: "passes", fullTitle: "suite passes", fullName: "suite passes" },
+      {},
+      {
+        passed: true,
+        duration: 1,
+        retries: { limit: 1, attempts: 0 },
+        exception: "",
+        status: "passed",
+      },
+    );
+    assert.deepEqual(events, ["consumer"]);
+    assert.equal(records.length, 1, "passing tests emit no failure-evidence callback");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("composeAfterTest reports no fictitious paths when capture fails and preserves the failure", async () => {
+  const events: string[] = [];
+  const runnerTest = {
+    type: "test",
+    title: "fails",
+    parent: "suite",
+    fullTitle: "suite fails",
+    fullName: "suite fails",
+    pending: false,
+    file: "/proj/fail.spec.ts",
+    ctx: {},
+  };
+  const result = {
+    passed: false,
+    duration: 1,
+    retries: { limit: 0, attempts: 0 },
+    exception: "failure",
+    status: "failed",
+  };
+  let consumerResult: unknown;
   const hook = composeAfterTest(
-    async () => {
+    async (_test, _context, receivedResult) => {
       events.push("consumer");
+      consumerResult = receivedResult;
     },
     async () => {
       events.push("capture");
       throw new Error("device disconnected during evidence capture");
     },
-  );
-
-  await hook(
-    runnerTest,
-    {},
     {
-      passed: false,
-      duration: 1,
-      retries: { limit: 0, attempts: 0 },
-      exception: "failure",
-      status: "failed",
+      project: "android",
+      onFailureEvidence() {
+        events.push("evidence");
+      },
     },
   );
+
+  await hook(runnerTest, {}, result);
   assert.deepEqual(events, ["capture", "consumer"]);
+  assert.equal(consumerResult, result);
+});
 
-  events.length = 0;
-  await hook(
-    { ...runnerTest, title: "passes", fullTitle: "suite passes", fullName: "suite passes" },
-    {},
+test("source-read rejection emits no complete evidence record and preserves the failed result", async () => {
+  const events: string[] = [];
+  const sourceError = new Error("page source unavailable");
+  const captureFailure = async (prefix: string) =>
+    captureStatePaths(prefix, {
+      async getPageSource() {
+        events.push("source");
+        throw sourceError;
+      },
+      async captureScreenshot(filename) {
+        events.push(`screenshot:${filename}`);
+        return `/artifacts/${filename}`;
+      },
+      async captureText(filename) {
+        events.push(`source-file:${filename}`);
+        return `/artifacts/${filename}`;
+      },
+    });
+  const runnerTest = {
+    type: "test",
+    title: "fails",
+    parent: "suite",
+    fullTitle: "suite fails",
+    fullName: "suite fails",
+    pending: false,
+    file: "/proj/source-failure.spec.ts",
+    ctx: {},
+  };
+  const result = {
+    passed: false,
+    duration: 1,
+    retries: { limit: 0, attempts: 0 },
+    exception: "original failure",
+    status: "failed",
+  };
+  let consumerResult: unknown;
+  const hook = composeAfterTest(
+    async (_test, _context, receivedResult) => {
+      events.push("consumer");
+      consumerResult = receivedResult;
+    },
+    captureFailure,
     {
-      passed: true,
-      duration: 1,
-      retries: { limit: 0, attempts: 0 },
-      exception: "",
-      status: "passed",
+      project: "ios",
+      onFailureEvidence() {
+        events.push("evidence");
+      },
     },
   );
-  assert.deepEqual(events, ["consumer"]);
+
+  await assert.rejects(() => captureFailure("direct-source-failure"), sourceError);
+  events.length = 0;
+  await hook(runnerTest, {}, result);
+
+  assert.deepEqual(events, ["source", "consumer"]);
+  assert.equal(consumerResult, result);
+});
+
+test("public captureState warns and writes best-effort evidence when source capture fails", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-public-capture-state-"));
+  const warnings: unknown[][] = [];
+  const previousWarn = console.warn;
+  try {
+    setArtifactDir(dir);
+    _setGlobal("browser", {
+      async getPageSource() {
+        throw new Error("page source unavailable");
+      },
+      async saveScreenshot(target: string) {
+        writeFileSync(target, "png");
+      },
+    });
+    console.warn = (...args: unknown[]) => warnings.push(args);
+
+    assert.equal(await captureState("legacy-source-failure"), "");
+    assert.equal(readFileSync(path.join(dir, "legacy-source-failure.png"), "utf8"), "png");
+    assert.equal(readFileSync(path.join(dir, "legacy-source-failure.xml"), "utf8"), "");
+    assert.deepEqual(warnings, [
+      [
+        '[nativeproof] getPageSource failed during captureState("legacy-source-failure"): Error: page source unavailable',
+      ],
+    ]);
+  } finally {
+    console.warn = previousWarn;
+    _setGlobal("browser", undefined);
+    setArtifactDir(undefined);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("public captureState does not misclassify screenshot failures as source failures", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-public-capture-state-"));
+  const screenshotError = new Error("screenshot unavailable");
+  const warnings: unknown[][] = [];
+  const previousWarn = console.warn;
+  try {
+    setArtifactDir(dir);
+    _setGlobal("browser", {
+      async getPageSource() {
+        return "<source />";
+      },
+      async saveScreenshot() {
+        throw screenshotError;
+      },
+    });
+    console.warn = (...args: unknown[]) => warnings.push(args);
+
+    await assert.rejects(() => captureState("screenshot-failure"), screenshotError);
+    assert.deepEqual(warnings, []);
+  } finally {
+    console.warn = previousWarn;
+    _setGlobal("browser", undefined);
+    setArtifactDir(undefined);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("buildWdioConfig lets nativeproof.config.ts own the artifact directory", async () => {
@@ -384,16 +580,47 @@ test("buildWdioConfig adds a built-in evidence-on-failure afterTest hook", async
   await afterTest({ title: "t", parent: "p" }, {}, { passed: false });
 });
 
-test("failureEvidenceName builds a filesystem-safe, capped and unique prefix", () => {
+test("failureEvidenceName is safe, capped and unique across file, project and retry identity", () => {
   assert.match(
     failureEvidenceName({ parent: "Room · onboarding", title: "Accept is inert!" }),
-    /^failure-Room_onboarding-Accept_is_inert_-[a-f0-9]{8}$/,
+    /^failure-Room_onboarding-Accept_is_inert_-[a-f0-9]{64}$/,
   );
   const first = failureEvidenceName({ parent: "x".repeat(200), title: "one" });
   const second = failureEvidenceName({ parent: "x".repeat(200), title: "two" });
   assert.ok(first.length <= 120);
   assert.ok(second.length <= 120);
   assert.notEqual(first, second);
+
+  const testIdentity = {
+    parent: "Login",
+    title: "rejects bad password",
+    fullName: "Login rejects bad password",
+    file: "/proj/tests/login.spec.ts",
+    project: "android",
+    attempt: 0,
+  };
+  const identities = [
+    testIdentity,
+    { ...testIdentity, file: "/proj/tests/admin-login.spec.ts" },
+    { ...testIdentity, project: "ios" },
+    { ...testIdentity, attempt: 1 },
+  ];
+  assert.equal(new Set(identities.map(failureEvidenceName)).size, identities.length);
+});
+
+test("failureEvidenceName distinguishes the exact known 32-bit digest collision", () => {
+  const identity = {
+    parent: "Login",
+    title: "rejects bad password",
+    fullName: "Login rejects bad password",
+    project: "android",
+    attempt: 0,
+  };
+  const knownCollision = [
+    { ...identity, file: "/proj/tests/case-64394.spec.ts" },
+    { ...identity, file: "/proj/tests/case-84739.spec.ts" },
+  ].map(failureEvidenceName);
+  assert.notEqual(knownCollision[0], knownCollision[1]);
 });
 
 test("findConfigFile locates nativeproof.config.* via the injected exists check", () => {

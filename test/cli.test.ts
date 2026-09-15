@@ -258,12 +258,18 @@ test("runnerEnv forwards grep through a NativeProof-prefixed variable", () => {
   assert.equal(env.NATIVEPROOF_GREP, "@smoke");
 });
 
-test("package carries the runtime reporter dependency used by generated WDIO config", () => {
+test("runnerEnv lets an explicit empty --grep clear an inherited filter", () => {
+  const env = runnerEnv(parseArgs(["--grep", ""]), { NATIVEPROOF_GREP: "@inherited" });
+  assert.equal(env.NATIVEPROOF_GREP, "");
+});
+
+test("package carries the runtime reporter and public WDIO type dependencies", () => {
   const pkg = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8")) as {
     dependencies?: Record<string, string>;
   };
 
   assert.equal(typeof pkg.dependencies?.["@wdio/spec-reporter"], "string");
+  assert.equal(typeof pkg.dependencies?.["@wdio/types"], "string");
 });
 
 test("Appium driver helpers map platforms and parse installed-driver output", () => {

@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import type { Frameworks, Reporters, Services } from "@wdio/types";
 import type { App } from "./app.js";
 import { captureState, failureEvidenceName, setArtifactDir } from "./evidence.js";
 
@@ -158,25 +159,16 @@ export interface RunnerMochaOptions {
 }
 
 /** A built-in or installed WebdriverIO reporter, optionally with reporter-native options. */
-export type RunnerReporter = string | [string, Record<string, unknown>];
+export type RunnerReporter = Reporters.ReporterEntry;
 
-export interface RunnerTest {
-  title: string;
-  parent: string;
-  [key: string]: unknown;
-}
+/** WebdriverIO's complete runner test payload. */
+export type RunnerTest = Frameworks.Test;
 
-export interface RunnerTestResult {
-  passed: boolean;
-  [key: string]: unknown;
-}
+/** WebdriverIO's complete runner result payload, including retries, duration, status, and error. */
+export type RunnerTestResult = Frameworks.TestResult;
 
 /** Consumer hook composed after NativeProof's built-in failure evidence capture. */
-export type RunnerAfterTestHook = (
-  test: RunnerTest,
-  context: unknown,
-  result: RunnerTestResult,
-) => unknown | Promise<unknown>;
+export type RunnerAfterTestHook = NonNullable<Services.HookFunctions["afterTest"]>;
 
 /** The device/run config the CLI turns into a WebdriverIO run. */
 export interface RunnerConfig {
@@ -355,7 +347,7 @@ export function buildWdioConfig(
       ui: "bdd",
       timeout: config.mochaTimeout ?? 240_000,
       ...config.mochaOpts,
-      ...(env.grep ? { grep: env.grep } : {}),
+      ...(env.grep !== undefined ? { grep: env.grep } : {}),
     },
     // Evidence on failure, out of the box: on a failed behaviour, snapshot a screenshot +
     // redacted page source into the artifact dir, named after the spec. Best-effort — a

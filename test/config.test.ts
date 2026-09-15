@@ -282,8 +282,36 @@ test("CLI grep overrides config grep without replacing other Mocha options", () 
   });
 });
 
+test("an explicit empty CLI grep clears config grep without replacing other Mocha options", () => {
+  const wdio = buildWdioConfig(
+    {
+      projects,
+      mochaOpts: { grep: "@regression", retries: 2, timeout: 20_000 },
+    },
+    { grep: "" },
+    "/p",
+  );
+
+  assert.deepEqual(wdio.mochaOpts, {
+    ui: "bdd",
+    timeout: 20_000,
+    grep: "",
+    retries: 2,
+  });
+});
+
 test("composeAfterTest captures failures before the consumer hook and keeps capture best-effort", async () => {
   const events: string[] = [];
+  const runnerTest = {
+    type: "test",
+    title: "fails",
+    parent: "suite",
+    fullTitle: "suite fails",
+    fullName: "suite fails",
+    pending: false,
+    file: "tests/failure.spec.ts",
+    ctx: {},
+  };
   const hook = composeAfterTest(
     async () => {
       events.push("consumer");
@@ -294,11 +322,31 @@ test("composeAfterTest captures failures before the consumer hook and keeps capt
     },
   );
 
-  await hook({ title: "fails", parent: "suite" }, {}, { passed: false });
+  await hook(
+    runnerTest,
+    {},
+    {
+      passed: false,
+      duration: 1,
+      retries: { limit: 0, attempts: 0 },
+      exception: "failure",
+      status: "failed",
+    },
+  );
   assert.deepEqual(events, ["capture", "consumer"]);
 
   events.length = 0;
-  await hook({ title: "passes", parent: "suite" }, {}, { passed: true });
+  await hook(
+    { ...runnerTest, title: "passes", fullTitle: "suite passes", fullName: "suite passes" },
+    {},
+    {
+      passed: true,
+      duration: 1,
+      retries: { limit: 0, attempts: 0 },
+      exception: "",
+      status: "passed",
+    },
+  );
   assert.deepEqual(events, ["consumer"]);
 });
 

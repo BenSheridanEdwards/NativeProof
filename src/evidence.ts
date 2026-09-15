@@ -70,15 +70,29 @@ export interface CapturedStatePaths {
   xmlPath: string;
 }
 
+interface CaptureStateDependencies {
+  getPageSource(): Promise<string>;
+  captureScreenshot(filename: string): Promise<string>;
+  captureText(filename: string, contents: string): Promise<string>;
+}
+
+const defaultCaptureStateDependencies: CaptureStateDependencies = {
+  getPageSource: () => browser.getPageSource(),
+  captureScreenshot,
+  captureText,
+};
+
 /** @internal Capture a screenshot + redacted source pair and return only paths written successfully. */
-export async function captureStatePaths(prefix: string): Promise<CapturedStatePaths & { source: string }> {
-  const source = await browser.getPageSource().catch((err: unknown) => {
-    // A failed capture must not look like a clean empty screen in the evidence trail.
-    console.warn(`[nativeproof] getPageSource failed during captureState("${prefix}"): ${err}`);
-    return "";
-  });
-  const pngPath = await captureScreenshot(`${prefix}.png`);
-  const xmlPath = await captureText(`${prefix}.xml`, source);
+export async function captureStatePaths(
+  prefix: string,
+  dependencies: CaptureStateDependencies = defaultCaptureStateDependencies,
+): Promise<CapturedStatePaths & { source: string }> {
+  // Reject the whole pair when source capture fails: an empty XML file would make a partial
+  // capture look complete to structured evidence consumers. composeAfterTest keeps this
+  // best-effort and preserves the original test failure + consumer hook invocation.
+  const source = await dependencies.getPageSource();
+  const pngPath = await dependencies.captureScreenshot(`${prefix}.png`);
+  const xmlPath = await dependencies.captureText(`${prefix}.xml`, source);
   return { source, pngPath, xmlPath };
 }
 
@@ -89,7 +103,7 @@ export async function captureState(prefix: string): Promise<string> {
 
 /**
  * A filesystem-safe evidence prefix for a failed behaviour — `failure-<describe>-<test>`
- * with runs of non-word characters collapsed to `_`, a short stable suffix to avoid
+ * with runs of non-word characters collapsed to `_`, a full stable digest to avoid
  * truncation collisions, and capped at 120 chars. Used by the runner's built-in on-failure
  * capture so a failing spec leaves a screenshot + source pair with no per-spec wiring.
  */
@@ -110,6 +124,6 @@ export function failureEvidenceName(test: {
     test.parent,
     test.title,
   ].join("\0");
-  const suffix = `-${createHash("sha1").update(identity).digest("hex").slice(0, 8)}`;
+  const suffix = `-${createHash("sha256").update(identity).digest("hex")}`;
   return `${raw.replace(/[^\w.-]+/g, "_").slice(0, 120 - suffix.length)}${suffix}`;
 }

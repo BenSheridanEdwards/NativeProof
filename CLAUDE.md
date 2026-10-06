@@ -1,5 +1,7 @@
 # NativeProof Agent Instructions
 
+Read `AGENTS.md` for shared coding and review guidance.
+
 Read `.agents/NORTH_STAR_GOAL.md` and `.agents/DEFINITION_OF_DONE.md` before changing this repository.
 
 The short version: NativeProof should be Playwright-feeling native E2E, not a new test framework.

@@ -1,5 +1,7 @@
 # NativeProof Agent Instructions
 
+Before writing or reviewing code, read [coding_standards.md](coding_standards.md). Apply it alongside the existing repository-specific rules; preserve stricter local requirements. These are engineering standards, not a substitute for the product specification.
+
 Read `.agents/NORTH_STAR_GOAL.md` and `.agents/DEFINITION_OF_DONE.md` before changing this repository.
 
 The short version: NativeProof should be Playwright-feeling native E2E, not a new test framework.

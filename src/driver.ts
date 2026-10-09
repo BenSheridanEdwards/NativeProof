@@ -14,7 +14,7 @@ export type Platform = "android" | "ios";
 export interface Driver {
   /** The platform under test — selects how a cross-platform selector maps to source. */
   readonly platform: Platform;
-  /** Current page-source XML (best-effort; empty string on driver error). */
+  /** Current page-source XML; rejects when the driver cannot read the source. */
   source(): Promise<string>;
   /** Idle for the given milliseconds; also used as the poll interval by the waits. */
   pause(ms: number): Promise<void>;
@@ -55,13 +55,7 @@ export function wdioDriver(): Driver {
     get platform(): Platform {
       return browser.isAndroid ? "android" : "ios";
     },
-    source: () =>
-      browser.getPageSource().catch((err: unknown) => {
-        // Don't let a dead/unreachable session masquerade as "element not visible";
-        // surface it so a timeout's cause is visible, then degrade to empty source.
-        console.warn(`[nativeproof] getPageSource failed: ${err}`);
-        return "";
-      }),
+    source: () => browser.getPageSource(),
     pause: (ms: number) => browser.pause(ms),
     tapAt: (x: number, y: number) => tapAt(x, y),
     pressAt: async (x: number, y: number, options = {}) => {

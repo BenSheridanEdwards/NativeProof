@@ -3,6 +3,8 @@ import { afterEach, test } from "node:test";
 import { _setGlobal } from "@wdio/globals";
 import * as driverModule from "../src/driver.js";
 import { iosExactNodeXPath, iosNodeCanUseNativeClick, wdioDriver } from "../src/driver.js";
+import { expect } from "../src/expect.js";
+import { by, Locator } from "../src/locator.js";
 
 const ELEMENT_ID = "element-6066-11e4-a52e-4f735466cecf";
 
@@ -229,3 +231,68 @@ test("exactNodeXPath must not read placeholderValue as the value predicate", () 
   assert.match(selector, /@value='abc'/);
   assert.doesNotMatch(selector, /Enter ID/);
 });
+
+for (const platform of ["ios", "android"] as const) {
+  test(`wdioDriver ${platform} source failures cannot satisfy positive or negative assertions`, async () => {
+    const browser = fakeBrowser({ isAndroid: platform === "android" });
+    browser.getPageSource = async () => {
+      throw new Error(`${platform} source unavailable`);
+    };
+    _setGlobal("browser", browser, false);
+    const ready = new Locator(wdioDriver(), by.text("Ready"));
+
+    await assert.rejects(
+      () => expect(ready).toBeVisible({ timeout: 0 }),
+      new RegExp(`${platform} source unavailable`),
+    );
+    await assert.rejects(
+      () => expect(ready).not.toBeVisible({ timeout: 0 }),
+      new RegExp(`${platform} source unavailable`),
+    );
+  });
+
+  test(`wdioDriver ${platform} assertions recover before deciding presence or absence`, async () => {
+    const present =
+      platform === "ios"
+        ? '<XCUIElementTypeStaticText type="XCUIElementTypeStaticText" label="Ready" visible="true" x="0" y="0" width="10" height="10" />'
+        : '<node class="android.widget.TextView" text="Ready" displayed="true" bounds="[0,0][10,10]" />';
+    const browser = fakeBrowser({ isAndroid: platform === "android" });
+    let reads = 0;
+    browser.getPageSource = async () => {
+      reads += 1;
+      if (reads === 1) throw new Error(`${platform} transient source failure`);
+      return present;
+    };
+    _setGlobal("browser", browser, false);
+    const ready = new Locator(wdioDriver(), by.text("Ready"));
+
+    await expect(ready).toBeVisible({ timeout: 50, interval: 1 });
+    assert.equal(reads, 2);
+
+    reads = 0;
+    await assert.rejects(
+      () => expect(ready).not.toBeVisible({ timeout: 5, interval: 1 }),
+      /assertion not met/,
+    );
+    assert.ok(reads >= 2, `expected recovery read on ${platform}, got ${reads}`);
+
+    reads = 0;
+    browser.getPageSource = async () => {
+      reads += 1;
+      if (reads === 1) throw new Error(`${platform} transient source failure`);
+      return "<hierarchy />";
+    };
+    await expect(ready).not.toBeVisible({ timeout: 50, interval: 1 });
+    assert.equal(reads, 2);
+  });
+
+  test(`wdioDriver ${platform} distinguishes legitimate absence from source unavailability`, async () => {
+    const browser = fakeBrowser({ isAndroid: platform === "android" });
+    browser.getPageSource = async () => "<hierarchy />";
+    _setGlobal("browser", browser, false);
+    const ready = new Locator(wdioDriver(), by.text("Ready"));
+
+    await expect(ready).not.toBeVisible({ timeout: 0 });
+    await assert.rejects(() => expect(ready).toBeVisible({ timeout: 0 }), /assertion not met/);
+  });
+}

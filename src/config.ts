@@ -3,7 +3,13 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import type { Frameworks, Reporters, Services } from "@wdio/types";
 import type { App } from "./app.js";
-import { captureState, failureEvidenceName, setArtifactDir } from "./evidence.js";
+import {
+  type CapturedStatePaths,
+  captureState,
+  captureStatePaths,
+  failureEvidenceName,
+  setArtifactDir,
+} from "./evidence.js";
 
 /**
  * The Playwright-style config: one `nativeproof.config.ts` declares the app, the device
@@ -167,6 +173,19 @@ export type RunnerTest = Frameworks.Test;
 /** WebdriverIO's complete runner result payload, including retries, duration, status, and error. */
 export type RunnerTestResult = Frameworks.TestResult;
 
+/** Exact files produced by NativeProof's built-in capture for one failed test attempt. */
+export interface FailureEvidence {
+  project: string;
+  file: string;
+  fullName: string;
+  attempt: number;
+  pngPath: string;
+  xmlPath: string;
+}
+
+/** Reporter-neutral notification after built-in failure evidence is saved successfully. */
+export type FailureEvidenceCallback = (evidence: FailureEvidence) => unknown | Promise<unknown>;
+
 /** Consumer hook composed after NativeProof's built-in failure evidence capture. */
 export type RunnerAfterTestHook = NonNullable<Services.HookFunctions["afterTest"]>;
 
@@ -196,6 +215,8 @@ export interface RunnerConfig {
   reporters?: RunnerReporter[];
   /** Consumer lifecycle hook; failure capture still runs first. */
   afterTest?: RunnerAfterTestHook;
+  /** Called with the exact built-in PNG/XML files after a failed test capture succeeds. */
+  onFailureEvidence?: FailureEvidenceCallback;
   /**
    * WebdriverIO pass-throughs for tuning real-device runs. Each is forwarded only when set, so
    * WebdriverIO's own defaults apply otherwise. Slow software-GPU emulators in particular often
@@ -303,16 +324,50 @@ export function projectCapabilities(config: RunnerConfig, project: DeviceProject
   };
 }
 
-type FailureCapture = (prefix: string) => Promise<unknown>;
+type FailureCapture = (prefix: string) => Promise<CapturedStatePaths>;
+type FallbackCapture = (prefix: string) => Promise<unknown>;
 
 /** @internal Compose public hooks without allowing them to replace default evidence capture. */
 export function composeAfterTest(
   consumerHook?: RunnerAfterTestHook,
-  captureFailure: FailureCapture = captureState,
+  captureFailure: FailureCapture = captureStatePaths,
+  evidence: { project?: string; onFailureEvidence?: FailureEvidenceCallback } = {},
+  fallbackCapture: FallbackCapture = captureState,
 ): RunnerAfterTestHook {
   return async (test, context, result) => {
     if (!result.passed) {
-      await captureFailure(failureEvidenceName(test)).catch(() => {});
+      const attempt = result.retries?.attempts ?? 0;
+      const identity = {
+        project: evidence.project ?? "",
+        file: test.file ?? "",
+        fullName: test.fullName ?? `${test.parent} ${test.title}`,
+        attempt,
+        parent: test.parent,
+        title: test.title,
+      };
+      const prefix = failureEvidenceName(identity);
+      let paths: CapturedStatePaths | undefined;
+      try {
+        paths = await captureFailure(prefix);
+      } catch {
+        // The strict capture rejects a partial pair so no misleading record is reported. Fall
+        // back to best-effort captureState so the failure still leaves a screenshot and a warning.
+        await fallbackCapture(prefix).catch(() => {});
+      }
+      if (paths) {
+        try {
+          await evidence.onFailureEvidence?.({
+            project: identity.project,
+            file: identity.file,
+            fullName: identity.fullName,
+            attempt,
+            pngPath: paths.pngPath,
+            xmlPath: paths.xmlPath,
+          });
+        } catch {
+          // A consumer's evidence callback must never mask the original test failure.
+        }
+      }
     }
     await consumerHook?.(test, context, result);
   };
@@ -353,7 +408,10 @@ export function buildWdioConfig(
     // redacted page source into the artifact dir, named after the spec. Best-effort — a
     // capture error never masks the real failure — and consumers get it without writing
     // their own afterTest hook.
-    afterTest: composeAfterTest(config.afterTest),
+    afterTest: composeAfterTest(config.afterTest, captureStatePaths, {
+      project: project.name,
+      ...(config.onFailureEvidence ? { onFailureEvidence: config.onFailureEvidence } : {}),
+    }),
   };
   // Optional WebdriverIO tuning — forwarded only when the consumer set it, so wdio's defaults apply
   // otherwise (real emulators/simulators often need longer connection/wait timeouts than the defaults).

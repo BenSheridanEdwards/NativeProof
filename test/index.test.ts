@@ -15,6 +15,8 @@ import {
   defineApp,
   defineConfig,
   expect,
+  type FailureEvidence,
+  type FailureEvidenceCallback,
   type FailureInfo,
   type FlowContext,
   type FrameDirection,
@@ -60,6 +62,8 @@ type PublicTypeSmoke = {
   appium: AppiumOptions;
   device: DeviceContext;
   driver: Driver;
+  failureEvidence: FailureEvidence;
+  failureEvidenceCallback: FailureEvidenceCallback;
   failure: FailureInfo;
   flow: FlowContext;
   frameDirection: FrameDirection;

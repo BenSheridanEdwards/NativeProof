@@ -17,6 +17,7 @@ test("runner env prefers NativeProof-prefixed selection vars", () => {
         PLATFORM: "android",
         NATIVEPROOF_PROJECT: "tablet",
         NATIVEPROOF_SPEC: "tests/login.spec.ts",
+        NATIVEPROOF_GREP: "@smoke",
         SPEC: "tests/ambient.spec.ts",
       },
       { warn },
@@ -25,6 +26,7 @@ test("runner env prefers NativeProof-prefixed selection vars", () => {
       platform: "ios",
       project: "tablet",
       spec: "tests/login.spec.ts",
+      grep: "@smoke",
     },
   );
   assert.deepEqual(warnings, []);
@@ -41,4 +43,8 @@ test("runner env warns when legacy bare vars are used", () => {
     "nativeproof: PLATFORM is deprecated for runner selection; use NATIVEPROOF_PLATFORM instead",
     "nativeproof: SPEC is deprecated for runner selection; use NATIVEPROOF_SPEC instead",
   ]);
+});
+
+test("runner env preserves a defined empty grep override", () => {
+  assert.deepEqual(runnerEnvFromProcess({ NATIVEPROOF_GREP: "" }), { grep: "" });
 });

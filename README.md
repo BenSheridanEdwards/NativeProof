@@ -317,8 +317,30 @@ npx nativeproof --ios
 npx nativeproof --android
 npx nativeproof --project ios
 npx nativeproof --spec tests/login.spec.ts
+npx nativeproof --spec 'tests/{login,settings}.spec.ts' --grep '@smoke'
 npx nativeproof --no-appium
 ```
+
+Runner-native filtering, retries, and reporting stay in `nativeproof.config.ts`:
+
+```ts
+export default defineConfig({
+  projects: [/* device projects */],
+  mochaOpts: {
+    grep: "@smoke",
+    retries: 1, // retry a failed test
+  },
+  specFileRetries: 2, // retry a failed spec file
+  reporters: ["spec", ["junit", { outputDir: "reports" }]],
+  async afterTest(test, _context, result) {
+    // NativeProof still captures its default failure evidence before this hook runs.
+    console.log(`${test.parent} > ${test.title}: ${result.passed ? "passed" : "failed"}`);
+  },
+});
+```
+
+`--spec` accepts comma-separated globs and brace expansions for selecting files. `--grep` overrides
+only `mochaOpts.grep` for that invocation, so reporter and retry configuration remains unchanged.
 
 Bin aliases:
 

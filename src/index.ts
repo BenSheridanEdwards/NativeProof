@@ -17,7 +17,17 @@ export type {
   SessionContext,
 } from "./app.js";
 export { defineApp } from "./app.js";
-export type { AppiumOptions, DeviceProject, NativeProofConfig, RunnerConfig } from "./config.js";
+export type {
+  AppiumOptions,
+  DeviceProject,
+  NativeProofConfig,
+  RunnerAfterTestHook,
+  RunnerConfig,
+  RunnerMochaOptions,
+  RunnerReporter,
+  RunnerTest,
+  RunnerTestResult,
+} from "./config.js";
 export { defineConfig } from "./config.js";
 export type { Driver, Platform } from "./driver.js";
 export { wdioDriver } from "./driver.js";

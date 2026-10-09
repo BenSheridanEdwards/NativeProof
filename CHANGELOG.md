@@ -4,6 +4,23 @@ All notable changes to NativeProof are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+**Added**
+
+- `onFailureEvidence` in `nativeproof.config.ts` receives the project, spec file,
+  full test name, retry attempt and the exact `.png` / `.xml` paths each time the
+  built-in failure capture saves both files. When the page source cannot be read,
+  the callback is skipped and the built-in capture still saves the screenshot with
+  an empty XML snapshot and a warning.
+
+**Changed**
+
+- Failure evidence filenames now end in a full SHA-256 of the project, spec file,
+  full test name and retry attempt instead of an 8-character hash of the titles, so
+  retries and same-named tests in other files or projects no longer overwrite each
+  other. Names stay capped at 120 characters, so less of a long title survives.
+
 ## 1.0.0
 
 NativeProof's first stable release locks in the one-command init/onboard flow
@@ -32,10 +49,6 @@ and the runner-native, Playwright-feeling test surface.
   aborting polling on the first thrown source/read.
 - Failure evidence filenames include a stable suffix, preventing truncated
   failing-test names from overwriting each other's `.png` / `.xml` artifacts.
-- Public `captureState(prefix)` keeps its best-effort source-read fallback: it warns,
-  writes an empty XML snapshot alongside the screenshot, and resolves with `""`.
-  Internal `captureStatePaths` remains strict so source-read failures cannot emit a
-  misleading complete `onFailureEvidence` record.
 - `nativeproof inspect` skips transient input values when suggesting
   `getByText(...)` locators, so typed emails/search queries do not become
   brittle first-read selectors.

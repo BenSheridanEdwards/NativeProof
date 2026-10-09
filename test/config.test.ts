@@ -422,10 +422,13 @@ test("composeAfterTest reports no fictitious paths when capture fails and preser
         events.push("evidence");
       },
     },
+    async () => {
+      events.push("fallback");
+    },
   );
 
   await hook(runnerTest, {}, result);
-  assert.deepEqual(events, ["capture", "consumer"]);
+  assert.deepEqual(events, ["capture", "fallback", "consumer"]);
   assert.equal(consumerResult, result);
 });
 
@@ -477,14 +480,74 @@ test("source-read rejection emits no complete evidence record and preserves the 
         events.push("evidence");
       },
     },
+    async (prefix) => {
+      events.push(
+        `fallback:${prefix === failureEvidenceName({ project: "ios", file: runnerTest.file, fullName: runnerTest.fullName, attempt: 0, parent: "suite", title: "fails" })}`,
+      );
+    },
   );
 
   await assert.rejects(() => captureFailure("direct-source-failure"), sourceError);
   events.length = 0;
   await hook(runnerTest, {}, result);
 
-  assert.deepEqual(events, ["source", "consumer"]);
+  assert.deepEqual(events, ["source", "fallback:true", "consumer"]);
   assert.equal(consumerResult, result);
+});
+
+test("built-in failure hook still saves a screenshot and warns when the page source is unavailable", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "nativeproof-default-failure-capture-"));
+  const warnings: unknown[][] = [];
+  const records: unknown[] = [];
+  const previousWarn = console.warn;
+  try {
+    _setGlobal("browser", {
+      async getPageSource() {
+        throw new Error("page source unavailable");
+      },
+      async saveScreenshot(target: string) {
+        writeFileSync(target, "png");
+      },
+    });
+    console.warn = (...args: unknown[]) => warnings.push(args);
+    const wdio = buildWdioConfig(
+      {
+        projects,
+        artifacts: { dir },
+        onFailureEvidence(record) {
+          records.push(record);
+        },
+      },
+      { platform: "ios" },
+      "/proj",
+    );
+    const afterTest = wdio.afterTest as (t: unknown, c: unknown, r: unknown) => Promise<void>;
+
+    await afterTest(
+      { title: "fails", parent: "suite", file: "/proj/tests/a.spec.ts", fullName: "suite fails" },
+      {},
+      { passed: false, retries: { attempts: 0 } },
+    );
+
+    const prefix = failureEvidenceName({
+      project: "ios",
+      file: "/proj/tests/a.spec.ts",
+      fullName: "suite fails",
+      attempt: 0,
+      parent: "suite",
+      title: "fails",
+    });
+    assert.equal(readFileSync(path.join(dir, `${prefix}.png`), "utf8"), "png");
+    assert.equal(readFileSync(path.join(dir, `${prefix}.xml`), "utf8"), "");
+    assert.equal(warnings.length, 1);
+    assert.match(String(warnings[0]?.[0]), /getPageSource failed during captureState/);
+    assert.deepEqual(records, [], "a partial capture emits no complete evidence record");
+  } finally {
+    console.warn = previousWarn;
+    _setGlobal("browser", undefined);
+    setArtifactDir(undefined);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("public captureState warns and writes best-effort evidence when source capture fails", async () => {

@@ -5,6 +5,7 @@ import type { Frameworks, Reporters, Services } from "@wdio/types";
 import type { App } from "./app.js";
 import {
   type CapturedStatePaths,
+  captureState,
   captureStatePaths,
   failureEvidenceName,
   setArtifactDir,
@@ -324,12 +325,14 @@ export function projectCapabilities(config: RunnerConfig, project: DeviceProject
 }
 
 type FailureCapture = (prefix: string) => Promise<CapturedStatePaths>;
+type FallbackCapture = (prefix: string) => Promise<unknown>;
 
 /** @internal Compose public hooks without allowing them to replace default evidence capture. */
 export function composeAfterTest(
   consumerHook?: RunnerAfterTestHook,
   captureFailure: FailureCapture = captureStatePaths,
   evidence: { project?: string; onFailureEvidence?: FailureEvidenceCallback } = {},
+  fallbackCapture: FallbackCapture = captureState,
 ): RunnerAfterTestHook {
   return async (test, context, result) => {
     if (!result.passed) {
@@ -342,8 +345,17 @@ export function composeAfterTest(
         parent: test.parent,
         title: test.title,
       };
-      await captureFailure(failureEvidenceName(identity))
-        .then(async (paths) => {
+      const prefix = failureEvidenceName(identity);
+      let paths: CapturedStatePaths | undefined;
+      try {
+        paths = await captureFailure(prefix);
+      } catch {
+        // The strict capture rejects a partial pair so no misleading record is reported. Fall
+        // back to best-effort captureState so the failure still leaves a screenshot and a warning.
+        await fallbackCapture(prefix).catch(() => {});
+      }
+      if (paths) {
+        try {
           await evidence.onFailureEvidence?.({
             project: identity.project,
             file: identity.file,
@@ -352,8 +364,10 @@ export function composeAfterTest(
             pngPath: paths.pngPath,
             xmlPath: paths.xmlPath,
           });
-        })
-        .catch(() => {});
+        } catch {
+          // A consumer's evidence callback must never mask the original test failure.
+        }
+      }
     }
     await consumerHook?.(test, context, result);
   };

@@ -10,3 +10,5 @@ Registry/network failures are UNAVAILABLE and fail the run. Logs are retained
 as CI artifacts; temporary consumers are removed even on failure.
 
 This does not exercise Appium, device connections or application behaviour.
+Dependency lifecycle scripts are disabled during installation: this checks the
+packed JavaScript and types, not dependency setup hooks or driver downloads.

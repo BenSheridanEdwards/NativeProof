@@ -21,7 +21,7 @@ export function run(command: string, args: string[], cwd: string, failure = fals
   if (/EAI_AGAIN|ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|E401|E403|E404|E502|E503/.test(output)) {
     throw new Error(`UNAVAILABLE: ${output}`);
   }
-  assert.ifError(result.error);
+  if (result.error) throw new Error(`UNAVAILABLE: ${result.error.message}`);
   if (!failure) assert.equal(result.status, 0, output);
   return { status: result.status, output, stdout: result.stdout };
 }
@@ -51,7 +51,19 @@ export function consumer(fault?: "tsx" | "onboard") {
     const cwd = path.join(scratch, "consumer");
     mkdirSync(cwd);
     writeFileSync(path.join(cwd, "package.json"), JSON.stringify({ private: true, type: "module" }));
-    run("npm", ["install", "--no-audit", "--no-fund", tarball, "typescript@5.9.3", "@types/node@24"], cwd);
+    run(
+      "npm",
+      [
+        "install",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        tarball,
+        "typescript@5.9.3",
+        "@types/node@24",
+      ],
+      cwd,
+    );
     return { cwd, cleanup: () => rmSync(scratch, { recursive: true, force: true }) };
   } catch (error) {
     rmSync(scratch, { recursive: true, force: true });

@@ -53,7 +53,8 @@
     "check": "biome check . && tsc --noEmit",
     "test": "node --import tsx --test 'test/**/*.test.ts'",
     "prepare": "npm run build && husky",
-    "prepublishOnly": "npm run check && npm test"
+    "prepublishOnly": "npm run check && npm test",
+    "test:consumer": "node --import tsx --test --test-concurrency=1 test/consumer/*.consumer.ts"
   },
   "dependencies": {
     "@wdio/cli": "^9.29.1",

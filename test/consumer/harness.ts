@@ -11,8 +11,10 @@ mkdirSync(logs, { recursive: true });
 export function run(command: string, args: string[], cwd: string, failure = false) {
   const env = { ...process.env };
   delete env.NODE_PATH;
-  env.npm_config_prefix = path.join(cwd, ".prefix");
-  env.npm_config_cache = path.join(cwd, ".cache");
+  if (cwd !== root) {
+    env.npm_config_prefix = path.join(cwd, ".prefix");
+    env.npm_config_cache = path.join(cwd, ".cache");
+  }
   const result = spawnSync(command, args, { cwd, env, encoding: "utf8", timeout: 240000 });
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
   appendFileSync(path.join(logs, `${process.pid}.log`), `${command} ${args.join(" ")}\n${output}\n`);
@@ -21,16 +23,17 @@ export function run(command: string, args: string[], cwd: string, failure = fals
   }
   assert.ifError(result.error);
   if (!failure) assert.equal(result.status, 0, output);
-  return { status: result.status, output };
+  return { status: result.status, output, stdout: result.stdout };
 }
 export function consumer(fault?: "tsx" | "onboard") {
   const scratch = mkdtempSync(path.join(tmpdir(), "nativeproof-consumer-"));
   try {
     run("npm", ["run", "build"], root);
     const packed = JSON.parse(
-      run("npm", ["pack", "--json", "--pack-destination", scratch], root).output.trim(),
+      run("npm", ["pack", "--json", "--pack-destination", scratch], root).stdout.trim(),
     ) as { filename: string }[];
-    let tarball = path.join(scratch, packed[0]!.filename);
+    assert.ok(packed[0]);
+    let tarball = path.join(scratch, packed[0].filename);
     if (fault) {
       run("tar", ["-xzf", tarball, "-C", scratch], scratch);
       const pkgPath = path.join(scratch, "package", "package.json");

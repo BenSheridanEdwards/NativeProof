@@ -13,7 +13,6 @@ export function run(command: string, args: string[], cwd: string, failure = fals
   delete env.NODE_PATH;
   if (cwd !== root) {
     env.npm_config_prefix = path.join(cwd, ".prefix");
-    env.npm_config_cache = path.join(cwd, ".cache");
   }
   const result = spawnSync(command, args, { cwd, env, encoding: "utf8", timeout: 240000 });
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;

@@ -1,6 +1,6 @@
 Run `npm run test:consumer` after `npm ci`. The harness builds and packs the
 current checkout, records its SHA and tarball SHA256 in consumer-results, and
-installs into a fresh OS temporary directory with its own manifest, cache and
+installs into a fresh OS temporary directory with its own manifest and
 prefix and NODE_PATH removed. No producer node_modules is linked.
 
 This proves CLI help, iOS scaffolding, APK onboarding and public declaration

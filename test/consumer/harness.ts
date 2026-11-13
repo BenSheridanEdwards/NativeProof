@@ -54,6 +54,7 @@ export function consumer(fault?: "tsx" | "onboard") {
       "npm",
       [
         "install",
+        "--install-strategy=nested",
         "--ignore-scripts",
         "--no-audit",
         "--no-fund",

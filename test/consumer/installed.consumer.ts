@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { consumer, run } from "./harness.js";
@@ -12,9 +12,11 @@ test("packed CLI and declarations work in an independent install", () => {
     assert.match(run(bin("nativeproof"), ["--help"], cwd).output, /nativeproof/);
     run(bin("nativeproof-init"), ["--ios"], cwd);
     assert.match(readFileSync(path.join(cwd, "nativeproof.config.ts"), "utf8"), /ios/i);
-    writeFileSync(path.join(cwd, "Example.apk"), "");
-    run(bin("nativeproof-onboard"), ["./Example.apk"], cwd);
-    assert.match(readFileSync(path.join(cwd, "nativeproof.config.ts"), "utf8"), /Example\.apk/);
+    const android = path.join(cwd, "android");
+    mkdirSync(android);
+    writeFileSync(path.join(android, "Example.apk"), "");
+    run(bin("nativeproof-onboard"), ["./Example.apk"], android);
+    assert.match(readFileSync(path.join(android, "nativeproof.config.ts"), "utf8"), /Example\.apk/);
     writeFileSync(
       path.join(cwd, "import.ts"),
       'import * as nativeproof from "nativeproof"; void nativeproof;\n',

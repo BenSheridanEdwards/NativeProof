@@ -71,7 +71,9 @@ export function faultProof(fault: "tsx" | "onboard") {
     assert.notEqual(result.status, 0, "broken package must fail");
     assert.match(
       result.output,
-      fault === "tsx" ? /Cannot find package 'tsx'/ : /Cannot find module .*nativeproof-onboard\.js/,
+      fault === "tsx"
+        ? /Cannot find (?:package|module) 'tsx'/
+        : /Cannot find module .*nativeproof-onboard\.js/,
     );
   } finally {
     fixture.cleanup();

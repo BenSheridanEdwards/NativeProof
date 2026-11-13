@@ -20,11 +20,11 @@ export function run(command: string, args: string[], cwd: string, failure = fals
   if (/EAI_AGAIN|ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|E401|E403|E404|E502|E503/.test(output)) {
     throw new Error(`UNAVAILABLE: ${output}`);
   }
-  if (result.error) throw new Error(`UNAVAILABLE: ${result.error.message}`);
+  if (result.error) throw new Error(`${command}: ${result.error.message}`);
   if (!failure) assert.equal(result.status, 0, output);
   return { status: result.status, output, stdout: result.stdout };
 }
-export function consumer(fault?: "tsx" | "onboard") {
+export function consumer(fault?: "tsx" | "onboard" | "types") {
   const scratch = mkdtempSync(path.join(tmpdir(), "nativeproof-consumer-"));
   try {
     run("npm", ["run", "build"], root);
@@ -40,7 +40,10 @@ export function consumer(fault?: "tsx" | "onboard") {
       if (fault === "tsx") {
         delete pkg.dependencies.tsx;
         writeFileSync(pkgPath, JSON.stringify(pkg));
-      } else rmSync(path.join(scratch, "package", "dist", "nativeproof-onboard.js"));
+      } else
+        rmSync(
+          path.join(scratch, "package", "dist", fault === "types" ? "index.d.ts" : "nativeproof-onboard.js"),
+        );
       tarball = path.join(scratch, "broken.tgz");
       run("tar", ["-czf", tarball, "package"], scratch);
     }
@@ -70,10 +73,32 @@ export function consumer(fault?: "tsx" | "onboard") {
     throw error;
   }
 }
-export function faultProof(fault: "tsx" | "onboard") {
+export function faultProof(fault: "tsx" | "onboard" | "types") {
   const fixture = consumer(fault);
   try {
-    const entry = fault === "tsx" ? "cli.js" : "nativeproof-onboard.js";
+    if (fault === "types") {
+      writeFileSync(
+        path.join(fixture.cwd, "import.ts"),
+        'import { defineConfig } from "nativeproof"; type Config = Parameters<typeof defineConfig>[0];',
+      );
+      const result = run(
+        path.join(fixture.cwd, "node_modules/.bin/tsc"),
+        ["--noEmit", "--strict", "--module", "NodeNext", "--target", "ES2022", "import.ts"],
+        fixture.cwd,
+        true,
+      );
+      assert.notEqual(result.status, 0);
+      assert.match(result.output, /TS7016.*nativeproof/);
+      return;
+    }
+    if (fault === "onboard") {
+      assert.throws(
+        () => run(path.join(fixture.cwd, "node_modules/.bin/nativeproof-onboard"), ["--help"], fixture.cwd),
+        /nativeproof-onboard/,
+      );
+      return;
+    }
+    const entry = "cli.js";
     const result = run(
       process.execPath,
       [path.join(fixture.cwd, "node_modules/nativeproof/dist", entry), "--help"],

@@ -29,4 +29,4 @@ test("local spawn errors are ordinary failures", () => {
   );
 });
 
-test("missing public declarations are detected", () => faultProof("types" as "onboard"));
+test("missing public declarations are detected", () => faultProof("types"));

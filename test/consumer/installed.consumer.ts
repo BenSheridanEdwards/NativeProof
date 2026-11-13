@@ -19,7 +19,7 @@ test("packed CLI and declarations work in an independent install", () => {
     assert.match(readFileSync(path.join(android, "nativeproof.config.ts"), "utf8"), /Example\.apk/);
     writeFileSync(
       path.join(cwd, "import.ts"),
-      'import { defineConfig } from "nativeproof"; type Config = Parameters<typeof defineConfig>[0]; const config: Config = {}; void config;\n',
+      'import { defineConfig } from "nativeproof"; type Config = Parameters<typeof defineConfig>[0]; const config: Config = { projects: [] }; void config;\n',
     );
     run(bin("tsc"), ["--noEmit", "--strict", "--module", "NodeNext", "--target", "ES2022", "import.ts"], cwd);
   } finally {

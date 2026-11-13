@@ -13,11 +13,20 @@ test("missing onboard command has a package diagnostic", () => {
   try {
     assert.throws(
       () => run(path.join(fixture.cwd, "node_modules/.bin/nativeproof-onboard"), ["--help"], fixture.cwd),
-      (error: unknown) => error instanceof Error && !error.message.includes("UNAVAILABLE") && /nativeproof-onboard/.test(error.message),
+      (error: unknown) =>
+        error instanceof Error &&
+        !error.message.includes("UNAVAILABLE") &&
+        /nativeproof-onboard/.test(error.message),
     );
-  } finally { fixture.cleanup(); }
+  } finally {
+    fixture.cleanup();
+  }
 });
 test("local spawn errors are ordinary failures", () => {
-  assert.throws(() => run("/nonexistent-nativeproof-command", [], process.cwd()),
-    (error: unknown) => error instanceof Error && !error.message.includes("UNAVAILABLE"));
+  assert.throws(
+    () => run("/nonexistent-nativeproof-command", [], process.cwd()),
+    (error: unknown) => error instanceof Error && !error.message.includes("UNAVAILABLE"),
+  );
 });
+
+test("missing public declarations are detected", () => faultProof("types" as "onboard"));
